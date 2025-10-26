@@ -72,3 +72,4 @@ jobs:
           releaseDraft: false
           prerelease: ${{ github.event.release.prerelease }}
           includeDebug: false
+          args: ${{ matrix.args }}
