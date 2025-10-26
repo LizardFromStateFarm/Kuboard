@@ -11,25 +11,8 @@ jobs:
       matrix:
         include:
           - platform: 'windows-latest'
-            args: '--target x86_64-pc-windows-msvc'
-            os: 'win32'
-            arch: 'x64'
-            ext: 'exe'
           - platform: 'macos-latest'
-            args: '--target x86_64-apple-darwin'
-            os: 'darwin'
-            arch: 'x64'
-            ext: 'app'
-          - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
-            os: 'darwin'
-            arch: 'arm64'
-            ext: 'app'
           - platform: 'ubuntu-latest'
-            args: '--target x86_64-unknown-linux-gnu'
-            os: 'linux'
-            arch: 'x64'
-            ext: 'AppImage'
 
     runs-on: ${{ matrix.platform }}
 
@@ -45,8 +28,6 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.args }}
 
       - name: Install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-latest'
@@ -71,4 +52,3 @@ jobs:
           releaseDraft: false
           prerelease: ${{ github.event.release.prerelease }}
           includeDebug: false
-          args: ${{ matrix.args }}
