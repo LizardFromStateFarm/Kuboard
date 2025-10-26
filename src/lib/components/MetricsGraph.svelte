@@ -15,6 +15,9 @@
   export let autoRefresh: boolean = true;
   export let loading: boolean = false;
   export let error: string | null = null;
+  export let maxCpuCores: number = 0;
+  export let maxMemoryBytes: number = 0;
+  export let maxDiskBytes: number = 0;
 
   // Events
   const dispatch = createEventDispatcher();
@@ -110,7 +113,23 @@
             ticks: {
               color: 'rgba(255, 255, 255, 0.7)',
               callback: function(value) {
-                return value + '%';
+                const percentage = value + '%';
+                let totalValue = '';
+                
+                if (type === 'cpu' && maxCpuCores > 0) {
+                  const totalCores = (value / 100) * maxCpuCores;
+                  totalValue = ` (${totalCores.toFixed(2)} cores)`;
+                } else if (type === 'memory' && maxMemoryBytes > 0) {
+                  const totalBytes = (value / 100) * maxMemoryBytes;
+                  const totalGB = totalBytes / (1024 * 1024 * 1024);
+                  totalValue = ` (${totalGB.toFixed(2)} GB)`;
+                } else if (type === 'disk' && maxDiskBytes > 0) {
+                  const totalBytes = (value / 100) * maxDiskBytes;
+                  const totalGB = totalBytes / (1024 * 1024 * 1024);
+                  totalValue = ` (${totalGB.toFixed(2)} GB)`;
+                }
+                
+                return percentage + totalValue;
               }
             }
           }

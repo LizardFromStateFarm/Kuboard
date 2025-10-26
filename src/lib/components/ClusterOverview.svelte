@@ -42,10 +42,10 @@
     const nodeDetails: NodeDetails = {
       name: node.metadata?.name || 'Unknown',
       status: node.status?.conditions?.find(c => c.type === 'Ready')?.status || 'Unknown',
-      max_cpu_cores: 0, // Will be populated by metrics
-      max_memory_bytes: 0, // Will be populated by metrics
-      allocatable_cpu_cores: 0,
-      allocatable_memory_bytes: 0,
+      max_cpu_cores: parseFloat(node.status?.capacity?.cpu?.replace('m', '')) / 1000 || 0,
+      max_memory_bytes: parseFloat(node.status?.capacity?.memory?.replace('Ki', '')) * 1024 || 0,
+      allocatable_cpu_cores: parseFloat(node.status?.allocatable?.cpu?.replace('m', '')) / 1000 || 0,
+      allocatable_memory_bytes: parseFloat(node.status?.allocatable?.memory?.replace('Ki', '')) * 1024 || 0,
       cpu_usage_percent: 0,
       memory_usage_percent: 0,
       disk_usage_percent: 0,
@@ -55,8 +55,8 @@
       kernel_version: node.status?.nodeInfo?.kernelVersion || 'Unknown',
       kubelet_version: node.status?.nodeInfo?.kubeletVersion || 'Unknown',
       container_runtime: node.status?.nodeInfo?.containerRuntimeVersion || 'Unknown',
-      disk_capacity: 0, // Will be populated if available
-      disk_allocatable: 0, // Will be populated if available
+      disk_capacity: parseFloat(node.status?.capacity?.['ephemeral-storage']?.replace('Ki', '')) * 1024 || 0,
+      disk_allocatable: parseFloat(node.status?.allocatable?.['ephemeral-storage']?.replace('Ki', '')) * 1024 || 0,
       labels: node.metadata?.labels || {},
       annotations: node.metadata?.annotations || {},
       taints: node.spec?.taints?.map((t: any) => `${t.key}=${t.value}:${t.effect}`) || [],
@@ -536,6 +536,9 @@
                       autoRefresh={true}
                       loading={metricsLoading}
                       error={metricsError}
+                      maxCpuCores={selectedNode?.max_cpu_cores || 0}
+                      maxMemoryBytes={selectedNode?.max_memory_bytes || 0}
+                      maxDiskBytes={selectedNode?.disk_capacity || 0}
                     />
                   {/if}
                 </div>

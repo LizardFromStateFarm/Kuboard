@@ -142,10 +142,10 @@
   }
 
   .context-dropdown {
-    background: rgba(16, 185, 129, 0.1);
-    border: 1px solid var(--primary-color);
+    background: rgba(30, 30, 30, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: var(--radius-sm);
-    color: var(--text-color);
+    color: var(--text-primary);
     font-size: 0.95em;
     font-weight: 600;
     padding: 8px 16px;
@@ -155,15 +155,15 @@
   }
 
   .context-dropdown:hover {
-    background: rgba(16, 185, 129, 0.3);
+    background: rgba(30, 30, 30, 0.9);
     border-color: var(--accent-color);
     transform: translateY(-1px);
   }
 
   .context-dropdown:focus {
     outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
   }
 
   .context-dropdown:disabled {
