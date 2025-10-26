@@ -2,8 +2,6 @@
 
 A modern Kubernetes dashboard built with SvelteKit and Tauri.
 
-![Kuboard Screenshot](https://via.placeholder.com/800x400/1a1a1a/10b981?text=Kuboard+Kubernetes+Dashboard)
-
 ## ✨ Features
 
 - **🖥️ Desktop Application** - Native desktop app for Windows, macOS, and Linux
@@ -121,7 +119,7 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 
 ## 📄 License
 
-This project is licensed under a custom open source license. See [LICENSE](LICENSE) for details.
+This project is licensed under PolyForm Noncommercial License 1.0.0. See [LICENSE](LICENSE) for details.
 
 ### Third-Party Licenses
 
