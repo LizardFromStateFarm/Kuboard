@@ -1,9 +1,8 @@
 name: Build and Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
   workflow_dispatch:
 
 jobs:
@@ -67,28 +66,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Kuboard ${{ github.ref_name }}'
-          releaseBody: |
-            ## 🚀 Kuboard ${{ github.ref_name }}
-            
-            ### Downloads:
-            - **Windows**: `Kuboard_${{ github.ref_name }}_x64-setup.exe`
-            - **macOS Intel**: `Kuboard_${{ github.ref_name }}_x64.dmg`
-            - **macOS Apple Silicon**: `Kuboard_${{ github.ref_name }}_aarch64.dmg`
-            - **Linux**: `Kuboard_${{ github.ref_name }}_x64.AppImage`
-            
-            ### Installation:
-            1. Download the appropriate file for your platform
-            2. Run the installer/executable
-            3. Launch Kuboard from your applications
-            
-            ### Features:
-            - 🖥️ Desktop Kubernetes dashboard
-            - 📊 Real-time metrics and monitoring
-            - 🔄 Context management
-            - 📈 Node and resource management
-            - 🎨 Modern UI with dark theme
-          releaseDraft: true
-          prerelease: false
+          tagName: ${{ github.event.release.tag_name }}
+          releaseName: ${{ github.event.release.name }}
+          releaseBody: ${{ github.event.release.body }}
+          releaseDraft: false
+          prerelease: ${{ github.event.release.prerelease }}
           includeDebug: false

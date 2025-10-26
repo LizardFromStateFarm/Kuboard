@@ -6,16 +6,17 @@ This guide explains how to create releases and distribute executables for Kuboar
 
 ### **Creating a Release**
 
-1. **Create a Version Tag:**
-   ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
+1. **Create a GitHub Release:**
+   - Go to your repository on GitHub
+   - Click "Releases" → "Create a new release"
+   - Choose "Create a new tag" (e.g., `v1.0.0`)
+   - Fill in release title and description
+   - Choose "Publish release"
 
 2. **GitHub Actions Will Automatically:**
    - Build executables for Windows, macOS (Intel + Apple Silicon), and Linux
-   - Create a GitHub release with all download links
-   - Upload all platform-specific installers
+   - Attach all platform-specific installers to the release
+   - Use your release title and description
 
 ### **Release Files Generated:**
 
@@ -106,22 +107,23 @@ The build process creates installers in:
 
 ### **Creating the Release:**
 
-1. **Create and Push Tag:**
-   ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
+1. **Create GitHub Release:**
+   - Go to GitHub repository → "Releases" → "Create a new release"
+   - Create new tag: `v1.0.0`
+   - Add release title: "Kuboard v1.0.0"
+   - Write release description with features and changes
+   - Choose "Publish release" (not draft)
 
 2. **Monitor GitHub Actions:**
    - Go to Actions tab in GitHub
-   - Watch the build progress
+   - Watch the build progress triggered by the release
    - Check for any build failures
 
 3. **Review Release:**
    - Go to Releases page
-   - Review generated release notes
-   - Edit release description if needed
-   - Publish the release
+   - Verify all platform installers are attached
+   - Check download links work correctly
+   - Share the release with users
 
 ## 🔧 **Troubleshooting Builds**
 
