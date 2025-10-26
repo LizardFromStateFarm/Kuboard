@@ -18,16 +18,7 @@ A modern Kubernetes dashboard built with SvelteKit and Tauri.
 **Windows:**
 - Download `Kuboard_v1.0.0_x64-setup.exe` from [Releases](https://github.com/LizardFromStateFarm/Kuboard/releases)
 - Run the installer and follow the setup wizard
-
-**macOS:**
-- **Intel Macs**: Download `Kuboard_v1.0.0_x64.dmg` from [Releases](https://github.com/LizardFromStateFarm/Kuboard/releases)
-- **Apple Silicon**: Download `Kuboard_v1.0.0_aarch64.dmg` from [Releases](https://github.com/LizardFromStateFarm/Kuboard/releases)
-- Open the DMG and drag Kuboard to Applications
-
-**Linux:**
-- Download `Kuboard_v1.0.0_x64.AppImage` from [Releases](https://github.com/LizardFromStateFarm/Kuboard/releases)
-- Make executable: `chmod +x Kuboard_v1.0.0_x64.AppImage`
-- Run: `./Kuboard_v1.0.0_x64.AppImage`
+- Alternative: Download `Kuboard_v1.0.0_x64_en-US.msi` for enterprise deployment
 
 ### First Run
 
@@ -66,8 +57,6 @@ npm run tauri build
 
 ### Build Outputs
 - **Windows**: `src-tauri/target/release/bundle/nsis/` and `msi/`
-- **macOS**: `src-tauri/target/release/bundle/dmg/`
-- **Linux**: `src-tauri/target/release/bundle/appimage/`
 
 See [BUILD_GUIDE.md](BUILD_GUIDE.md) for detailed build instructions.
 
