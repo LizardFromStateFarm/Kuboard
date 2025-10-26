@@ -85,7 +85,15 @@
             borderWidth: 1,
             callbacks: {
               label: function(context) {
-                return `${getResourceLabel(type)}: ${context.parsed.y.toFixed(1)}%`;
+                const value = context.parsed.y;
+                if (type === 'cpu') {
+                  return `${getResourceLabel(type)}: ${value.toFixed(2)} cores`;
+                } else if (type === 'memory') {
+                  return `${getResourceLabel(type)}: ${value.toFixed(2)} GB`;
+                } else if (type === 'disk') {
+                  return `${getResourceLabel(type)}: ${value.toFixed(2)} GB`;
+                }
+                return `${getResourceLabel(type)}: ${value.toFixed(2)}`;
               }
             }
           }
@@ -105,7 +113,6 @@
           y: {
             display: true,
             min: 0,
-            max: 100,
             grid: {
               color: 'rgba(255, 255, 255, 0.1)',
               drawBorder: false
@@ -113,23 +120,14 @@
             ticks: {
               color: 'rgba(255, 255, 255, 0.7)',
               callback: function(value) {
-                const percentage = value + '%';
-                let totalValue = '';
-                
-                if (type === 'cpu' && maxCpuCores > 0) {
-                  const totalCores = (value / 100) * maxCpuCores;
-                  totalValue = ` (${totalCores.toFixed(2)} cores)`;
-                } else if (type === 'memory' && maxMemoryBytes > 0) {
-                  const totalBytes = (value / 100) * maxMemoryBytes;
-                  const totalGB = totalBytes / (1024 * 1024 * 1024);
-                  totalValue = ` (${totalGB.toFixed(2)} GB)`;
-                } else if (type === 'disk' && maxDiskBytes > 0) {
-                  const totalBytes = (value / 100) * maxDiskBytes;
-                  const totalGB = totalBytes / (1024 * 1024 * 1024);
-                  totalValue = ` (${totalGB.toFixed(2)} GB)`;
+                if (type === 'cpu') {
+                  return value.toFixed(2) + ' cores';
+                } else if (type === 'memory') {
+                  return value.toFixed(2) + ' GB';
+                } else if (type === 'disk') {
+                  return value.toFixed(2) + ' GB';
                 }
-                
-                return percentage + totalValue;
+                return value.toFixed(2);
               }
             }
           }
@@ -186,9 +184,9 @@
 
   function getResourceValue(point: MetricsDataPoint, type: ResourceTab): number {
     switch (type) {
-      case 'cpu': return point.cpu_usage_percent;
-      case 'memory': return point.memory_usage_percent;
-      case 'disk': return point.disk_usage_percent;
+      case 'cpu': return point.cpu_usage_cores;
+      case 'memory': return point.memory_usage_bytes / (1024 * 1024 * 1024); // Convert to GB
+      case 'disk': return point.disk_usage_bytes / (1024 * 1024 * 1024); // Convert to GB
       default: return 0;
     }
   }
@@ -231,7 +229,15 @@
     </div>
     <div class="graph-stats">
       <div class="current-value">
-        {getCurrentValue().toFixed(1)}%
+        {#if type === 'cpu'}
+          {getCurrentValue().toFixed(2)} cores
+        {:else if type === 'memory'}
+          {getCurrentValue().toFixed(2)} GB
+        {:else if type === 'disk'}
+          {getCurrentValue().toFixed(2)} GB
+        {:else}
+          {getCurrentValue().toFixed(2)}
+        {/if}
       </div>
       {#if loading}
         <div class="loading-indicator">🔄</div>
