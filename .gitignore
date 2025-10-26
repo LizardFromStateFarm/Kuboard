@@ -24,6 +24,12 @@ src-tauri/target/
 *.zip
 *.tar.gz
 
+# Development scripts
+build-local.ps1
+build-local.sh
+release-local.ps1
+release-local.sh
+
 # Environment variables
 .env
 .env.local

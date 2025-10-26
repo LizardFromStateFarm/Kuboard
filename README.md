@@ -57,17 +57,10 @@ npm install
 npm run tauri dev
 ```
 
-### Building Releases (Free)
+### Building
 
 ```bash
-# Windows
-.\release-local.ps1
-
-# Linux/macOS
-chmod +x release-local.sh
-./release-local.sh
-
-# Or manually
+# Build for production
 npm run tauri build
 ```
 
@@ -75,13 +68,6 @@ npm run tauri build
 - **Windows**: `src-tauri/target/release/bundle/nsis/` and `msi/`
 - **macOS**: `src-tauri/target/release/bundle/dmg/`
 - **Linux**: `src-tauri/target/release/bundle/appimage/`
-
-### Creating Releases
-1. Run the build script above
-2. Go to [GitHub Releases](https://github.com/LizardFromStateFarm/Kuboard/releases)
-3. Click "Create a new release"
-4. Upload the files from the bundle directory
-5. Publish the release
 
 See [BUILD_GUIDE.md](BUILD_GUIDE.md) for detailed build instructions.
 
