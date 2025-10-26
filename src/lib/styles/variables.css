@@ -1,0 +1,74 @@
+/* Kuboard UI - CSS Custom Properties */
+/* Eye-friendly dark theme with softer colors */
+
+:root {
+  /* Primary Colors */
+  --primary-color: #10b981; /* Emerald green */
+  --accent-color: #059669; /* Darker emerald */
+  --success-color: #10b981; /* Emerald */
+  --warning-color: #f59e0b; /* Amber */
+  --error-color: #ef4444; /* Red */
+  --info-color: #3b82f6; /* Blue */
+  
+  /* Background Colors */
+  --background-color: #1a1a1a; /* Brighter black-grey */
+  --surface-color: #2a2a2a; /* Brighter dark grey */
+  --card-background: #2a2a2a; /* Brighter card background */
+  --hover-color: #3a3a3a; /* Brighter hover state */
+  
+  /* Text Colors */
+  --text-color: #f0f9ff; /* Soft white */
+  --text-muted: #9ca3af; /* Muted text */
+  --text-secondary: #6b7280; /* Secondary text */
+  
+  /* Border Colors */
+  --border-color: #404040; /* Brighter grey borders */
+  --border-light: #525252; /* Lighter borders */
+  --border-dark: #2a2a2a; /* Darker borders */
+  
+  /* Accent Colors for Variety */
+  --mint-cream: #f0fdf4; /* Very light mint */
+  --soft-green: #d1fae5; /* Soft green */
+  --warm-grey: #f3f4f6; /* Warm grey */
+  --cool-blue: #dbeafe; /* Cool blue */
+  --soft-yellow: #fef3c7; /* Soft yellow */
+  
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+  
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1);
+  
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+  --transition-slow: 0.3s ease;
+}
+
+/* Global body styles to ensure full screen coverage */
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
+}
+
+html {
+  background-color: var(--background-color);
+}

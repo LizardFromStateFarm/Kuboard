@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: Config
+current-context: prod-context
+clusters:
+- name: dev-cluster
+  cluster:
+    server: https://dev-cluster.example.com
+    insecure-skip-tls-verify: true
+- name: staging-cluster
+  cluster:
+    server: https://staging-cluster.example.com
+    insecure-skip-tls-verify: true
+- name: prod-cluster
+  cluster:
+    server: https://prod-cluster.example.com
+    insecure-skip-tls-verify: true
+contexts:
+- name: dev-context
+  context:
+    cluster: dev-cluster
+    user: dev-user
+    namespace: development
+- name: staging-context
+  context:
+    cluster: staging-cluster
+    user: staging-user
+    namespace: staging
+- name: prod-context
+  context:
+    cluster: prod-cluster
+    user: prod-user
+    namespace: production
+users:
+- name: dev-user
+  user:
+    token: dev-token-12345
+- name: staging-user
+  user:
+    token: staging-token-67890
+- name: prod-user
+  user:
+    token: prod-token-abcdef
