@@ -37,6 +37,8 @@ export interface NodeDetails {
   taints: string[];
   metrics_available: boolean;
   metrics_error?: string;
+  // Preserve original Kubernetes node data for details panel
+  originalData?: any;
 }
 
 export interface ClusterMetrics {

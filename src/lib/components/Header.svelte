@@ -52,7 +52,7 @@
           {#if contexts.length === 0}
             <option value="">Loading contexts...</option>
           {:else}
-            <option value="">Select a context</option>
+            <option value="">🔍 Select a context to begin</option>
             {#each contexts as context}
               <option value={context.name}>{context.name}</option>
             {/each}

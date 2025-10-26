@@ -4,6 +4,8 @@
   import { createEventDispatcher } from 'svelte';
 
   // Props
+  export let clusterOverview: any = null;
+  export let currentContext: any = null;
   export let nodes: any[] = [];
   export let namespaces: any[] = [];
   export let pods: any[] = [];
@@ -33,6 +35,14 @@
   }
 </script>
 
+{#if !currentContext}
+  <div class="no-context-message">
+    <div class="message-content">
+      <h2>📋 Resource Overview</h2>
+      <p>Select a Kubernetes context above to view cluster resources.</p>
+    </div>
+  </div>
+{:else}
 <section class="resource-overview">
   <h2>Resource Overview</h2>
   <div class="resource-grid">
@@ -243,10 +253,40 @@
     </div>
   </div>
 </section>
+{/if}
 
 <style>
   /* Import CSS variables */
   @import '../styles/variables.css';
+
+  .no-context-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    padding: var(--spacing-xl);
+  }
+
+  .message-content {
+    text-align: center;
+    max-width: 400px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .message-content h2 {
+    color: var(--text-primary);
+    margin: 0 0 var(--spacing-md) 0;
+    font-size: 1.3rem;
+  }
+
+  .message-content p {
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.6;
+  }
 
   .resource-overview {
     margin: var(--spacing-xl) 0;

@@ -62,21 +62,22 @@ pub async fn kuboard_list_contexts(state: State<'_, AppState>) -> Result<Context
     // Automatically set the current context if one exists and no context is currently set
     if let Some(current_context_name) = &current_context {
         let current_state = state.current_context.read().await;
-        if current_state.is_none() {
-            drop(current_state); // Release the read lock
-            
-            // Set the current context automatically
-            match kuboard_create_client_from_context(&kubeconfig, current_context_name).await {
-                Ok(client) => {
-                    *state.current_client.write().await = Some(client);
-                    *state.current_context.write().await = Some(current_context_name.clone());
-                    info!("Automatically set current context to: {}", current_context_name);
-                }
-                Err(e) => {
-                    warn!("Failed to automatically set current context '{}': {}", current_context_name, e);
-                }
-            }
-        }
+        // Don't auto-select context - let user choose
+        // if current_state.is_none() {
+        //     drop(current_state); // Release the read lock
+        //     
+        //     // Set the current context automatically
+        //     match kuboard_create_client_from_context(&kubeconfig, current_context_name).await {
+        //         Ok(client) => {
+        //             *state.current_client.write().await = Some(client);
+        //             *state.current_context.write().await = Some(current_context_name.clone());
+        //             info!("Automatically set current context to: {}", current_context_name);
+        //         }
+        //         Err(e) => {
+        //             warn!("Failed to automatically set current context '{}': {}", current_context_name, e);
+        //         }
+        //     }
+        // }
     }
 
     Ok(ContextListResponse {
@@ -393,17 +394,27 @@ pub async fn kuboard_get_node_metrics_history(
 
 // Check metrics server availability
 #[tauri::command]
-pub async fn kuboard_check_metrics_availability(state: State<'_, AppState>) -> Result<bool, String> {
+pub async fn kuboard_check_metrics_availability(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let client_guard = state.current_client.read().await;
     let client = client_guard
         .as_ref()
         .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
 
     match kuboard_check_metrics_server_availability(client).await {
-        Ok(available) => Ok(available),
+        Ok(available) => {
+            let response = serde_json::json!({
+                "available": available,
+                "using_mock_data": !available
+            });
+            Ok(response)
+        }
         Err(e) => {
             warn!("Error checking metrics server availability: {}", e);
-            Ok(false)
+            let response = serde_json::json!({
+                "available": false,
+                "using_mock_data": true
+            });
+            Ok(response)
         }
     }
 }

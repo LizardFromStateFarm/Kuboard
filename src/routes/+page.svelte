@@ -53,7 +53,13 @@
   let debugConsole = '';
   let showDebugConsole = false;
   let autoRefreshInterval: number | null = null;
+  let metricsRefreshInterval: number | null = null;
   let refreshIntervalSeconds = 10;
+  let metricsRefreshIntervalSeconds = 5;
+  let autoRefreshEnabled = true;
+  let metricsAutoRefreshEnabled = true;
+  let lastRefreshTime = '';
+  let lastMetricsRefreshTime = '';
   let maxDataPoints = 30;
   let historyDurationMinutes = 30;
   let maxHistoryDurationMinutes = 720;
@@ -62,11 +68,13 @@
 
   // Check if we're running in Tauri environment
   onMount(async () => {
+    console.log('🚀 Kuboard app starting...');
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       isTauriAvailable = true;
       console.log('✅ Tauri environment detected');
       await loadContexts();
+      console.log('✅ Contexts loaded:', contexts.length);
     } catch (error) {
       isTauriAvailable = false;
       console.log('🌐 Web development mode - using demo data');
@@ -83,7 +91,7 @@
   // Tauri API functions
   async function loadContexts() {
     if (!isTauriAvailable) return;
-    
+
     try {
       loading = true;
       error = "";
@@ -91,10 +99,11 @@
       const response = await invoke('kuboard_list_contexts');
       contexts = response.contexts || [];
       
-      if (response.current_context) {
-        currentContext = contexts.find(ctx => ctx.name === response.current_context) || null;
-        selectedContextName = response.current_context;
-      }
+      // Don't auto-select context - let user choose
+      // if (response.current_context) {
+      //   currentContext = contexts.find(ctx => ctx.name === response.current_context) || null;
+      //   selectedContextName = response.current_context;
+      // }
       
       success = `Loaded ${contexts.length} contexts`;
       console.log('✅ Contexts loaded:', contexts);
@@ -107,8 +116,14 @@
   }
 
   async function setContext(contextName: string) {
-    if (!isTauriAvailable) return;
-    
+    console.log('🔄 Setting context to:', contextName);
+    alert(`🔄 Setting context to: ${contextName}`); // Temporary debug alert
+    if (!isTauriAvailable) {
+      console.log('⚠️ Tauri not available, skipping context set');
+      alert('⚠️ Tauri not available, skipping context set'); // Temporary debug alert
+      return;
+    }
+
     try {
       loading = true;
       error = "";
@@ -118,8 +133,16 @@
       currentContext = contexts.find(ctx => ctx.name === contextName) || null;
       selectedContextName = contextName;
       
+      console.log('✅ Context set, loading cluster overview...');
       // Load cluster overview after setting context
       await loadClusterOverview();
+      
+      console.log('✅ Cluster overview loaded, checking metrics...');
+      // Check metrics server availability
+      await checkMetricsAvailability();
+      
+      // Start auto-refresh for cluster data
+      startAutoRefresh();
       
       success = `Switched to context: ${contextName}`;
       console.log('✅ Context switched to:', contextName);
@@ -140,11 +163,13 @@
       const { invoke } = await import('@tauri-apps/api/core');
       clusterOverview = await invoke('kuboard_get_cluster_overview');
       
+      console.log('✅ Cluster overview loaded:', clusterOverview);
+      
       // Load resource details
+      console.log('🔄 Loading resource details...');
       await loadResourceDetails();
       
       success = "Cluster overview loaded successfully";
-      console.log('✅ Cluster overview loaded:', clusterOverview);
     } catch (err) {
       error = `Failed to load cluster overview: ${err}`;
       console.error('❌ Error loading cluster overview:', err);
@@ -154,12 +179,17 @@
   }
 
   async function loadResourceDetails() {
-    if (!isTauriAvailable) return;
+    if (!isTauriAvailable) {
+      console.log('⚠️ Tauri not available, skipping resource details');
+      return;
+    }
     
     try {
+      console.log('🔄 Starting resource details loading...');
       resourceLoading = true;
       const { invoke } = await import('@tauri-apps/api/core');
       
+      console.log('🔄 Calling kuboard_get_nodes...');
       // Load all resource types in parallel
       const [nodesData, namespacesData, podsData, deploymentsData] = await Promise.all([
         invoke('kuboard_get_nodes'),
@@ -168,14 +198,20 @@
         invoke('kuboard_get_deployments')
       ]);
       
+      console.log('📊 Raw nodes data:', nodesData);
+      console.log('📊 Raw namespaces data:', namespacesData);
+      console.log('📊 Raw pods data:', podsData);
+      console.log('📊 Raw deployments data:', deploymentsData);
+      
       nodes = nodesData || [];
       namespaces = namespacesData || [];
       pods = podsData || [];
       deployments = deploymentsData || [];
       
-      console.log('✅ Resource details loaded');
+      console.log('✅ Resource details loaded - Nodes:', nodes.length, 'Namespaces:', namespaces.length, 'Pods:', pods.length, 'Deployments:', deployments.length);
     } catch (err) {
       console.error('❌ Error loading resource details:', err);
+      error = `Failed to load resource details: ${err}`;
     } finally {
       resourceLoading = false;
     }
@@ -305,12 +341,55 @@
     }
   }
 
-  function handleNodeSelect(event: CustomEvent<NodeDetails>) {
+  async function handleNodeSelect(event: CustomEvent<NodeDetails>) {
     selectedNode = event.detail;
     console.log('🖥️ Node selected:', selectedNode.name);
     
-    // Start auto-refresh for metrics
-    startAutoRefresh();
+    // Load metrics for the selected node
+    if (selectedNode && isTauriAvailable) {
+      try {
+        metricsLoading = true;
+        metricsError = null;
+        
+        const { invoke } = await import('@tauri-apps/api/core');
+        
+        // Load both current metrics and historical data
+        const [metrics, historyData] = await Promise.all([
+          invoke('kuboard_get_node_metrics', { nodeName: selectedNode.name }),
+          invoke('kuboard_get_node_metrics_history', { nodeName: selectedNode.name, durationMinutes: historyDurationMinutes })
+        ]);
+        
+        console.log('📊 Raw metrics response:', metrics);
+        console.log('📊 Raw history response:', historyData);
+        
+        // Update the selected node with metrics data
+        selectedNode.cpu_usage_percent = metrics.cpu?.usage_percent || 0;
+        selectedNode.memory_usage_percent = metrics.memory?.usage_percent || 0;
+        selectedNode.disk_usage_percent = metrics.disk?.usage_percent || 0;
+        
+        // Transform history data to MetricsDataPoint format
+        resourceHistory = (historyData || []).map((item: any) => ({
+          timestamp: item.timestamp,
+          cpu_usage_cores: parseFloat(item.cpu?.usage?.replace('m', '')) / 1000 || 0,
+          memory_usage_bytes: parseFloat(item.memory?.usage?.replace('Gi', '')) * 1024 * 1024 * 1024 || 0,
+          disk_usage_bytes: parseFloat(item.disk?.usage?.replace('Gi', '')) * 1024 * 1024 * 1024 || 0,
+          cpu_usage_percent: item.cpu?.usage_percent || 0,
+          memory_usage_percent: item.memory?.usage_percent || 0,
+          disk_usage_percent: item.disk?.usage_percent || 0,
+          is_mock_data: item.is_mock_data || false
+        }));
+        
+        console.log('✅ Metrics and history loaded for node:', selectedNode.name);
+      } catch (error) {
+        console.error('❌ Error loading metrics for node:', error);
+        metricsError = `Failed to load metrics for node ${selectedNode.name}`;
+      } finally {
+        metricsLoading = false;
+      }
+    }
+    
+    // Start metrics auto-refresh (cluster data auto-refresh is already running)
+    startMetricsAutoRefresh();
   }
 
   function handleTabChange(event: CustomEvent<ResourceTab>) {
@@ -322,6 +401,30 @@
     refreshIntervalSeconds = event.detail;
     console.log('⏰ Refresh interval changed to:', refreshIntervalSeconds);
     startAutoRefresh();
+  }
+
+  function toggleAutoRefresh() {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    if (autoRefreshEnabled) {
+      startAutoRefresh();
+    } else {
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+      }
+    }
+  }
+
+  function toggleMetricsAutoRefresh() {
+    metricsAutoRefreshEnabled = !metricsAutoRefreshEnabled;
+    if (metricsAutoRefreshEnabled) {
+      startMetricsAutoRefresh();
+    } else {
+      if (metricsRefreshInterval) {
+        clearInterval(metricsRefreshInterval);
+        metricsRefreshInterval = null;
+      }
+    }
   }
 
   function handleHistoryDurationChange(event: CustomEvent<number>) {
@@ -352,20 +455,64 @@
     // Implement retry logic
   }
 
-  // Auto-refresh functionality
+  // Auto-refresh functionality for cluster data
   function startAutoRefresh() {
     if (autoRefreshInterval) {
       clearInterval(autoRefreshInterval);
     }
     
-    if (selectedNode && isTauriAvailable) {
+    if (autoRefreshEnabled && currentContext && isTauriAvailable) {
       autoRefreshInterval = setInterval(async () => {
         try {
-          await fetchNodeMetrics(selectedNode.name);
+          console.log('🔄 Auto-refreshing cluster data...');
+          lastRefreshTime = new Date().toLocaleTimeString();
+          await loadClusterOverview();
         } catch (error) {
           console.error('❌ Auto-refresh error:', error);
         }
       }, refreshIntervalSeconds * 1000);
+    }
+  }
+
+  // Auto-refresh functionality for metrics
+  function startMetricsAutoRefresh() {
+    if (metricsRefreshInterval) {
+      clearInterval(metricsRefreshInterval);
+    }
+    
+    if (metricsAutoRefreshEnabled && selectedNode && isTauriAvailable) {
+      metricsRefreshInterval = setInterval(async () => {
+        try {
+          console.log('🔄 Auto-refreshing metrics...');
+          lastMetricsRefreshTime = new Date().toLocaleTimeString();
+          await fetchNodeMetrics(selectedNode.name);
+        } catch (error) {
+          console.error('❌ Metrics auto-refresh error:', error);
+        }
+      }, metricsRefreshIntervalSeconds * 1000);
+    }
+  }
+
+  async function checkMetricsAvailability() {
+    if (!isTauriAvailable) return;
+    
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const availability = await invoke('kuboard_check_metrics_availability');
+      
+      metricsServerAvailable = availability.available;
+      isUsingMockData = availability.using_mock_data || false;
+      
+      if (metricsServerAvailable) {
+        console.log('✅ Metrics server is available');
+      } else {
+        console.log('⚠️ Metrics server not available, using mock data');
+        metricsError = 'Metrics server is not available or no data has been collected yet';
+      }
+    } catch (error) {
+      console.error('❌ Error checking metrics availability:', error);
+      metricsServerAvailable = false;
+      metricsError = 'Failed to check metrics server availability';
     }
   }
 
@@ -374,14 +521,31 @@
     
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const metrics = await invoke('kuboard_get_node_metrics', { nodeName });
+      
+      // Load both current metrics and historical data
+      const [metrics, historyData] = await Promise.all([
+        invoke('kuboard_get_node_metrics', { nodeName }),
+        invoke('kuboard_get_node_metrics_history', { nodeName, durationMinutes: historyDurationMinutes })
+      ]);
       
       // Update selected node with new metrics
       if (selectedNode && selectedNode.name === nodeName) {
-        selectedNode.cpu_usage_percent = metrics.cpu.usage_percent;
-        selectedNode.memory_usage_percent = metrics.memory.usage_percent;
-        selectedNode.disk_usage_percent = metrics.disk.usage_percent;
+        selectedNode.cpu_usage_percent = metrics.cpu?.usage_percent || 0;
+        selectedNode.memory_usage_percent = metrics.memory?.usage_percent || 0;
+        selectedNode.disk_usage_percent = metrics.disk?.usage_percent || 0;
         selectedNode = selectedNode; // Trigger reactivity
+        
+        // Transform history data to MetricsDataPoint format
+        resourceHistory = (historyData || []).map((item: any) => ({
+          timestamp: item.timestamp,
+          cpu_usage_cores: parseFloat(item.cpu?.usage?.replace('m', '')) / 1000 || 0,
+          memory_usage_bytes: parseFloat(item.memory?.usage?.replace('Gi', '')) * 1024 * 1024 * 1024 || 0,
+          disk_usage_bytes: parseFloat(item.disk?.usage?.replace('Gi', '')) * 1024 * 1024 * 1024 || 0,
+          cpu_usage_percent: item.cpu?.usage_percent || 0,
+          memory_usage_percent: item.memory?.usage_percent || 0,
+          disk_usage_percent: item.disk?.usage_percent || 0,
+          is_mock_data: item.is_mock_data || false
+        }));
       }
     } catch (error) {
       console.error('❌ Error fetching metrics:', error);
@@ -427,7 +591,9 @@
   {#if clusterOverview}
     <ClusterOverviewComponent 
       {clusterOverview}
+      {currentContext}
       {selectedNode}
+      {nodes}
       {metricsLoading}
       {metricsError}
       {resourceHistory}
@@ -438,6 +604,9 @@
       {lastUpdateTime}
       {debugConsole}
       {showDebugConsole}
+      {autoRefreshEnabled}
+      {lastRefreshTime}
+      {resourceLoading}
       on:nodeSelect={handleNodeSelect}
       on:tabChange={handleTabChange}
       on:refreshIntervalChange={handleRefreshIntervalChange}
@@ -445,12 +614,23 @@
       on:debugConsoleToggle={handleDebugConsoleToggle}
       on:debugConsoleClear={handleDebugConsoleClear}
       on:metricsRetry={handleMetricsRetry}
+      on:toggleAutoRefresh={toggleAutoRefresh}
     />
-  {/if}
+  {:else if currentContext}
+    <div class="loading-cluster">
+      <div class="loading-content">
+        <h2>🔄 Loading Cluster Data</h2>
+        <p>Fetching cluster overview...</p>
+        <div class="loading-spinner">⏳</div>
+      </div>
+        </div>
+      {/if}
 
   <!-- Resource Overview Component -->
   {#if clusterOverview}
     <ResourceOverview 
+      {clusterOverview}
+      {currentContext}
       {nodes}
       {namespaces}
       {pods}
@@ -495,6 +675,45 @@
     border: 1px solid var(--success-color);
     border-radius: var(--radius-sm);
     background: rgba(16, 185, 129, 0.1);
+  }
+
+  .loading-cluster {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    padding: var(--spacing-xl);
+  }
+
+  .loading-content {
+    text-align: center;
+    max-width: 400px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .loading-content h2 {
+    color: var(--text-primary);
+    margin: 0 0 var(--spacing-md) 0;
+    font-size: 1.5rem;
+  }
+
+  .loading-content p {
+    color: var(--text-secondary);
+    margin: 0 0 var(--spacing-lg) 0;
+    line-height: 1.6;
+  }
+
+  .loading-spinner {
+    font-size: 2rem;
+    animation: spin 2s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   /* Responsive Design */

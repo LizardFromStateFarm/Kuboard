@@ -2,11 +2,24 @@
 <script lang="ts">
   import type { ClusterOverview, NodeDetails, ResourceTab } from '../types/index.js';
   import { createEventDispatcher } from 'svelte';
+  import MetricsGraph from './MetricsGraph.svelte';
 
   // Props
-  export let clusterOverview: ClusterOverview;
+  export let clusterOverview: ClusterOverview | null = null;
+  export let currentContext: any = null;
   export let selectedNode: NodeDetails | null = null;
+  export let nodes: any[] = [];
   export let metricsLoading: boolean = false;
+  
+  // Debug logging - only show when nodes actually change and are not empty
+  $: if (nodes && nodes.length > 0) {
+    console.log('🔍 ClusterOverview nodes prop changed:', nodes.length, nodes);
+  }
+  
+  // Force reactivity for nodes display
+  $: nodesLength = nodes?.length || 0;
+  $: nodesData = nodes || [];
+  $: isNodesLoading = nodesLength === 0 && currentContext;
   export let metricsError: string | null = null;
   export let resourceHistory: any[] = [];
   export let activeResourceTab: ResourceTab = 'cpu';
@@ -16,13 +29,43 @@
   export let lastUpdateTime: string = '';
   export let debugConsole: string = '';
   export let showDebugConsole: boolean = false;
+  export let autoRefreshEnabled: boolean = true;
+  export let lastRefreshTime: string = '';
+  export let resourceLoading: boolean = false;
 
   // Events
   const dispatch = createEventDispatcher();
 
   // Event handlers
-  function selectNode(node: NodeDetails) {
-    dispatch('nodeSelect', node);
+  function selectNode(node: any) {
+    // Convert the raw node data to NodeDetails format while preserving the original data
+    const nodeDetails: NodeDetails = {
+      name: node.metadata?.name || 'Unknown',
+      status: node.status?.conditions?.find(c => c.type === 'Ready')?.status || 'Unknown',
+      max_cpu_cores: 0, // Will be populated by metrics
+      max_memory_bytes: 0, // Will be populated by metrics
+      allocatable_cpu_cores: 0,
+      allocatable_memory_bytes: 0,
+      cpu_usage_percent: 0,
+      memory_usage_percent: 0,
+      disk_usage_percent: 0,
+      conditions: node.status?.conditions?.map((c: any) => `${c.type}: ${c.status}`) || [],
+      // Extract additional node information from the original data
+      os: node.status?.nodeInfo?.operatingSystem || 'Unknown',
+      kernel_version: node.status?.nodeInfo?.kernelVersion || 'Unknown',
+      kubelet_version: node.status?.nodeInfo?.kubeletVersion || 'Unknown',
+      container_runtime: node.status?.nodeInfo?.containerRuntimeVersion || 'Unknown',
+      disk_capacity: 0, // Will be populated if available
+      disk_allocatable: 0, // Will be populated if available
+      labels: node.metadata?.labels || {},
+      annotations: node.metadata?.annotations || {},
+      taints: node.spec?.taints?.map((t: any) => `${t.key}=${t.value}:${t.effect}`) || [],
+      metrics_available: false, // Will be updated by metrics loading
+      metrics_error: undefined,
+      // Preserve the original node data for the details panel
+      originalData: node
+    };
+    dispatch('nodeSelect', nodeDetails);
   }
 
   function switchResourceTab(tab: ResourceTab) {
@@ -47,6 +90,10 @@
     }
   }
 
+  function toggleAutoRefresh() {
+    dispatch('toggleAutoRefresh');
+  }
+
   // Helper functions
   function formatMemory(bytes: number): string {
     if (bytes === 0) return '0 B';
@@ -60,12 +107,26 @@
     return cores.toFixed(1) + ' cores';
   }
 
+  function getStatusClass(status: string): string {
+    return status.toLowerCase().replace(/\s+/g, '-');
+  }
+
   function copyToClipboard(text: string) {
     navigator.clipboard.writeText(text);
   }
 </script>
 
-{#if clusterOverview.cluster_metrics}
+{#if !currentContext}
+  <div class="no-context-message">
+    <div class="message-content">
+      <h2>🔍 Select a Kubernetes Context</h2>
+      <p>Choose a context from the dropdown above to view your cluster information.</p>
+      <div class="context-hint">
+        <p>💡 <strong>Tip:</strong> Make sure your kubeconfig is properly configured and accessible.</p>
+      </div>
+    </div>
+  </div>
+{:else if clusterOverview}
   <div class="cluster-overview">
     <div class="cluster-header">
       <h2>🏗️ Cluster Overview</h2>
@@ -84,41 +145,50 @@
       <!-- Left Panel: Node List -->
       <div class="nodes-panel">
         <div class="panel-header">
-          <h4>🖥️ Nodes ({clusterOverview.cluster_metrics.nodes.length})</h4>
-          <div class="node-summary">
-            <span class="summary-item">
-              <strong>{clusterOverview.cluster_metrics.active_nodes}</strong> Active
-            </span>
-            <span class="summary-item">
-              <strong>{clusterOverview.cluster_metrics.max_nodes}</strong> Total
-            </span>
-          </div>
+          <h4>🖥️ Nodes ({nodesLength})</h4>
+        <div class="node-summary">
+          <span class="summary-item">
+            <strong>{nodesLength}</strong> Total
+          </span>
+        </div>
         </div>
         
         <div class="nodes-list">
-          {#each clusterOverview.cluster_metrics.nodes as node}
-            <div 
-              class="node-list-item"
-              class:selected={selectedNode?.name === node.name}
-              onclick={() => selectNode(node)}
-              role="button"
-              tabindex="0"
-              onkeydown={(e) => e.key === 'Enter' || e.key === ' ' ? selectNode(node) : null}
-            >
-              <div class="node-item-header">
-                <h5 class="node-item-name">{node.name}</h5>
-                <span class="node-item-status status-{node.status.toLowerCase()}">{node.status}</span>
-              </div>
-              <div class="node-item-resources">
-                <span class="node-item-resource">{formatCPU(node.max_cpu_cores)} CPU</span>
-                <span class="node-item-resource">{formatMemory(node.max_memory_bytes)} RAM</span>
-              </div>
-              <div class="node-item-usage">
-                <span class="usage-text">CPU: {node.cpu_usage_percent.toFixed(1)}%</span>
-                <span class="usage-text">RAM: {node.memory_usage_percent.toFixed(1)}%</span>
-              </div>
+          {#if isNodesLoading}
+            <div class="loading-nodes">
+              <p>🔄 Loading nodes...</p>
             </div>
-          {/each}
+          {:else if nodesData.length > 0}
+            {#each nodesData as node}
+              <div 
+                class="node-list-item"
+                class:selected={selectedNode?.name === node.name}
+                onclick={() => selectNode(node)}
+                role="button"
+                tabindex="0"
+                onkeydown={(e) => e.key === 'Enter' || e.key === ' ' ? selectNode(node) : null}
+              >
+                <div class="node-item-header">
+                  <h5 class="node-item-name">{node.metadata?.name || 'Unknown'}</h5>
+                  <span class="node-item-status status-{getStatusClass(node.status?.conditions?.find(c => c.type === 'Ready')?.status || 'Unknown')}">
+                    {node.status?.conditions?.find(c => c.type === 'Ready')?.status || 'Unknown'}
+                  </span>
+                </div>
+                <div class="node-item-resources">
+                  <span class="node-item-resource">Kubelet: {node.status?.nodeInfo?.kubeletVersion || 'Unknown'}</span>
+                  <span class="node-item-resource">OS: {node.status?.nodeInfo?.operatingSystem || 'Unknown'}</span>
+                </div>
+                <div class="node-item-usage">
+                  <span class="usage-text">Architecture: {node.status?.nodeInfo?.architecture || 'Unknown'}</span>
+                  <span class="usage-text">Container Runtime: {node.status?.nodeInfo?.containerRuntimeVersion || 'Unknown'}</span>
+                </div>
+              </div>
+            {/each}
+          {:else}
+            <div class="no-node-selected">
+              <p>No nodes available</p>
+            </div>
+          {/if}
         </div>
       </div>
 
@@ -346,9 +416,23 @@
                         >
                           <option value={5}>5s</option>
                           <option value={10}>10s</option>
+                          <option value={15}>15s</option>
                           <option value={30}>30s</option>
                           <option value={60}>1m</option>
                         </select>
+                      </div>
+                      <div class="auto-refresh-control">
+                        <button 
+                          class="auto-refresh-toggle"
+                          class:enabled={autoRefreshEnabled}
+                          onclick={toggleAutoRefresh}
+                          title={autoRefreshEnabled ? 'Disable auto-refresh' : 'Enable auto-refresh'}
+                        >
+                          {autoRefreshEnabled ? '⏸️ Pause' : '▶️ Resume'}
+                        </button>
+                        {#if lastRefreshTime}
+                          <span class="last-refresh">Last: {lastRefreshTime}</span>
+                        {/if}
                       </div>
                       <div class="history-control">
                         <label for="history-duration">History:</label>
@@ -445,14 +529,14 @@
                       </div>
                     </div>
                   {:else}
-                    <div class="chartjs-container">
-                      <canvas id="metrics-chart" class="chartjs-canvas"></canvas>
-                      
-                      <!-- Scrolling indicator -->
-                      <div class="scrolling-indicator">
-                        <span class="dot"></span> Live Data
-                      </div>
-                    </div>
+                    <MetricsGraph 
+                      data={resourceHistory}
+                      type={activeResourceTab}
+                      duration={historyDurationMinutes}
+                      autoRefresh={true}
+                      loading={metricsLoading}
+                      error={metricsError}
+                    />
                   {/if}
                 </div>
               </div>
@@ -536,6 +620,64 @@
   @import '../styles/variables.css';
 
   /* Modern Cluster Overview Styles */
+  .no-context-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    padding: var(--spacing-xl);
+  }
+
+  .no-node-selected, .loading-nodes {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    padding: var(--spacing-lg);
+    color: var(--text-secondary);
+    font-style: italic;
+  }
+
+  .loading-nodes {
+    color: var(--accent-color);
+    font-weight: 500;
+  }
+
+  .message-content {
+    text-align: center;
+    max-width: 500px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .message-content h2 {
+    color: var(--text-primary);
+    margin: 0 0 var(--spacing-md) 0;
+    font-size: 1.5rem;
+  }
+
+  .message-content p {
+    color: var(--text-secondary);
+    margin: 0 0 var(--spacing-md) 0;
+    line-height: 1.6;
+  }
+
+  .context-hint {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    margin-top: var(--spacing-lg);
+  }
+
+  .context-hint p {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+  }
+
   .cluster-overview {
     background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
     border-radius: var(--radius-xl);
@@ -896,7 +1038,7 @@
     gap: var(--spacing-md);
   }
 
-  .refresh-control, .history-control {
+  .refresh-control, .history-control, .auto-refresh-control {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
@@ -921,6 +1063,36 @@
     transition: var(--transition-normal);
     min-width: 60px;
     text-align: center;
+  }
+
+  .auto-refresh-toggle {
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: var(--radius-sm);
+    color: white;
+    font-size: 0.85em;
+    font-weight: 600;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: var(--transition-normal);
+    min-width: 60px;
+    text-align: center;
+  }
+
+  .auto-refresh-toggle:hover {
+    background: rgba(0, 0, 0, 0.8);
+    border-color: var(--accent-color);
+  }
+
+  .auto-refresh-toggle.enabled {
+    background: var(--accent-color);
+    color: white;
+  }
+
+  .last-refresh {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    font-style: italic;
   }
 
   .history-select {
@@ -1264,3 +1436,4 @@
     }
   }
 </style>
+
