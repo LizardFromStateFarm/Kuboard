@@ -59,12 +59,24 @@ npm install
 npm run tauri dev
 ```
 
-### Building
+### Local Building
 
 ```bash
-# Build for production
+# Windows
+.\build-local.ps1
+
+# Linux/macOS
+chmod +x build-local.sh
+./build-local.sh
+
+# Or manually
 npm run tauri build
 ```
+
+### Build Outputs
+- **Windows**: `src-tauri/target/release/bundle/nsis/` and `msi/`
+- **macOS**: `src-tauri/target/release/bundle/dmg/`
+- **Linux**: `src-tauri/target/release/bundle/appimage/`
 
 See [BUILD_GUIDE.md](BUILD_GUIDE.md) for detailed build instructions.
 
