@@ -18,16 +18,18 @@ A modern Kubernetes dashboard built with SvelteKit and Tauri.
 ### Download & Install
 
 **Windows:**
-- Download `Kuboard_0.1.0_x64-setup.exe` from [Releases](https://github.com/your-username/kuboard/releases)
+- Download `Kuboard_v1.0.0_x64-setup.exe` from [Releases](https://github.com/LizardFromStateFarm/Kuboard/releases)
 - Run the installer and follow the setup wizard
 
 **macOS:**
-- Download `Kuboard_0.1.0_x64.dmg` from [Releases](https://github.com/your-username/kuboard/releases)
+- **Intel Macs**: Download `Kuboard_v1.0.0_x64.dmg` from [Releases](https://github.com/LizardFromStateFarm/Kuboard/releases)
+- **Apple Silicon**: Download `Kuboard_v1.0.0_aarch64.dmg` from [Releases](https://github.com/LizardFromStateFarm/Kuboard/releases)
 - Open the DMG and drag Kuboard to Applications
 
 **Linux:**
-- Download `Kuboard_0.1.0_amd64.deb` from [Releases](https://github.com/your-username/kuboard/releases)
-- Install with `sudo dpkg -i Kuboard_0.1.0_amd64.deb`
+- Download `Kuboard_v1.0.0_x64.AppImage` from [Releases](https://github.com/LizardFromStateFarm/Kuboard/releases)
+- Make executable: `chmod +x Kuboard_v1.0.0_x64.AppImage`
+- Run: `./Kuboard_v1.0.0_x64.AppImage`
 
 ### First Run
 
