@@ -80,14 +80,14 @@ npm run tauri build
 ### Build Outputs
 - **Windows**: `src-tauri/target/release/bundle/nsis/` and `msi/`
 
-See [BUILD_GUIDE.md](BUILD_GUIDE.md) for detailed build instructions.
+See [docs/BUILD_GUIDE.md](docs/BUILD_GUIDE.md) for detailed build instructions.
 
 ## 📚 Documentation
 
-- **[Architecture Overview](ARCHITECTURE_OVERVIEW.md)** - Complete system architecture
-- **[UI Organization](UI_ORGANIZATION_GUIDE.md)** - Component structure and usage
-- **[Function Documentation](FUNCTION_DOCUMENTATION.md)** - API and function reference
-- **[Build Guide](BUILD_GUIDE.md)** - Development and build instructions
+- **[Architecture Overview](docs/ARCHITECTURE_OVERVIEW.md)** - Complete system architecture
+- **[UI Organization](docs/UI_ORGANIZATION_GUIDE.md)** - Component structure and usage
+- **[Function Documentation](docs/FUNCTION_DOCUMENTATION.md)** - API and function reference
+- **[Build Guide](docs/BUILD_GUIDE.md)** - Development and build instructions
 
 ## 🏗️ Architecture
 
@@ -105,7 +105,7 @@ See [BUILD_GUIDE.md](BUILD_GUIDE.md) for detailed build instructions.
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+We welcome contributions! Please see our [Contributing Guidelines](docs/CONTRIBUTING.md) for details.
 
 ### Development Setup
 
@@ -127,7 +127,7 @@ This project is licensed under PolyForm Noncommercial License 1.0.0. See [LICENS
 
 ### Third-Party Licenses
 
-This project uses several open source libraries. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for complete license information.
+This project uses several open source libraries. See [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md) for complete license information.
 
 ## 🙏 Acknowledgments
 
