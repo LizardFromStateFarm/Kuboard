@@ -692,13 +692,26 @@
   }
 
   .cluster-overview {
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
+    background: var(--gradient-primary);
     border-radius: var(--radius-xl);
     padding: var(--spacing-lg);
     margin: 20px 0;
     color: white;
-    box-shadow: var(--shadow-xl);
-    border: 1px solid var(--primary-color);
+    box-shadow: 0 20px 25px rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cluster-overview::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+    pointer-events: none;
   }
 
   .cluster-header {
@@ -713,11 +726,13 @@
   }
 
   .cluster-info-card {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.3);
     border-radius: var(--radius-lg);
     padding: var(--spacing-lg);
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.2);
+    position: relative;
+    z-index: 1;
   }
 
   .cluster-basic-info h3 {

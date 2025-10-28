@@ -121,25 +121,29 @@
     letter-spacing: 0.05em;
   }
 
-  /* Color variants */
+  /* Color variants with improved contrast */
   .progress-circle[stroke="#10b981"] {
-    filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.3));
+    filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.4));
   }
 
   .progress-circle[stroke="#3b82f6"] {
-    filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.3));
+    filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.4));
   }
 
   .progress-circle[stroke="#f59e0b"] {
-    filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.3));
+    filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.4));
   }
 
   .progress-circle[stroke="#ef4444"] {
-    filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.3));
+    filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.4));
   }
 
   .progress-circle[stroke="#8b5cf6"] {
-    filter: drop-shadow(0 0 6px rgba(139, 92, 246, 0.3));
+    filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.4));
+  }
+
+  .progress-circle[stroke="#06b6d4"] {
+    filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.4));
   }
 
   /* Responsive sizing */

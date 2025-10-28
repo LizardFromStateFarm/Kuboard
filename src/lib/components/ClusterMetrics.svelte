@@ -53,7 +53,7 @@
   function getUsageColor(percentage: number): string {
     if (percentage >= 90) return '#ef4444'; // Red
     if (percentage >= 75) return '#f59e0b'; // Orange
-    if (percentage >= 50) return '#3b82f6'; // Blue
+    if (percentage >= 50) return '#06b6d4'; // Cyan
     return '#10b981'; // Green
   }
 

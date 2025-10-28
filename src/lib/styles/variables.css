@@ -1,30 +1,30 @@
 /* Kuboard UI - CSS Custom Properties */
-/* Eye-friendly dark theme with softer colors */
+/* Modern dark theme with improved contrast and visual appeal */
 
 :root {
-  /* Primary Colors */
-  --primary-color: #10b981; /* Emerald green */
-  --accent-color: #059669; /* Darker emerald */
-  --success-color: #10b981; /* Emerald */
+  /* Primary Colors - More vibrant and accessible */
+  --primary-color: #3b82f6; /* Blue instead of green for better contrast */
+  --accent-color: #1d4ed8; /* Darker blue */
+  --success-color: #10b981; /* Keep emerald for success states */
   --warning-color: #f59e0b; /* Amber */
   --error-color: #ef4444; /* Red */
-  --info-color: #3b82f6; /* Blue */
+  --info-color: #06b6d4; /* Cyan for info */
   
-  /* Background Colors */
-  --background-color: #1a1a1a; /* Brighter black-grey */
-  --surface-color: #2a2a2a; /* Brighter dark grey */
-  --card-background: #2a2a2a; /* Brighter card background */
-  --hover-color: #3a3a3a; /* Brighter hover state */
+  /* Background Colors - True black for full coverage */
+  --background-color: #000000; /* Pure black for full coverage */
+  --surface-color: #111111; /* Very dark grey */
+  --card-background: #1a1a1a; /* Dark card background */
+  --hover-color: #2a2a2a; /* Hover state */
   
-  /* Text Colors */
-  --text-color: #f0f9ff; /* Soft white */
-  --text-muted: #9ca3af; /* Muted text */
-  --text-secondary: #6b7280; /* Secondary text */
+  /* Text Colors - High contrast for readability */
+  --text-primary: #ffffff; /* Pure white for primary text */
+  --text-secondary: #a1a1aa; /* Muted text */
+  --text-muted: #71717a; /* More muted text */
   
   /* Border Colors */
-  --border-color: #404040; /* Brighter grey borders */
-  --border-light: #525252; /* Lighter borders */
-  --border-dark: #2a2a2a; /* Darker borders */
+  --border-color: #27272a; /* Subtle borders */
+  --border-light: #3f3f46; /* Lighter borders */
+  --border-dark: #18181b; /* Darker borders */
   
   /* Accent Colors for Variety */
   --mint-cream: #f0fdf4; /* Very light mint */
@@ -32,6 +32,12 @@
   --warm-grey: #f3f4f6; /* Warm grey */
   --cool-blue: #dbeafe; /* Cool blue */
   --soft-yellow: #fef3c7; /* Soft yellow */
+  
+  /* New gradient colors for better visual appeal */
+  --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  --gradient-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  --gradient-error: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   
   /* Spacing */
   --spacing-xs: 4px;
@@ -59,16 +65,38 @@
   --transition-slow: 0.3s ease;
 }
 
-/* Global body styles to ensure full screen coverage */
+/* Global styles to ensure full screen coverage and eliminate white edges */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background-color: var(--background-color);
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   padding: 0;
   background-color: var(--background-color);
-  color: var(--text-color);
+  color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow-x: hidden;
+  min-height: 100vh;
+  width: 100%;
 }
 
-html {
+/* Ensure the main app container covers the full screen */
+#app, [data-sveltekit-hydrate] {
+  background-color: var(--background-color);
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Remove any potential white edges from SvelteKit */
+[data-sveltekit-preload-data] {
   background-color: var(--background-color);
 }

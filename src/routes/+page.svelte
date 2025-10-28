@@ -649,14 +649,28 @@
 
   main {
     width: 100vw;
-    height: 100vh;
+    min-height: 100vh;
     margin: 0;
     padding: 20px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: var(--background-color);
-    color: var(--text-color);
+    color: var(--text-primary);
     overflow-x: auto;
     box-sizing: border-box;
+    position: relative;
+  }
+
+  /* Ensure no white edges */
+  main::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--background-color);
+    z-index: -1;
+    pointer-events: none;
   }
 
   .error-message {

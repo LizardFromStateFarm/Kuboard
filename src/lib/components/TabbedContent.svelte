@@ -1,5 +1,6 @@
 <!-- Kuboard Tabbed Content Component -->
 <script lang="ts">
+  import { invoke } from '@tauri-apps/api/core';
   import ResourceTabs from './ResourceTabs.svelte';
   import WorkloadsTab from './WorkloadsTab.svelte';
   import ConfigTab from './ConfigTab.svelte';
