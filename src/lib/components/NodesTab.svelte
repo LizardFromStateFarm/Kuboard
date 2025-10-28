@@ -20,6 +20,7 @@
   let metricsLoading: boolean = false;
   let metricsError: string | null = null;
   let selectedResourceType: 'cpu' | 'memory' | 'disk' = 'cpu';
+  let selectedTimeRange: number = 30; // Default to 30 minutes
 
   // Event dispatcher
   const dispatch = createEventDispatcher();
@@ -66,7 +67,7 @@
       const { invoke } = await import('@tauri-apps/api/core');
         const metrics = await invoke('kuboard_get_node_metrics_history', {
           nodeName: node.metadata.name,
-          durationMinutes: 30
+          durationMinutes: selectedTimeRange
         });
       nodeMetrics = metrics;
     } catch (err) {
@@ -110,6 +111,15 @@
   // Change resource type for metrics graph
   function changeResourceType(type: 'cpu' | 'memory' | 'disk') {
     selectedResourceType = type;
+  }
+
+  // Change time range for metrics graph
+  function changeTimeRange(minutes: number) {
+    selectedTimeRange = minutes;
+    // Reload metrics with new time range if a node is selected
+    if (selectedNode) {
+      loadNodeMetrics(selectedNode);
+    }
   }
 
   // Get status class
@@ -355,7 +365,25 @@
             {:else if nodeMetrics}
               <!-- Resource Type Selector -->
               <div class="resource-type-selector">
-                <h6>📊 Resource Usage (30 min)</h6>
+                <div class="metrics-header">
+                  <h6>📊 Resource Usage</h6>
+                  <div class="time-range-selector">
+                    <label for="timeRange">Time Range:</label>
+                    <select 
+                      id="timeRange"
+                      bind:value={selectedTimeRange}
+                      onchange={() => changeTimeRange(selectedTimeRange)}
+                      class="time-range-select"
+                    >
+                      <option value="30">30 minutes</option>
+                      <option value="60">1 hour</option>
+                      <option value="120">2 hours</option>
+                      <option value="240">4 hours</option>
+                      <option value="480">8 hours</option>
+                      <option value="720">12 hours</option>
+                    </select>
+                  </div>
+                </div>
                 <div class="resource-tabs">
                   <button 
                     class="resource-tab {selectedResourceType === 'cpu' ? 'active' : ''}"
@@ -382,6 +410,7 @@
                 <MetricsGraph
                   data={nodeMetrics}
                   type={selectedResourceType}
+                  duration={selectedTimeRange}
                   loading={metricsLoading}
                   error={metricsError}
                   maxCpuCores={parseFloat(selectedNode.cpuCapacity || '0')}
@@ -946,11 +975,57 @@
         margin-bottom: var(--spacing-md);
       }
 
+      .metrics-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--spacing-sm);
+        flex-wrap: wrap;
+        gap: var(--spacing-sm);
+      }
+
       .resource-type-selector h6 {
-        margin: 0 0 var(--spacing-sm) 0;
+        margin: 0;
         color: var(--text-primary);
         font-size: 1.1rem;
         font-weight: 600;
+      }
+
+      .time-range-selector {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-sm);
+      }
+
+      .time-range-selector label {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      .time-range-select {
+        background: var(--background-card);
+        border: 1px solid var(--border-primary);
+        border-radius: var(--radius-sm);
+        color: var(--text-primary);
+        font-size: 0.9rem;
+        font-weight: 500;
+        padding: var(--spacing-xs) var(--spacing-sm);
+        cursor: pointer;
+        transition: var(--transition-normal);
+        min-width: 120px;
+      }
+
+      .time-range-select:hover {
+        border-color: var(--accent-color);
+        background: var(--background-tertiary);
+      }
+
+      .time-range-select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
       }
 
       .resource-tabs {

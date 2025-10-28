@@ -28,7 +28,7 @@
 
   // Initialize chart
   onMount(() => {
-    if (chartCanvas && data.length > 0) {
+    if (chartCanvas) {
       initializeChart();
     }
   });
@@ -40,6 +40,40 @@
     }
   });
 
+  // Generate time range labels for the full duration
+  function generateTimeRangeLabels() {
+    const now = new Date();
+    const labels = [];
+    const dataPoints = Math.max(20, duration * 2); // At least 20 points, or 2 per minute
+    
+    for (let i = dataPoints; i >= 0; i--) {
+      const time = new Date(now.getTime() - (i * (duration * 60 * 1000) / dataPoints));
+      labels.push(time.toLocaleTimeString());
+    }
+    
+    return labels;
+  }
+
+  // Create data array with null values for missing data points
+  function createFullTimeRangeData() {
+    const now = new Date();
+    const dataPoints = Math.max(20, duration * 2);
+    const fullData = new Array(dataPoints + 1).fill(null);
+    
+    // Fill in actual data points where they exist
+    data.forEach(point => {
+      const pointTime = new Date(point.timestamp * 1000);
+      const timeDiff = now.getTime() - pointTime.getTime();
+      const index = Math.round((timeDiff / (duration * 60 * 1000)) * dataPoints);
+      
+      if (index >= 0 && index < fullData.length) {
+        fullData[dataPoints - index] = getResourceValue(point, type);
+      }
+    });
+    
+    return fullData;
+  }
+
   // Initialize Chart.js
   function initializeChart() {
     if (chartInstance) {
@@ -50,10 +84,10 @@
     if (!ctx) return;
 
     const chartData = {
-      labels: data.map(point => new Date(point.timestamp * 1000).toLocaleTimeString()),
+      labels: generateTimeRangeLabels(),
       datasets: [{
         label: getResourceLabel(type),
-        data: data.map(point => getResourceValue(point, type)),
+        data: createFullTimeRangeData(),
         borderColor: getResourceColor(type),
         backgroundColor: getResourceColor(type, 0.1),
         borderWidth: 2,
@@ -63,7 +97,8 @@
         pointHoverRadius: 6,
         pointBackgroundColor: getResourceColor(type),
         pointBorderColor: '#ffffff',
-        pointBorderWidth: 2
+        pointBorderWidth: 2,
+        spanGaps: true // This allows the line to continue across null values
       }]
     };
 
@@ -86,15 +121,16 @@
             callbacks: {
               label: function(context) {
                 const value = context.parsed.y;
-                const numValue = typeof value === 'number' ? value : parseFloat(value) || 0;
+                const numValue = typeof value === 'number' ? value : parseFloat(String(value)) || 0;
+                const label = getResourceLabel(type) || 'Usage';
                 if (type === 'cpu') {
-                  return `${getResourceLabel(type)}: ${numValue.toFixed(2)} cores`;
+                  return `${label}: ${numValue.toFixed(2)} cores`;
                 } else if (type === 'memory') {
-                  return `${getResourceLabel(type)}: ${numValue.toFixed(2)} GB`;
+                  return `${label}: ${numValue.toFixed(2)} GB`;
                 } else if (type === 'disk') {
-                  return `${getResourceLabel(type)}: ${numValue.toFixed(2)} GB`;
+                  return `${label}: ${numValue.toFixed(2)} GB`;
                 }
-                return `${getResourceLabel(type)}: ${numValue.toFixed(2)}`;
+                return `${label}: ${numValue.toFixed(2)}`;
               }
             }
           }
@@ -103,8 +139,7 @@
           x: {
             display: true,
             grid: {
-              color: 'rgba(255, 255, 255, 0.1)',
-              drawBorder: false
+              color: 'rgba(255, 255, 255, 0.1)'
             },
             ticks: {
               color: 'rgba(255, 255, 255, 0.7)',
@@ -116,13 +151,12 @@
             min: 0,
             max: getMaxValue(),
             grid: {
-              color: 'rgba(255, 255, 255, 0.1)',
-              drawBorder: false
+              color: 'rgba(255, 255, 255, 0.1)'
             },
             ticks: {
               color: 'rgba(255, 255, 255, 0.7)',
               callback: function(value) {
-                const numValue = typeof value === 'number' ? value : parseFloat(value) || 0;
+                const numValue = typeof value === 'number' ? value : parseFloat(String(value || '0')) || 0;
                 if (type === 'cpu') {
                   return numValue.toFixed(2) + ' cores';
                 } else if (type === 'memory') {
@@ -160,17 +194,30 @@
     updateChart();
   }
 
+  // Update chart when duration changes
+  $: if (chartInstance && data.length > 0) {
+    console.log('📊 MetricsGraph: Duration changed to:', duration);
+    updateChart();
+  }
+
+  // Update chart when duration changes even without data
+  $: if (chartInstance) {
+    console.log('📊 MetricsGraph: Duration changed to:', duration);
+    updateChart();
+  }
+
   function updateChart() {
     if (!chartInstance) return;
 
     const newData = {
-      labels: data.map(point => new Date(point.timestamp * 1000).toLocaleTimeString()),
+      labels: generateTimeRangeLabels(),
       datasets: [{
         ...chartInstance.data.datasets[0],
         label: getResourceLabel(type),
-        data: data.map(point => getResourceValue(point, type)),
+        data: createFullTimeRangeData(),
         borderColor: getResourceColor(type),
-        backgroundColor: getResourceColor(type, 0.1)
+        backgroundColor: getResourceColor(type, 0.1),
+        spanGaps: true
       }]
     };
 
@@ -199,15 +246,16 @@
     if (chartInstance.options.plugins?.tooltip?.callbacks) {
       chartInstance.options.plugins.tooltip.callbacks.label = function(context) {
         const value = context.parsed.y;
-        const numValue = typeof value === 'number' ? value : parseFloat(value) || 0;
+        const numValue = typeof value === 'number' ? value : parseFloat(String(value)) || 0;
+        const label = getResourceLabel(type) || 'Usage';
         if (type === 'cpu') {
-          return `${getResourceLabel(type)}: ${numValue.toFixed(2)} cores`;
+          return `${label}: ${numValue.toFixed(2)} cores`;
         } else if (type === 'memory') {
-          return `${getResourceLabel(type)}: ${numValue.toFixed(2)} GB`;
+          return `${label}: ${numValue.toFixed(2)} GB`;
         } else if (type === 'disk') {
-          return `${getResourceLabel(type)}: ${numValue.toFixed(2)} GB`;
+          return `${label}: ${numValue.toFixed(2)} GB`;
         }
-        return `${getResourceLabel(type)}: ${numValue.toFixed(2)}`;
+        return `${label}: ${numValue.toFixed(2)}`;
       };
     }
 
