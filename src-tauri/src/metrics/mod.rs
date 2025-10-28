@@ -194,7 +194,7 @@ pub async fn kuboard_fetch_node_metrics_history(
             
             for i in 0..=duration_minutes {
                 let timestamp = now - (i * 60) as i64;
-                let time_offset = i as f64 / duration_minutes as f64;
+                let _time_offset = i as f64 / duration_minutes as f64;
                 
                 // Create slight variations around current values
                 let variation_factor = 1.0 + (i as f64 * 0.1).sin() * 0.1; // ±10% variation

@@ -3,6 +3,8 @@
   import type { ClusterOverview, NodeDetails, ResourceTab } from '../types/index.js';
   import { createEventDispatcher } from 'svelte';
   import MetricsGraph from './MetricsGraph.svelte';
+  import ClusterMetrics from './ClusterMetrics.svelte';
+  import TabbedContent from './TabbedContent.svelte';
 
   // Props
   export let clusterOverview: ClusterOverview | null = null;
@@ -31,7 +33,6 @@
   export let showDebugConsole: boolean = false;
   export let autoRefreshEnabled: boolean = true;
   export let lastRefreshTime: string = '';
-  export let resourceLoading: boolean = false;
 
   // Events
   const dispatch = createEventDispatcher();
@@ -41,7 +42,7 @@
     // Convert the raw node data to NodeDetails format while preserving the original data
     const nodeDetails: NodeDetails = {
       name: node.metadata?.name || 'Unknown',
-      status: node.status?.conditions?.find(c => c.type === 'Ready')?.status || 'Unknown',
+      status: node.status?.conditions?.find((c: any) => c.type === 'Ready')?.status || 'Unknown',
       max_cpu_cores: parseFloat(node.status?.capacity?.cpu?.replace('m', '')) / 1000 || 0,
       max_memory_bytes: parseFloat(node.status?.capacity?.memory?.replace('Ki', '')) * 1024 || 0,
       allocatable_cpu_cores: parseFloat(node.status?.allocatable?.cpu?.replace('m', '')) / 1000 || 0,
@@ -141,6 +142,15 @@
       </div>
     </div>
 
+    <!-- Cluster Metrics Section -->
+    <ClusterMetrics 
+      refreshInterval={refreshIntervalSeconds * 1000}
+      autoRefresh={autoRefreshEnabled}
+    />
+
+    <!-- Resource Management Tabs -->
+    <TabbedContent {currentContext} />
+
     <div class="nodes-layout">
       <!-- Left Panel: Node List -->
       <div class="nodes-panel">
@@ -170,8 +180,8 @@
               >
                 <div class="node-item-header">
                   <h5 class="node-item-name">{node.metadata?.name || 'Unknown'}</h5>
-                  <span class="node-item-status status-{getStatusClass(node.status?.conditions?.find(c => c.type === 'Ready')?.status || 'Unknown')}">
-                    {node.status?.conditions?.find(c => c.type === 'Ready')?.status || 'Unknown'}
+                  <span class="node-item-status status-{getStatusClass(node.status?.conditions?.find((c: any) => c.type === 'Ready')?.status || 'Unknown')}">
+                    {node.status?.conditions?.find((c: any) => c.type === 'Ready')?.status || 'Unknown'}
                   </span>
                 </div>
                 <div class="node-item-resources">
@@ -224,7 +234,7 @@
                         <span class="info-value" title={selectedNode.os}>{selectedNode.os}</span>
                         <button 
                           class="copy-button" 
-                          onclick={() => copyToClipboard(selectedNode.os)}
+                          onclick={() => copyToClipboard(selectedNode.os || '')}
                           title="Copy to clipboard"
                         >
                           📋
@@ -239,7 +249,7 @@
                         <span class="info-value" title={selectedNode.kernel_version}>{selectedNode.kernel_version}</span>
                         <button 
                           class="copy-button" 
-                          onclick={() => copyToClipboard(selectedNode.kernel_version)}
+                          onclick={() => copyToClipboard(selectedNode.kernel_version || '')}
                           title="Copy to clipboard"
                         >
                           📋
@@ -254,7 +264,7 @@
                         <span class="info-value" title={selectedNode.kubelet_version}>{selectedNode.kubelet_version}</span>
                         <button 
                           class="copy-button" 
-                          onclick={() => copyToClipboard(selectedNode.kubelet_version)}
+                          onclick={() => copyToClipboard(selectedNode.kubelet_version || '')}
                           title="Copy to clipboard"
                         >
                           📋
@@ -269,7 +279,7 @@
                         <span class="info-value" title={selectedNode.container_runtime}>{selectedNode.container_runtime}</span>
                         <button 
                           class="copy-button" 
-                          onclick={() => copyToClipboard(selectedNode.container_runtime)}
+                          onclick={() => copyToClipboard(selectedNode.container_runtime || '')}
                           title="Copy to clipboard"
                         >
                           📋
@@ -343,7 +353,7 @@
                         <span class="resource-value" title={formatMemory(selectedNode.disk_capacity)}>{formatMemory(selectedNode.disk_capacity)}</span>
                         <button 
                           class="copy-button" 
-                          onclick={() => copyToClipboard(formatMemory(selectedNode.disk_capacity))}
+                          onclick={() => copyToClipboard(formatMemory(selectedNode.disk_capacity || 0))}
                           title="Copy to clipboard"
                         >
                           📋
@@ -358,7 +368,7 @@
                         <span class="resource-value" title={formatMemory(selectedNode.disk_allocatable)}>{formatMemory(selectedNode.disk_allocatable)}</span>
                         <button 
                           class="copy-button" 
-                          onclick={() => copyToClipboard(formatMemory(selectedNode.disk_allocatable))}
+                          onclick={() => copyToClipboard(formatMemory(selectedNode.disk_allocatable || 0))}
                           title="Copy to clipboard"
                         >
                           📋

@@ -48,11 +48,15 @@ pub fn run() {
             commands::kuboard_get_namespaces,
             commands::kuboard_get_pods,
             commands::kuboard_get_deployments,
+            commands::kuboard_get_services,
+            commands::kuboard_get_configmaps,
+            commands::kuboard_get_secrets,
             
             // Metrics (Real Implementation)
             commands::kuboard_get_node_metrics,
             commands::kuboard_get_node_metrics_history,
             commands::kuboard_check_metrics_availability,
+            commands::kuboard_get_cluster_metrics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -8,7 +8,7 @@ use tauri::State;
 use kube::Api;
 use k8s_openapi::api::{
     apps::v1::Deployment,
-    core::v1::{Node, Namespace, Pod},
+    core::v1::{Node, Namespace, Pod, Service, ConfigMap, Secret},
 };
 use tracing::{error, info, warn};
 
@@ -60,8 +60,8 @@ pub async fn kuboard_list_contexts(state: State<'_, AppState>) -> Result<Context
     }
 
     // Automatically set the current context if one exists and no context is currently set
-    if let Some(current_context_name) = &current_context {
-        let current_state = state.current_context.read().await;
+    if let Some(_current_context_name) = &current_context {
+        let _current_state = state.current_context.read().await;
         // Don't auto-select context - let user choose
         // if current_state.is_none() {
         //     drop(current_state); // Release the read lock
@@ -296,6 +296,48 @@ pub async fn kuboard_get_deployments(state: State<'_, AppState>) -> Result<Vec<D
     }
 }
 
+#[tauri::command]
+pub async fn kuboard_get_services(state: State<'_, AppState>) -> Result<Vec<Service>, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let services_api: Api<Service> = Api::all(client.clone());
+    match services_api.list(&Default::default()).await {
+        Ok(services) => Ok(services.items),
+        Err(e) => Err(format!("Failed to get services: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_configmaps(state: State<'_, AppState>) -> Result<Vec<ConfigMap>, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let configmaps_api: Api<ConfigMap> = Api::all(client.clone());
+    match configmaps_api.list(&Default::default()).await {
+        Ok(configmaps) => Ok(configmaps.items),
+        Err(e) => Err(format!("Failed to get configmaps: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_secrets(state: State<'_, AppState>) -> Result<Vec<Secret>, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let secrets_api: Api<Secret> = Api::all(client.clone());
+    match secrets_api.list(&Default::default()).await {
+        Ok(secrets) => Ok(secrets.items),
+        Err(e) => Err(format!("Failed to get secrets: {}", e)),
+    }
+}
+
 // Metrics Commands - Real Implementation
 #[tauri::command]
 pub async fn kuboard_get_node_metrics(node_name: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
@@ -416,5 +458,189 @@ pub async fn kuboard_check_metrics_availability(state: State<'_, AppState>) -> R
             });
             Ok(response)
         }
+    }
+}
+
+// Cluster-wide metrics command
+#[tauri::command]
+pub async fn kuboard_get_cluster_metrics(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    info!("Fetching cluster-wide metrics");
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    // Get all nodes
+    let nodes_api: Api<Node> = Api::all(client.clone());
+    let nodes = match nodes_api.list(&Default::default()).await {
+        Ok(nodes) => nodes.items,
+        Err(e) => {
+            error!("Failed to get nodes for cluster metrics: {}", e);
+            return Err(format!("Failed to get nodes: {}", e));
+        }
+    };
+
+    // Calculate cluster-wide totals
+    let mut total_cpu_cores = 0.0;
+    let mut total_memory_bytes = 0u64;
+    let mut total_disk_bytes = 0u64;
+    let mut total_cpu_usage = 0.0;
+    let mut total_memory_usage = 0u64;
+    let mut total_disk_usage = 0u64;
+
+    // Check if metrics server is available
+    let metrics_available = kuboard_check_metrics_server_availability(client).await.unwrap_or(false);
+
+    for node in &nodes {
+        // Parse node capacity
+        if let Some(capacity) = &node.status.as_ref().and_then(|s| s.capacity.as_ref()) {
+            // CPU capacity
+            if let Some(cpu_quantity) = capacity.get("cpu") {
+                if let Ok(cpu_cores) = parse_cpu_capacity(&cpu_quantity.0) {
+                    total_cpu_cores += cpu_cores;
+                }
+            }
+            
+            // Memory capacity
+            if let Some(memory_quantity) = capacity.get("memory") {
+                if let Ok(memory_bytes) = parse_memory_capacity(&memory_quantity.0) {
+                    total_memory_bytes += memory_bytes;
+                }
+            }
+            
+            // Disk capacity
+            if let Some(disk_quantity) = capacity.get("ephemeral-storage") {
+                if let Ok(disk_bytes) = parse_memory_capacity(&disk_quantity.0) {
+                    total_disk_bytes += disk_bytes;
+                }
+            }
+        }
+
+        // Get usage from metrics server if available
+        if metrics_available {
+            if let Some(node_name) = node.metadata.name.as_ref() {
+                match kuboard_fetch_node_metrics_real(client, node_name).await {
+                    Ok(metrics) => {
+                        total_cpu_usage += metrics.cpu_usage_cores;
+                        total_memory_usage += metrics.memory_usage_bytes;
+                        total_disk_usage += metrics.disk_usage_bytes;
+                    }
+                    Err(e) => {
+                        warn!("Failed to get metrics for node {}: {}", node_name, e);
+                    }
+                }
+            }
+        }
+    }
+
+    // If metrics server not available, calculate from pod requests/limits
+    if !metrics_available {
+        let pods_api: Api<Pod> = Api::all(client.clone());
+        if let Ok(pods) = pods_api.list(&Default::default()).await {
+            for pod in &pods.items {
+                if let Some(spec) = &pod.spec {
+                    for container in &spec.containers {
+                        // CPU requests
+                        if let Some(requests) = &container.resources.as_ref().and_then(|r| r.requests.as_ref()) {
+                            if let Some(cpu_quantity) = requests.get("cpu") {
+                                if let Ok(cpu_cores) = parse_cpu_capacity(&cpu_quantity.0) {
+                                    total_cpu_usage += cpu_cores;
+                                }
+                            }
+                        }
+                        
+                        // Memory requests
+                        if let Some(requests) = &container.resources.as_ref().and_then(|r| r.requests.as_ref()) {
+                            if let Some(memory_quantity) = requests.get("memory") {
+                                if let Ok(memory_bytes) = parse_memory_capacity(&memory_quantity.0) {
+                                    total_memory_usage += memory_bytes;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Calculate percentages
+    let cpu_usage_percent = if total_cpu_cores > 0.0 {
+        (total_cpu_usage / total_cpu_cores * 100.0).min(100.0)
+    } else {
+        0.0
+    };
+
+    let memory_usage_percent = if total_memory_bytes > 0 {
+        (total_memory_usage as f64 / total_memory_bytes as f64 * 100.0).min(100.0)
+    } else {
+        0.0
+    };
+
+    let disk_usage_percent = if total_disk_bytes > 0 {
+        (total_disk_usage as f64 / total_disk_bytes as f64 * 100.0).min(100.0)
+    } else {
+        0.0
+    };
+
+    let response = serde_json::json!({
+        "cpu": {
+            "total_cores": total_cpu_cores,
+            "used_cores": total_cpu_usage,
+            "usage_percent": cpu_usage_percent
+        },
+        "memory": {
+            "total_bytes": total_memory_bytes,
+            "used_bytes": total_memory_usage,
+            "usage_percent": memory_usage_percent
+        },
+        "disk": {
+            "total_bytes": total_disk_bytes,
+            "used_bytes": total_disk_usage,
+            "usage_percent": disk_usage_percent
+        },
+        "nodes_count": nodes.len(),
+        "metrics_available": metrics_available
+    });
+
+    Ok(response)
+}
+
+// Helper functions for parsing capacity strings
+fn parse_cpu_capacity(cpu_str: &str) -> Result<f64, String> {
+    let cpu_str = cpu_str.trim();
+    
+    if cpu_str.ends_with('m') {
+        let millicores_str = cpu_str.trim_end_matches('m');
+        let millicores = millicores_str.parse::<f64>()
+            .map_err(|e| format!("Invalid CPU millicores '{}': {}", cpu_str, e))?;
+        Ok(millicores / 1000.0)
+    } else {
+        cpu_str.parse::<f64>()
+            .map_err(|e| format!("Invalid CPU cores '{}': {}", cpu_str, e))
+    }
+}
+
+fn parse_memory_capacity(memory_str: &str) -> Result<u64, String> {
+    let memory_str = memory_str.trim();
+    
+    if memory_str.ends_with("Ki") {
+        let kibibytes_str = memory_str.trim_end_matches("Ki");
+        let kibibytes = kibibytes_str.parse::<f64>()
+            .map_err(|e| format!("Invalid memory KiB '{}': {}", memory_str, e))?;
+        Ok((kibibytes * 1024.0) as u64)
+    } else if memory_str.ends_with("Mi") {
+        let mebibytes_str = memory_str.trim_end_matches("Mi");
+        let mebibytes = mebibytes_str.parse::<f64>()
+            .map_err(|e| format!("Invalid memory MiB '{}': {}", memory_str, e))?;
+        Ok((mebibytes * 1024.0 * 1024.0) as u64)
+    } else if memory_str.ends_with("Gi") {
+        let gibibytes_str = memory_str.trim_end_matches("Gi");
+        let gibibytes = gibibytes_str.parse::<f64>()
+            .map_err(|e| format!("Invalid memory GiB '{}': {}", memory_str, e))?;
+        Ok((gibibytes * 1024.0 * 1024.0 * 1024.0) as u64)
+    } else {
+        memory_str.parse::<u64>()
+            .map_err(|e| format!("Invalid memory bytes '{}': {}", memory_str, e))
     }
 }
