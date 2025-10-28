@@ -123,19 +123,19 @@
 
   /* Color variants with improved contrast */
   .progress-circle[stroke="#10b981"] {
-    filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.4));
+    filter: drop-shadow(0 0 8px var(--shadow-success));
   }
 
   .progress-circle[stroke="#3b82f6"] {
-    filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.4));
+    filter: drop-shadow(0 0 8px var(--shadow-primary));
   }
 
   .progress-circle[stroke="#f59e0b"] {
-    filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.4));
+    filter: drop-shadow(0 0 8px var(--shadow-warning));
   }
 
   .progress-circle[stroke="#ef4444"] {
-    filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.4));
+    filter: drop-shadow(0 0 8px var(--shadow-error));
   }
 
   .progress-circle[stroke="#8b5cf6"] {
@@ -143,7 +143,7 @@
   }
 
   .progress-circle[stroke="#06b6d4"] {
-    filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.4));
+    filter: drop-shadow(0 0 8px var(--shadow-info));
   }
 
   /* Responsive sizing */

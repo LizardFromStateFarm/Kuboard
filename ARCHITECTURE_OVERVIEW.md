@@ -6,11 +6,12 @@ This document provides a comprehensive overview of the Kuboard application archi
 
 1. [Application Overview](#application-overview)
 2. [UI Architecture](#ui-architecture)
-3. [Backend Architecture](#backend-architecture)
-4. [Function Organization](#function-organization)
-5. [Documentation Status](#documentation-status)
-6. [Build System](#build-system)
-7. [Development Guidelines](#development-guidelines)
+3. [Styling Architecture](#styling-architecture)
+4. [Backend Architecture](#backend-architecture)
+5. [Function Organization](#function-organization)
+6. [Documentation Status](#documentation-status)
+7. [Build System](#build-system)
+8. [Development Guidelines](#development-guidelines)
 
 ## 🎯 **Application Overview**
 
@@ -29,7 +30,17 @@ src/lib/components/
 ├── Header.svelte           # Main header with context selection
 ├── ClusterOverview.svelte  # Cluster info and node management
 ├── ResourceOverview.svelte # Resource panels (nodes, pods, etc.)
-└── MetricsGraph.svelte     # Real-time resource usage graphs
+├── MetricsGraph.svelte     # Real-time resource usage graphs
+├── TabbedContent.svelte    # Main tabbed interface container
+├── ResourceTabs.svelte     # Tab navigation component
+├── WorkloadsTab.svelte     # Workloads management (pods, deployments, services)
+├── NodesTab.svelte         # Advanced node management and details
+├── ConfigTab.svelte        # Configuration management (ConfigMaps, Secrets)
+├── NetworkTab.svelte       # Network resources and services
+├── CustomResourcesTab.svelte # Custom Resource Definitions (CRDs)
+├── DonutChart.svelte       # Resource usage donut charts
+├── ClusterMetrics.svelte   # Cluster-wide metrics display
+└── ThemeSwitcher.svelte    # Development theme switching tool
 ```
 
 ### **Key Features**
@@ -38,6 +49,10 @@ src/lib/components/
 - **Type Safety:** Full TypeScript integration
 - **Responsive:** Works on different screen sizes
 - **Accessible:** Proper ARIA roles and keyboard navigation
+- **Tabbed Interface:** Organized resource management with dedicated tabs
+- **Advanced Theming:** Centralized color palette with theme switching
+- **Real-time Updates:** Live metrics and resource monitoring
+- **Development Tools:** Built-in theme switcher for rapid prototyping
 
 ### **Component Responsibilities**
 
@@ -63,11 +78,108 @@ src/lib/components/
 - Loading states and error handling
 
 #### **MetricsGraph Component**
-- Chart.js integration
+- Chart.js integration with capacity-based y-axis scaling
+- Real-time data updates with proper data format handling
+- Multiple resource types (CPU, Memory, Disk) with dynamic switching
+- Capacity-based visualization showing actual utilization percentages
+- Utilization percentage display in current value section
+- Dynamic y-axis scaling based on resource capacity (cores, GB)
+- Robust error handling for various backend data formats
+- Auto-refresh functionality with proper chart updates
+
+#### **TabbedContent Component**
+- Main container for tabbed resource management
+- Coordinates between different resource tabs
+- Manages tab state and data loading
+- Handles tab switching and updates
+
+#### **ResourceTabs Component**
+- Tab navigation interface
+- Dynamic tab counts and status
+- Disabled state management
+- Tab selection and events
+
+#### **WorkloadsTab Component**
+- Pods, Deployments, and Services management
+- Lazy loading of resource types
+- Detailed resource information display
+- Status filtering and sorting
+
+#### **NodesTab Component**
+- Advanced node management interface with simplified card-based layout
+- Detailed node information and metrics with capacity-based visualization
+- Node selection and detailed panel expansion on click
+- Real-time metrics integration with resource type switching (CPU/Memory/Disk)
+- Capacity-based y-axis scaling for meaningful utilization visualization
+- Utilization percentage display showing actual resource usage vs capacity
+- Resource type selector for switching between CPU, Memory, and Disk metrics
+- Historical metrics graphs with proper data format handling
+
+#### **ConfigTab Component**
+- ConfigMaps and Secrets management
+- Configuration data display
+- Secret value masking
+- Resource creation and editing
+
+#### **NetworkTab Component**
+- Network services and resources
+- Service discovery and endpoints
+- Network policy management
+- Load balancer configuration
+
+#### **CustomResourcesTab Component**
+- Custom Resource Definitions (CRDs)
+- Dynamic resource type discovery
+- Custom resource management
+- CRD schema validation
+
+#### **DonutChart Component**
+- Resource usage visualization
+- Interactive donut charts
 - Real-time data updates
-- Multiple resource types (CPU, Memory, Disk)
-- Customizable time ranges
-- Auto-refresh functionality
+- Multiple chart types
+
+#### **ClusterMetrics Component**
+- Cluster-wide metrics display
+- Resource utilization overview
+- Performance monitoring
+- Alert integration
+
+#### **ThemeSwitcher Component**
+- Development theme switching
+- Color palette management
+- Theme persistence
+- Live theme preview
+
+## 🎨 **Styling Architecture**
+
+### **Color Palette System**
+```
+src/lib/styles/
+├── color-palette.css    # Centralized color definitions
+├── variables.css        # Spacing, sizing, and non-color variables
+└── README.md           # Styling guide and documentation
+```
+
+### **Theme Management**
+- **Centralized Colors:** All colors defined in `color-palette.css`
+- **Theme Variations:** Dark, Light, and High Contrast themes
+- **CSS Variables:** Consistent color usage across components
+- **Development Tools:** Live theme switching in dev mode
+
+### **Color Categories**
+- **Primary Brand Colors:** Main application branding
+- **Status Colors:** Success, warning, error, and info states
+- **Background Colors:** Primary, secondary, and tertiary backgrounds
+- **Text Colors:** Primary, secondary, muted, and disabled text
+- **Border Colors:** Various border and divider colors
+- **Interactive Colors:** Hover, focus, and active states
+
+### **Component Styling**
+- **Consistent Patterns:** Standardized styling across all components
+- **Responsive Design:** Mobile-first approach with breakpoints
+- **Accessibility:** High contrast ratios and proper color usage
+- **Dark Mode First:** Optimized for dark theme with light theme support
 
 ## 🔧 **Backend Architecture**
 
@@ -98,6 +210,10 @@ src-tauri/src/
 - `kuboard_get_namespaces` - Fetch all namespaces
 - `kuboard_get_pods` - Fetch all pods
 - `kuboard_get_deployments` - Fetch all deployments
+- `kuboard_get_services` - Fetch all services
+- `kuboard_get_configmaps` - Fetch all ConfigMaps
+- `kuboard_get_secrets` - Fetch all Secrets
+- `kuboard_get_custom_resources` - Fetch custom resources
 - `kuboard_get_node_metrics` - Get current node metrics
 - `kuboard_get_node_metrics_history` - Get historical metrics
 - `kuboard_check_metrics_availability` - Check metrics server
@@ -139,9 +255,11 @@ src-tauri/src/
 - Handle cluster information display
 
 #### **Resource Management**
-- Fetch nodes, namespaces, pods, deployments
-- Handle resource selection and display
-- Manage resource loading states
+- Fetch nodes, namespaces, pods, deployments, services
+- Handle ConfigMaps, Secrets, and custom resources
+- Manage resource selection and display
+- Handle resource loading states
+- Support for CRDs and dynamic resource types
 
 #### **Metrics Integration**
 - Real-time metrics from metrics server
@@ -164,6 +282,8 @@ src-tauri/src/
 - **UI_ORGANIZATION_GUIDE.md** - Complete component breakdown
 - **Component Props & Events** - Detailed interface documentation
 - **Styling Organization** - CSS variables and design system
+- **Color Palette Guide** - Comprehensive color management documentation
+- **Theme System** - Theme switching and customization guide
 - **Usage Examples** - Code examples for component usage
 
 #### **Function Documentation**
@@ -184,6 +304,10 @@ src-tauri/src/
 - **Event Handling** - Component communication patterns
 - **Error Handling** - Comprehensive error management
 - **Performance Considerations** - Optimization strategies
+- **Color System Documentation** - Complete color palette reference
+- **Theme Customization** - Step-by-step theming guide
+- **Component Styling** - Consistent styling patterns
+- **Development Tools** - Theme switcher and debugging tools
 
 ## 🔨 **Build System**
 
@@ -251,15 +375,21 @@ src-tauri/src/
 - Type safety throughout the application
 - Comprehensive error handling
 - Professional build system
+- Consistent theming and styling
+- Advanced resource management
+- Real-time monitoring capabilities
 
 ## 🔄 **Next Steps**
 
 ### **Potential Improvements**
 1. **Testing** - Add comprehensive unit tests
 2. **Performance** - Optimize for very large clusters
-3. **Features** - Add more Kubernetes resource types
-4. **UI/UX** - Enhance user experience with animations
+3. **Features** - Add more Kubernetes resource types (Storage, Security tabs)
+4. **UI/UX** - Enhance user experience with animations and transitions
 5. **Documentation** - Add video tutorials and examples
+6. **Theming** - Add more theme variations and customization options
+7. **Resource Management** - Add resource creation and editing capabilities
+8. **Monitoring** - Enhanced alerting and notification system
 
 ### **Maintenance**
 1. **Keep Documentation Updated** - Sync with code changes
@@ -269,4 +399,45 @@ src-tauri/src/
 
 ---
 
-This modular architecture has successfully transformed Kuboard into a maintainable, scalable, and professional Kubernetes dashboard! 🚀
+This modular architecture has successfully transformed Kuboard into a comprehensive, maintainable, and professional Kubernetes dashboard with advanced resource management, theming capabilities, and real-time monitoring! 🚀
+
+## 🆕 **Recent Major Updates**
+
+### **Advanced Nodes Management (Latest)**
+- Complete nodes tab functionality with simplified card-based layout
+- Capacity-based metrics visualization with utilization percentages
+- Resource type switching (CPU/Memory/Disk) with dynamic graph updates
+- Y-axis scaling based on actual resource capacity for meaningful visualization
+- Historical metrics integration with proper data format handling
+- Node selection with detailed panel expansion on click
+
+### **Enhanced Metrics Visualization**
+- Capacity-based y-axis scaling showing actual resource utilization
+- Utilization percentage display in current value section
+- Dynamic chart updates when switching between resource types
+- Robust error handling for various backend data formats
+- Better visual context for understanding resource pressure
+
+### **Tabbed Resource Management**
+- Complete overhaul of the resource management interface
+- Dedicated tabs for Workloads, Nodes, Config, Network, and Custom Resources
+- Lazy loading and efficient resource handling
+- Enhanced user experience with organized navigation
+
+### **Advanced Theming System**
+- Centralized color palette management
+- Live theme switching in development mode
+- Support for Dark, Light, and High Contrast themes
+- Comprehensive styling documentation
+
+### **Enhanced Component Library**
+- 14 specialized components for different resource types
+- Improved component organization and responsibilities
+- Better separation of concerns and modularity
+- Enhanced development tools and debugging capabilities
+
+### **Real-time Monitoring**
+- Advanced metrics visualization with capacity-based scaling
+- Live resource usage tracking with utilization percentages
+- Historical data analysis with meaningful context
+- Performance monitoring and alerting

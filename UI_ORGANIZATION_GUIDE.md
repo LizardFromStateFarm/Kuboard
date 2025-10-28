@@ -9,19 +9,61 @@ src/
 ├── lib/
 │   ├── components/          # Reusable UI components
 │   │   ├── Header.svelte    # Main header with context selector
-│   │   ├── ClusterOverview.svelte  # Cluster info and node management
-│   │   ├── ResourceOverview.svelte # Resource panels (nodes, pods, etc.)
-│   │   └── MetricsGraph.svelte     # Resource usage graphs
+│   │   ├── ClusterOverview.svelte  # Cluster info and metrics
+│   │   ├── ClusterMetrics.svelte   # Cluster-wide resource metrics (donut charts)
+│   │   ├── DonutChart.svelte       # CSS-based donut chart component
+│   │   ├── TabbedContent.svelte    # Main resource management tabs
+│   │   ├── ResourceTabs.svelte     # Tab navigation component
+│   │   ├── WorkloadsTab.svelte     # Pods, Deployments, Services
+│   │   ├── NodesTab.svelte         # Cluster nodes management
+│   │   ├── ConfigTab.svelte        # ConfigMaps and Secrets
+│   │   ├── NetworkTab.svelte       # Services and networking
+│   │   ├── CustomResourcesTab.svelte # CRDs and custom resources
+│   │   ├── ResourceOverview.svelte # Legacy resource panels
+│   │   ├── MetricsGraph.svelte     # Resource usage graphs
+│   │   └── ThemeSwitcher.svelte    # Dev mode theme controls
 │   ├── styles/              # CSS organization
-│   │   └── variables.css    # CSS custom properties and global styles
+│   │   ├── color-palette.css # Centralized color definitions
+│   │   ├── variables.css    # CSS custom properties and global styles
+│   │   └── README.md        # Color customization guide
 │   ├── types/               # TypeScript interfaces
 │   │   └── index.ts         # All UI type definitions
 │   └── utils/               # Utility functions
-│       └── formatters.ts    # Data formatting functions
+│       ├── formatters.ts    # Data formatting functions
+│       └── performance.ts   # Performance utilities
 ├── routes/
 │   ├── +layout.ts          # Layout configuration
 │   └── +page.svelte        # Main page (orchestrates components)
 └── app.html                # HTML template
+```
+
+## 🎨 Color System & Theming
+
+### Centralized Color Management
+The application uses a centralized color system defined in `src/lib/styles/color-palette.css`:
+
+**Key Features:**
+- **Single Source of Truth**: All colors defined in one file
+- **CSS Custom Properties**: Easy to modify and maintain
+- **Theme Variations**: Dark (default), Light, and High Contrast themes
+- **Dev Mode Controls**: ThemeSwitcher component for real-time editing
+- **Semantic Naming**: Colors named by purpose, not appearance
+
+**Color Categories:**
+- **Primary Brand**: Main application colors
+- **Status Colors**: Success, warning, error, info states
+- **Background Colors**: Various background shades
+- **Text Colors**: Primary, secondary, muted text
+- **Status Badges**: Ready, pending, error, info states
+- **Donut Charts**: Usage visualization colors
+- **Network Services**: Service type indicators
+
+**Usage:**
+```css
+/* Use semantic color names */
+color: var(--text-primary);
+background: var(--status-ready-bg);
+border: 1px solid var(--border-primary);
 ```
 
 ## 🧩 Component Breakdown
@@ -46,13 +88,44 @@ src/
 - `contextChange` - Emitted when context is changed
 - `refresh` - Emitted when refresh button is clicked
 
-### 2. **Cluster Overview Component** (`src/lib/components/ClusterOverview.svelte`)
-**Purpose:** Display cluster information and comprehensive node management
+### 2. **Resource Management System**
+**Purpose:** Tabbed interface for managing different Kubernetes resource types
+
+**Architecture:**
+- **TabbedContent.svelte**: Main container that orchestrates all resource tabs
+- **ResourceTabs.svelte**: Navigation component for tab switching
+- **Individual Tab Components**: Specialized components for each resource type
+
+**Available Tabs:**
+1. **Workloads** (`WorkloadsTab.svelte`): Pods, Deployments, Services
+2. **Nodes** (`NodesTab.svelte`): Cluster nodes with detailed management
+3. **Config** (`ConfigTab.svelte`): ConfigMaps and Secrets
+4. **Network** (`NetworkTab.svelte`): Services and networking resources
+5. **Storage** (`CustomResourcesTab.svelte`): PersistentVolumes, PVCs (coming soon)
+6. **Custom Resources** (`CustomResourcesTab.svelte`): CRDs and custom resources
+7. **Security** (`CustomResourcesTab.svelte`): RBAC, SecurityContexts (coming soon)
+
+**Key Features:**
+- **Lazy Loading**: Resources only loaded when tab is selected
+- **Real-time Counts**: Tab badges show resource counts
+- **Consistent UI**: All tabs follow the same design patterns
+- **Error Handling**: Graceful error states and retry mechanisms
+- **Responsive Design**: Works on different screen sizes
+
+### 3. **Cluster Overview Component** (`src/lib/components/ClusterOverview.svelte`)
+**Purpose:** Display cluster information and metrics overview
 
 **Features:**
 - Cluster basic information and statistics
-- Two-panel layout (node list + node details)
+- **ClusterMetrics**: Real-time cluster-wide resource usage (donut charts)
+- **TabbedContent**: Resource management tabs (workloads, nodes, config, etc.)
+- **Node Management**: Two-panel layout (node list + node details)
 - Node selection and detailed information display
+
+**Sub-components:**
+- **ClusterMetrics.svelte**: Donut charts for CPU, memory, disk usage
+- **DonutChart.svelte**: Reusable CSS-based donut chart component
+- **TabbedContent.svelte**: Resource management interface
 - System information (OS, kernel, kubelet, container runtime)
 - Resource specifications and usage
 - Labels, annotations, and taints display

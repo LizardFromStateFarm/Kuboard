@@ -4,7 +4,6 @@
   // Import our modular components
   import Header from '$lib/components/Header.svelte';
   import ClusterOverviewComponent from '$lib/components/ClusterOverview.svelte';
-  import ResourceOverview from '$lib/components/ResourceOverview.svelte';
   import MetricsGraph from '$lib/components/MetricsGraph.svelte';
   
   // Import types
@@ -13,12 +12,14 @@
     ClusterOverview, 
     NodeDetails, 
     ResourceTab, 
-    ExpandedPanel,
     MetricsDataPoint 
   } from '$lib/types/index.js';
   
   // Import utilities
   import { formatMemory, formatCPU, formatPercentage } from '$lib/utils/formatters.js';
+  
+  // Import theme switcher for dev mode
+  import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
 
 
   // State variables
@@ -30,12 +31,11 @@
   let success = "";
   let isTauriAvailable = false;
 
-  // Resource data and expanded states
+  // Resource data
   let nodes: any[] = [];
   let namespaces: any[] = [];
   let pods: any[] = [];
   let deployments: any[] = [];
-  let expandedPanel: ExpandedPanel = null;
   let resourceLoading = false;
 
   // Node selection state
@@ -96,7 +96,7 @@
       loading = true;
       error = "";
       const { invoke } = await import('@tauri-apps/api/core');
-      const response = await invoke('kuboard_list_contexts');
+      const response = await invoke('kuboard_list_contexts') as any;
       contexts = response.contexts || [];
       
       // Don't auto-select context - let user choose
@@ -117,10 +117,8 @@
 
   async function setContext(contextName: string) {
     console.log('🔄 Setting context to:', contextName);
-    alert(`🔄 Setting context to: ${contextName}`); // Temporary debug alert
     if (!isTauriAvailable) {
       console.log('⚠️ Tauri not available, skipping context set');
-      alert('⚠️ Tauri not available, skipping context set'); // Temporary debug alert
       return;
     }
 
@@ -203,12 +201,14 @@
       console.log('📊 Raw pods data:', podsData);
       console.log('📊 Raw deployments data:', deploymentsData);
       
-      nodes = nodesData || [];
-      namespaces = namespacesData || [];
-      pods = podsData || [];
-      deployments = deploymentsData || [];
+      nodes = (nodesData as any[]) || [];
+      namespaces = (namespacesData as any[]) || [];
+      pods = (podsData as any[]) || [];
+      deployments = (deploymentsData as any[]) || [];
       
       console.log('✅ Resource details loaded - Nodes:', nodes.length, 'Namespaces:', namespaces.length, 'Pods:', pods.length, 'Deployments:', deployments.length);
+      console.log('📊 Nodes data sample:', nodes[0]);
+      console.log('🔄 Main page: Nodes array updated, length:', nodes.length);
     } catch (err) {
       console.error('❌ Error loading resource details:', err);
       error = `Failed to load resource details: ${err}`;
@@ -362,13 +362,16 @@
         console.log('📊 Raw metrics response:', metrics);
         console.log('📊 Raw history response:', historyData);
         
+        const metricsData = metrics as any;
+        const historyArray = historyData as any[];
+        
         // Update the selected node with metrics data
-        selectedNode.cpu_usage_percent = metrics.cpu?.usage_percent || 0;
-        selectedNode.memory_usage_percent = metrics.memory?.usage_percent || 0;
-        selectedNode.disk_usage_percent = metrics.disk?.usage_percent || 0;
+        selectedNode.cpu_usage_percent = metricsData.cpu?.usage_percent || 0;
+        selectedNode.memory_usage_percent = metricsData.memory?.usage_percent || 0;
+        selectedNode.disk_usage_percent = metricsData.disk?.usage_percent || 0;
         
         // Transform history data to MetricsDataPoint format
-        resourceHistory = (historyData || []).map((item: any) => ({
+        resourceHistory = (historyArray || []).map((item: any) => ({
           timestamp: item.timestamp,
           cpu_usage_cores: parseFloat(item.cpu?.usage?.replace('m', '')) / 1000 || 0,
           memory_usage_bytes: parseFloat(item.memory?.usage?.replace('Gi', '')) * 1024 * 1024 * 1024 || 0,
@@ -432,14 +435,6 @@
     console.log('📈 History duration changed to:', historyDurationMinutes);
   }
 
-  function handlePanelToggle(event: CustomEvent<ExpandedPanel>) {
-    expandedPanel = event.detail;
-    console.log('📋 Panel toggled:', expandedPanel);
-  }
-
-  function handleResourceSelect(event: CustomEvent<{type: string, resource: any}>) {
-    console.log('🔍 Resource selected:', event.detail);
-  }
 
   function handleDebugConsoleToggle() {
     showDebugConsole = !showDebugConsole;
@@ -485,7 +480,7 @@
         try {
           console.log('🔄 Auto-refreshing metrics...');
           lastMetricsRefreshTime = new Date().toLocaleTimeString();
-          await fetchNodeMetrics(selectedNode.name);
+          await fetchNodeMetrics(selectedNode!.name);
         } catch (error) {
           console.error('❌ Metrics auto-refresh error:', error);
         }
@@ -498,7 +493,7 @@
     
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const availability = await invoke('kuboard_check_metrics_availability');
+      const availability = await invoke('kuboard_check_metrics_availability') as any;
       
       metricsServerAvailable = availability.available;
       isUsingMockData = availability.using_mock_data || false;
@@ -528,15 +523,18 @@
         invoke('kuboard_get_node_metrics_history', { nodeName, durationMinutes: historyDurationMinutes })
       ]);
       
+      const metricsData = metrics as any;
+      const historyArray = historyData as any[];
+      
       // Update selected node with new metrics
       if (selectedNode && selectedNode.name === nodeName) {
-        selectedNode.cpu_usage_percent = metrics.cpu?.usage_percent || 0;
-        selectedNode.memory_usage_percent = metrics.memory?.usage_percent || 0;
-        selectedNode.disk_usage_percent = metrics.disk?.usage_percent || 0;
+        selectedNode.cpu_usage_percent = metricsData.cpu?.usage_percent || 0;
+        selectedNode.memory_usage_percent = metricsData.memory?.usage_percent || 0;
+        selectedNode.disk_usage_percent = metricsData.disk?.usage_percent || 0;
         selectedNode = selectedNode; // Trigger reactivity
         
         // Transform history data to MetricsDataPoint format
-        resourceHistory = (historyData || []).map((item: any) => ({
+        resourceHistory = (historyArray || []).map((item: any) => ({
           timestamp: item.timestamp,
           cpu_usage_cores: parseFloat(item.cpu?.usage?.replace('m', '')) / 1000 || 0,
           memory_usage_bytes: parseFloat(item.memory?.usage?.replace('Gi', '')) * 1024 * 1024 * 1024 || 0,
@@ -606,7 +604,6 @@
       {showDebugConsole}
       {autoRefreshEnabled}
       {lastRefreshTime}
-      {resourceLoading}
       on:nodeSelect={handleNodeSelect}
       on:tabChange={handleTabChange}
       on:refreshIntervalChange={handleRefreshIntervalChange}
@@ -626,21 +623,9 @@
         </div>
       {/if}
 
-  <!-- Resource Overview Component -->
-  {#if clusterOverview}
-    <ResourceOverview 
-      {clusterOverview}
-      {currentContext}
-      {nodes}
-      {namespaces}
-      {pods}
-      {deployments}
-      {expandedPanel}
-      {resourceLoading}
-      on:panelToggle={handlePanelToggle}
-      on:resourceSelect={handleResourceSelect}
-    />
-  {/if}
+  
+  <!-- Theme Switcher (Dev Mode Only) -->
+  <ThemeSwitcher />
 </main>
 
 <style>

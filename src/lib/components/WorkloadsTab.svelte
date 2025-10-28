@@ -10,47 +10,111 @@
   let pods: any[] = [];
   let deployments: any[] = [];
   let services: any[] = [];
-  let replicasets: any[] = [];
-  let daemonsets: any[] = [];
-  let statefulsets: any[] = [];
-  let jobs: any[] = [];
-  let cronjobs: any[] = [];
   
   let loading: boolean = false;
   let error: string | null = null;
   let lastUpdate: string = '';
+  let selectedWorkloadType: string = 'pods'; // Default to pods
+  let loadedTypes: Set<string> = new Set(); // Track which types have been loaded
 
-  // Load workloads data
-  async function loadWorkloads() {
-    if (!currentContext || loading) return;
+  // Workload type definitions
+  const workloadTypes = [
+    { id: 'pods', label: 'Pods', icon: '🟢', description: 'Running containers' },
+    { id: 'deployments', label: 'Deployments', icon: '📦', description: 'Deployment controllers' },
+    { id: 'services', label: 'Services', icon: '🌐', description: 'Network services' }
+  ];
+
+  // Load specific workload type
+  async function loadWorkloadType(type: string) {
+    if (!currentContext || loading || loadedTypes.has(type)) return;
     
     loading = true;
     error = null;
     
     try {
-      // Load all workload types in parallel
-      const [podsData, deploymentsData, servicesData] = await Promise.all([
-        invoke('kuboard_get_pods').catch(() => []),
-        invoke('kuboard_get_deployments').catch(() => []),
-        invoke('kuboard_get_services').catch(() => [])
-      ]);
-
-      pods = podsData as any[] || [];
-      deployments = deploymentsData as any[] || [];
-      services = servicesData as any[] || [];
+      let data: any[] = [];
       
+      switch (type) {
+        case 'pods':
+          data = await invoke('kuboard_get_pods').catch(() => []);
+          pods = data as any[] || [];
+          break;
+        case 'deployments':
+          data = await invoke('kuboard_get_deployments').catch(() => []);
+          deployments = data as any[] || [];
+          break;
+        case 'services':
+          data = await invoke('kuboard_get_services').catch(() => []);
+          services = data as any[] || [];
+          break;
+      }
+      
+      loadedTypes.add(type);
       lastUpdate = new Date().toLocaleTimeString();
     } catch (err) {
       error = err as string;
-      console.error('Failed to load workloads:', err);
+      console.error(`Failed to load ${type}:`, err);
     } finally {
       loading = false;
     }
   }
 
-  // Get status class for workload
-  function getStatusClass(status: string): string {
-    return status.toLowerCase().replace(/\s+/g, '-');
+  // Load workloads data (legacy function for compatibility)
+  async function loadWorkloads() {
+    // This function is kept for compatibility but now just loads the selected type
+    await loadWorkloadType(selectedWorkloadType);
+  }
+
+  // Switch workload type
+  async function switchWorkloadType(type: string) {
+    selectedWorkloadType = type;
+    await loadWorkloadType(type);
+  }
+
+  // Get current workload data
+  function getCurrentWorkloads() {
+    switch (selectedWorkloadType) {
+      case 'pods': return pods;
+      case 'deployments': return deployments;
+      case 'services': return services;
+      default: return [];
+    }
+  }
+
+  // Get workload count
+  function getWorkloadCount(type: string) {
+    switch (type) {
+      case 'pods': return pods.length;
+      case 'deployments': return deployments.length;
+      case 'services': return services.length;
+      default: return 0;
+    }
+  }
+
+
+  // Get status class for pods
+  function getPodStatusClass(status: string): string {
+    switch (status?.toLowerCase()) {
+      case 'running': return 'running';
+      case 'pending': return 'pending';
+      case 'succeeded': return 'ready';
+      case 'failed': return 'failed';
+      case 'unknown': return 'unknown';
+      default: return 'unknown';
+    }
+  }
+
+  // Get status class for deployments
+  function getDeploymentStatusClass(deployment: any): string {
+    const available = deployment.status?.conditions?.find((c: any) => c.type === 'Available');
+    if (available?.status === 'True') return 'available';
+    return 'not-available';
+  }
+
+  // Get status class for services
+  function getServiceStatusClass(service: any): string {
+    const type = service.spec?.type || 'ClusterIP';
+    return type.toLowerCase();
   }
 
   // Format age
@@ -68,33 +132,35 @@
     return `${diffMins}m`;
   }
 
-  // Get pod status
-  function getPodStatus(pod: any): string {
-    if (pod.status?.phase) return pod.status.phase;
-    return 'Unknown';
+  // Format memory
+  function formatMemory(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 
-  // Get deployment status
-  function getDeploymentStatus(deployment: any): string {
-    const conditions = deployment.status?.conditions || [];
-    const available = conditions.find((c: any) => c.type === 'Available');
-    if (available?.status === 'True') return 'Available';
-    return 'Not Available';
-  }
-
-  // Get service type
-  function getServiceType(service: any): string {
-    return service.spec?.type || 'ClusterIP';
+  // Format CPU
+  function formatCPU(millicores: number): string {
+    if (millicores === 0) return '0m';
+    if (millicores >= 1000) {
+      return (millicores / 1000).toFixed(1) + ' cores';
+    }
+    return millicores + 'm';
   }
 
   // Lifecycle
   onMount(() => {
-    loadWorkloads();
+    // Don't auto-load anything - wait for user selection
   });
 
   // Reactive updates
   $: if (currentContext) {
-    loadWorkloads();
+    // Only load if a type is selected and not already loaded
+    if (selectedWorkloadType && !loadedTypes.has(selectedWorkloadType)) {
+      loadWorkloadType(selectedWorkloadType);
+    }
   }
 </script>
 
@@ -104,9 +170,9 @@
     <div class="tab-controls">
       <button 
         class="refresh-button" 
-        onclick={loadWorkloads}
+        onclick={() => loadWorkloadType(selectedWorkloadType)}
         disabled={loading}
-        title="Refresh workloads"
+        title="Refresh current workload type"
       >
         {#if loading}
           🔄
@@ -120,13 +186,44 @@
     </div>
   </div>
 
+  <!-- Workload Type Selector -->
+  <div class="workload-type-selector">
+    <div class="selector-header">
+      <h5>Select Workload Type</h5>
+      <p>Choose a workload type to view and manage</p>
+    </div>
+    <div class="workload-type-grid">
+      {#each workloadTypes as type}
+        <button 
+          class="workload-type-card"
+          class:active={selectedWorkloadType === type.id}
+          class:loaded={loadedTypes.has(type.id)}
+          onclick={() => switchWorkloadType(type.id)}
+          disabled={loading}
+        >
+          <div class="type-icon">{type.icon}</div>
+          <div class="type-info">
+            <div class="type-label">{type.label}</div>
+            <div class="type-description">{type.description}</div>
+            {#if loadedTypes.has(type.id)}
+              <div class="type-count">{getWorkloadCount(type.id)} items</div>
+            {/if}
+          </div>
+          {#if loadedTypes.has(type.id)}
+            <div class="loaded-indicator">✓</div>
+          {/if}
+        </button>
+      {/each}
+    </div>
+  </div>
+
   {#if error}
     <div class="error-message">
       <div class="error-icon">⚠️</div>
       <div class="error-content">
-        <h5>Failed to load workloads</h5>
+        <h5>Failed to load {selectedWorkloadType}</h5>
         <p>{error}</p>
-        <button class="retry-button" onclick={loadWorkloads}>
+        <button class="retry-button" onclick={() => loadWorkloadType(selectedWorkloadType)}>
           Retry
         </button>
       </div>
@@ -134,93 +231,128 @@
   {:else if loading}
     <div class="loading-message">
       <div class="loading-spinner">🔄</div>
-      <p>Loading workloads...</p>
+      <p>Loading {selectedWorkloadType}...</p>
     </div>
-  {:else}
-    <div class="workloads-grid">
-      <!-- Pods Section -->
-      <div class="workload-section">
-        <div class="section-header">
-          <h5>Pods ({pods.length})</h5>
-        </div>
+  {:else if loadedTypes.has(selectedWorkloadType) || (selectedWorkloadType === 'pods' && pods.length > 0)}
+    <!-- Workload Content -->
+    <div class="workload-content">
+      <div class="content-header">
+        <h5>
+          {workloadTypes.find(t => t.id === selectedWorkloadType)?.icon} 
+          {workloadTypes.find(t => t.id === selectedWorkloadType)?.label}
+          <span class="item-count">
+            {#if selectedWorkloadType === 'pods'}
+              ({pods.length})
+            {:else if selectedWorkloadType === 'deployments'}
+              ({deployments.length})
+            {:else if selectedWorkloadType === 'services'}
+              ({services.length})
+            {/if}
+          </span>
+        </h5>
+      </div>
+
+      {#if selectedWorkloadType === 'pods'}
+        <!-- Pods List -->
         <div class="workload-list">
-          {#each pods.slice(0, 10) as pod}
+          {#each pods as pod}
             <div class="workload-item">
               <div class="workload-info">
                 <span class="workload-name">{pod.metadata?.name || 'Unknown'}</span>
                 <span class="workload-namespace">{pod.metadata?.namespace || 'default'}</span>
               </div>
-              <div class="workload-status">
-                <span class="status-badge status-{getStatusClass(getPodStatus(pod))}">
-                  {getPodStatus(pod)}
-                </span>
-                <span class="workload-age">{formatAge(pod.metadata?.creationTimestamp)}</span>
+              <div class="workload-details">
+                <div class="workload-status">
+                  <span class="status-badge status-{getPodStatusClass(pod.status?.phase || 'Unknown')}">
+                    {pod.status?.phase || 'Unknown'}
+                  </span>
+                </div>
+                <div class="workload-age">
+                  <span class="age-info">{formatAge(pod.metadata?.creationTimestamp)}</span>
+                </div>
+                <div class="workload-restarts">
+                  <span class="restart-info">
+                    Restarts: {pod.status?.containerStatuses?.[0]?.restartCount || 0}
+                  </span>
+                </div>
               </div>
             </div>
           {/each}
-          {#if pods.length > 10}
-            <div class="workload-more">
-              <span>... and {pods.length - 10} more</span>
-            </div>
-          {/if}
         </div>
-      </div>
 
-      <!-- Deployments Section -->
-      <div class="workload-section">
-        <div class="section-header">
-          <h5>Deployments ({deployments.length})</h5>
-        </div>
+      {:else if selectedWorkloadType === 'deployments'}
+        <!-- Deployments List -->
         <div class="workload-list">
-          {#each deployments.slice(0, 10) as deployment}
+          {#each deployments as deployment}
             <div class="workload-item">
               <div class="workload-info">
                 <span class="workload-name">{deployment.metadata?.name || 'Unknown'}</span>
                 <span class="workload-namespace">{deployment.metadata?.namespace || 'default'}</span>
               </div>
-              <div class="workload-status">
-                <span class="status-badge status-{getStatusClass(getDeploymentStatus(deployment))}">
-                  {getDeploymentStatus(deployment)}
-                </span>
-                <span class="workload-age">{formatAge(deployment.metadata?.creationTimestamp)}</span>
+              <div class="workload-details">
+                <div class="workload-status">
+                  <span class="status-badge status-{getDeploymentStatusClass(deployment)}">
+                    {deployment.status?.conditions?.find((c: any) => c.type === 'Available')?.status === 'True' ? 'Available' : 'Not Available'}
+                  </span>
+                </div>
+                <div class="workload-replicas">
+                  <span class="replica-info">
+                    Replicas: {deployment.status?.readyReplicas || 0}/{deployment.spec?.replicas || 0}
+                  </span>
+                </div>
+                <div class="workload-age">
+                  <span class="age-info">{formatAge(deployment.metadata?.creationTimestamp)}</span>
+                </div>
               </div>
             </div>
           {/each}
-          {#if deployments.length > 10}
-            <div class="workload-more">
-              <span>... and {deployments.length - 10} more</span>
-            </div>
-          {/if}
         </div>
-      </div>
 
-      <!-- Services Section -->
-      <div class="workload-section">
-        <div class="section-header">
-          <h5>Services ({services.length})</h5>
-        </div>
+      {:else if selectedWorkloadType === 'services'}
+        <!-- Services List -->
         <div class="workload-list">
-          {#each services.slice(0, 10) as service}
+          {#each services as service}
             <div class="workload-item">
               <div class="workload-info">
                 <span class="workload-name">{service.metadata?.name || 'Unknown'}</span>
                 <span class="workload-namespace">{service.metadata?.namespace || 'default'}</span>
               </div>
-              <div class="workload-status">
-                <span class="status-badge status-{getStatusClass(getServiceType(service))}">
-                  {getServiceType(service)}
-                </span>
-                <span class="workload-age">{formatAge(service.metadata?.creationTimestamp)}</span>
+              <div class="workload-details">
+                <div class="workload-status">
+                  <span class="status-badge status-{getServiceStatusClass(service)}">
+                    {service.spec?.type || 'ClusterIP'}
+                  </span>
+                </div>
+                <div class="workload-ports">
+                  <span class="port-info">
+                    Ports: {service.spec?.ports?.length || 0}
+                  </span>
+                </div>
+                <div class="workload-age">
+                  <span class="age-info">{formatAge(service.metadata?.creationTimestamp)}</span>
+                </div>
               </div>
             </div>
           {/each}
-          {#if services.length > 10}
-            <div class="workload-more">
-              <span>... and {services.length - 10} more</span>
-            </div>
-          {/if}
         </div>
-      </div>
+      {/if}
+    </div>
+  {:else if selectedWorkloadType === 'pods' && pods.length === 0}
+    <!-- No pods found -->
+    <div class="no-resources">
+      <div class="no-resources-icon">📭</div>
+      <h5>No Pods Found</h5>
+      <p>No pods are currently running in this cluster</p>
+      <button class="retry-button" onclick={() => loadWorkloadType('pods')}>
+        Refresh
+      </button>
+    </div>
+  {:else}
+    <!-- No workload type selected -->
+    <div class="no-selection">
+      <div class="no-selection-icon">👆</div>
+      <h5>Select a Workload Type</h5>
+      <p>Choose a workload type from above to view and manage resources</p>
     </div>
   {/if}
 </div>
@@ -240,7 +372,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
     padding-bottom: var(--spacing-sm);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
@@ -282,6 +414,104 @@
   .last-update {
     font-size: 0.8rem;
     color: rgba(255, 255, 255, 0.6);
+  }
+
+  .workload-type-selector {
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .selector-header {
+    margin-bottom: var(--spacing-md);
+  }
+
+  .selector-header h5 {
+    margin: 0 0 4px 0;
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .selector-header p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+  }
+
+  .workload-type-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+  }
+
+  .workload-type-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    cursor: pointer;
+    transition: var(--transition-normal);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    position: relative;
+  }
+
+  .workload-type-card:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+  }
+
+  .workload-type-card.active {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+  }
+
+  .workload-type-card.loaded {
+    border-color: var(--success-color);
+  }
+
+  .workload-type-card:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .type-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .type-info {
+    flex: 1;
+  }
+
+  .type-label {
+    color: white;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .type-description {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+  }
+
+  .type-count {
+    color: var(--success-color);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .loaded-indicator {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    color: var(--success-color);
+    font-size: 0.8rem;
+    font-weight: bold;
   }
 
   .error-message {
@@ -346,28 +576,29 @@
     to { transform: rotate(360deg); }
   }
 
-  .workloads-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: var(--spacing-lg);
-  }
-
-  .workload-section {
+  .workload-content {
     background: rgba(255, 255, 255, 0.02);
     border-radius: var(--radius-md);
     padding: var(--spacing-md);
     border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
-  .section-header {
+  .content-header {
     margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  .section-header h5 {
+  .content-header h5 {
     margin: 0;
     color: white;
     font-size: 1rem;
     font-weight: 600;
+  }
+
+  .item-count {
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 400;
   }
 
   .workload-list {
@@ -377,9 +608,6 @@
   }
 
   .workload-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     padding: var(--spacing-sm);
     background: rgba(255, 255, 255, 0.03);
     border-radius: var(--radius-sm);
@@ -388,8 +616,9 @@
 
   .workload-info {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-xs);
   }
 
   .workload-name {
@@ -403,11 +632,14 @@
     font-size: 0.8rem;
   }
 
-  .workload-status {
+  .workload-details {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
+    gap: 4px;
+  }
+
+  .workload-status {
+    margin-bottom: var(--spacing-xs);
   }
 
   .status-badge {
@@ -420,8 +652,10 @@
   }
 
   .status-running, .status-available, .status-clusterip {
-    background: rgba(16, 185, 129, 0.2);
-    color: var(--primary-color);
+    background: var(--status-ready-bg);
+    color: var(--status-ready-text);
+    border: 1px solid var(--status-ready-border);
+    font-weight: 600;
   }
 
   .status-pending, .status-not-available {
@@ -439,33 +673,83 @@
     color: #3b82f6;
   }
 
+  .workload-replicas, .workload-ports, .workload-restarts, .workload-resources {
+    margin-bottom: 2px;
+  }
+
+  .replica-info, .port-info, .restart-info, .resource-info {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+
+  .workload-resources {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
   .workload-age {
+    margin-top: 2px;
+  }
+
+  .age-info {
     color: rgba(255, 255, 255, 0.6);
     font-size: 0.7rem;
   }
 
-  .workload-more {
-    text-align: center;
-    padding: var(--spacing-sm);
+  .no-selection, .no-resources {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-xl);
     color: rgba(255, 255, 255, 0.6);
-    font-size: 0.8rem;
-    font-style: italic;
+    text-align: center;
+  }
+
+  .no-selection-icon, .no-resources-icon {
+    font-size: 3rem;
+    opacity: 0.7;
+  }
+
+  .no-selection h5, .no-resources h5 {
+    margin: 0;
+    color: white;
+    font-size: 1.2rem;
+    font-weight: 600;
+  }
+
+  .no-selection p, .no-resources p {
+    margin: 0;
+    font-size: 0.9rem;
+  }
+
+  .no-resources .retry-button {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    cursor: pointer;
+    transition: var(--transition-normal);
+    font-size: 0.9rem;
+  }
+
+  .no-resources .retry-button:hover {
+    background: var(--primary-dark);
   }
 
   /* Responsive Design */
   @media (max-width: 768px) {
-    .workloads-grid {
+    .workload-type-grid {
       grid-template-columns: 1fr;
     }
     
-    .workload-item {
+    .workload-info {
       flex-direction: column;
       align-items: flex-start;
-      gap: var(--spacing-sm);
-    }
-    
-    .workload-status {
-      align-items: flex-start;
+      gap: var(--spacing-xs);
     }
   }
 </style>

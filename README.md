@@ -5,11 +5,13 @@ A modern Kubernetes dashboard built with SvelteKit and Tauri.
 ## ✨ Features
 
 - **🖥️ Desktop Application** - Native desktop app for Windows, macOS, and Linux
-- **📊 Real-time Metrics** - Live resource usage graphs and monitoring
+- **📊 Real-time Metrics** - Live resource usage graphs and cluster-wide donut charts
 - **🔄 Context Management** - Easy switching between Kubernetes contexts
-- **📈 Node Management** - Comprehensive node information and metrics
-- **🎨 Modern UI** - Clean, responsive interface with dark theme
+- **📋 Resource Management** - Tabbed interface for workloads, nodes, config, and networking
+- **🖥️ Node Management** - Comprehensive node information and detailed metrics
+- **🎨 Modern UI** - Clean, responsive interface with centralized theming system
 - **⚡ Fast Performance** - Built with Rust backend and SvelteKit frontend
+- **🎨 Customizable Themes** - Dark, light, and high-contrast themes with dev mode controls
 
 ## 🚀 Quick Start
 
@@ -25,6 +27,26 @@ A modern Kubernetes dashboard built with SvelteKit and Tauri.
 1. **Launch Kuboard** from your applications
 2. **Select Context** - Choose your Kubernetes context
 3. **View Dashboard** - Explore your cluster resources and metrics
+
+## 📋 Resource Management
+
+Kuboard features a comprehensive tabbed interface for managing Kubernetes resources:
+
+### Available Tabs
+- **🖥️ Nodes** - Cluster nodes with detailed system information and resource specs
+- **⚙️ Workloads** - Pods, Deployments, and Services
+- **⚙️ Config** - ConfigMaps and Secrets
+- **🌐 Network** - Services and networking resources
+- **🔧 Custom Resources** - CRDs and custom resource definitions
+- **💾 Storage** - PersistentVolumes and StorageClasses (coming soon)
+- **🔒 Security** - RBAC and SecurityContexts (coming soon)
+
+### Key Features
+- **Lazy Loading** - Resources only load when tab is selected
+- **Real-time Counts** - Tab badges show current resource counts
+- **Detailed Views** - Comprehensive information for each resource type
+- **Copy to Clipboard** - Easy copying of resource details
+- **Responsive Design** - Works on different screen sizes
 
 ## 🛠️ Development
 

@@ -436,8 +436,10 @@
   }
 
   .status-badge.real {
-    background: rgba(16, 185, 129, 0.2);
-    color: var(--primary-color);
+    background: var(--status-ready-bg);
+    color: var(--status-ready-text);
+    border: 1px solid var(--status-ready-border);
+    font-weight: 600;
   }
 
   .status-badge.estimated {

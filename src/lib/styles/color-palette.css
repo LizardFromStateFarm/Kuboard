@@ -1,0 +1,209 @@
+/* Kuboard Color Palette - Centralized Color Management */
+/* Modify these colors to customize the entire application theme */
+
+:root {
+  /* ======================================== */
+  /* PRIMARY BRAND COLORS */
+  /* ======================================== */
+  --primary-color: #2e91be;           /* Main brand color (blue) */
+  --primary-dark: #1d4ed8;            /* Darker shade of primary */
+  --primary-light: #60a5fa;           /* Lighter shade of primary */
+  
+  /* ======================================== */
+  /* STATUS COLORS */
+  /* ======================================== */
+  --success-color: #10b981;           /* Green for success/ready states */
+  --success-dark: #0d1110;            /* Darker green for better contrast */
+  --success-light: #34d399;           /* Lighter green */
+  
+  --warning-color: #f59e0b;           /* Amber for warnings */
+  --warning-dark: #d97706;            /* Darker amber */
+  --warning-light: #fbbf24;           /* Lighter amber */
+  
+  --error-color: #ef4444;             /* Red for errors */
+  --error-dark: #dc2626;              /* Darker red */
+  --error-light: #f87171;             /* Lighter red */
+  
+  --info-color: #06b6d4;              /* Cyan for info */
+  --info-dark: #0891b2;               /* Darker cyan */
+  --info-light: #22d3ee;              /* Lighter cyan */
+  
+  /* ======================================== */
+  /* BACKGROUND COLORS */
+  /* ======================================== */
+  --background-primary: #000000;      /* Main background (pure black) */
+  --background-secondary: #111111;    /* Secondary background */
+  --background-tertiary: #1a1a1a;     /* Tertiary background */
+  --background-card: #1a1a1a;         /* Card backgrounds */
+  --background-hover: #2a2a2a;        /* Hover states */
+  --background-overlay: #000000;      /* Overlay backgrounds */
+  
+  /* ======================================== */
+  /* TEXT COLORS */
+  /* ======================================== */
+  --text-primary: #ffffff;            /* Primary text (pure white) */
+  --text-secondary: #a1a1aa;          /* Secondary text */
+  --text-muted: #71717a;              /* Muted text */
+  --text-disabled: #525252;           /* Disabled text */
+  
+  /* ======================================== */
+  /* BORDER COLORS */
+  /* ======================================== */
+  --border-primary: #27272a;          /* Primary borders */
+  --border-secondary: #3f3f46;        /* Secondary borders */
+  --border-accent: #525252;           /* Accent borders */
+  --border-focus: var(--primary-color); /* Focus borders */
+  
+  /* ======================================== */
+  /* STATUS BADGE COLORS */
+  /* ======================================== */
+  /* Ready/Running/Available states */
+  --status-ready-bg: rgba(21, 219, 87, 0.4);  /* Background opacity */
+  --status-ready-text: #fcfcfc;                /* Text color */
+  --status-ready-border: rgba(16, 185, 129, 0.6); /* Border color */
+  
+  /* Pending/Warning states */
+  --status-pending-bg: rgba(245, 158, 11, 0.2);
+  --status-pending-text: #f59e0b;
+  --status-pending-border: rgba(245, 158, 11, 0.4);
+  
+  /* Error/Failed states */
+  --status-error-bg: rgba(239, 68, 68, 0.2);
+  --status-error-text: #ef4444;
+  --status-error-border: rgba(239, 68, 68, 0.4);
+  
+  /* Info/Blue states */
+  --status-info-bg: rgba(59, 130, 246, 0.2);
+  --status-info-text: #3b82f6;
+  --status-info-border: rgba(59, 130, 246, 0.4);
+  
+  /* ======================================== */
+  /* GRADIENT DEFINITIONS */
+  /* ======================================== */
+  --gradient-primary: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+  --gradient-success: linear-gradient(135deg, var(--success-color) 0%, var(--success-dark) 100%);
+  --gradient-warning: linear-gradient(135deg, var(--warning-color) 0%, var(--warning-dark) 100%);
+  --gradient-error: linear-gradient(135deg, var(--error-color) 0%, var(--error-dark) 100%);
+  --gradient-info: linear-gradient(135deg, var(--info-color) 0%, var(--info-dark) 100%);
+  
+  /* ======================================== */
+  /* SHADOW COLORS */
+  /* ======================================== */
+  --shadow-primary: rgba(59, 130, 246, 0.15);
+  --shadow-success: rgba(16, 185, 129, 0.15);
+  --shadow-warning: rgba(245, 158, 11, 0.15);
+  --shadow-error: rgba(239, 68, 68, 0.15);
+  --shadow-info: rgba(6, 182, 212, 0.15);
+  --shadow-dark: rgba(0, 0, 0, 0.3);
+  
+  /* ======================================== */
+  /* DONUT CHART COLORS */
+  /* ======================================== */
+  --donut-success: #10b981;           /* Green for low usage */
+  --donut-info: #06b6d4;              /* Cyan for medium usage */
+  --donut-warning: #f59e0b;           /* Amber for high usage */
+  --donut-error: #ef4444;             /* Red for critical usage */
+  --donut-primary: #3b82f6;           /* Blue for primary usage */
+  --donut-purple: #8b5cf6;            /* Purple for special cases */
+  
+  /* ======================================== */
+  /* NETWORK SERVICE TYPE COLORS */
+  /* ======================================== */
+  --service-clusterip: #10b981;       /* ClusterIP services */
+  --service-loadbalancer: #3b82f6;    /* LoadBalancer services */
+  --service-nodeport: #f59e0b;        /* NodePort services */
+  --service-externalname: #8b5cf6;    /* ExternalName services */
+  
+  /* ======================================== */
+  /* LEGACY COMPATIBILITY */
+  /* ======================================== */
+  /* These maintain compatibility with existing code */
+  --accent-color: var(--primary-dark);
+  --surface-color: var(--background-secondary);
+  --card-background: var(--background-card);
+  --hover-color: var(--background-hover);
+  --text-color: var(--text-primary);
+  --border-color: var(--border-primary);
+  --border-light: var(--border-secondary);
+  --border-dark: var(--border-primary);
+}
+
+/* ======================================== */
+/* THEME VARIATIONS */
+/* ======================================== */
+
+/* Dark Theme (Default) */
+[data-theme="dark"] {
+  /* Already defined above as default */
+}
+
+/* Light Theme (Optional) */
+[data-theme="light"] {
+  --background-primary: #ffffff;
+  --background-secondary: #f8fafc;
+  --background-tertiary: #f1f5f9;
+  --background-card: #ffffff;
+  --background-hover: #f1f5f9;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --border-primary: #e2e8f0;
+  --border-secondary: #cbd5e1;
+}
+
+/* High Contrast Theme */
+[data-theme="high-contrast"] {
+  --background-primary: #000000;
+  --background-secondary: #000000;
+  --text-primary: #ffffff;
+  --text-secondary: #ffffff;
+  --border-primary: #ffffff;
+  --primary-color: #00ff00;
+  --success-color: #00ff00;
+  --error-color: #ff0000;
+  --warning-color: #ffff00;
+}
+
+/* ======================================== */
+/* UTILITY CLASSES */
+/* ======================================== */
+
+/* Status Badge Utilities */
+.status-ready, .status-running, .status-available {
+  background: var(--status-ready-bg);
+  color: var(--status-ready-text);
+  border: 1px solid var(--status-ready-border);
+  font-weight: 600;
+}
+
+.status-pending, .status-not-ready, .status-unknown {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-text);
+  border: 1px solid var(--status-pending-border);
+}
+
+.status-error, .status-failed {
+  background: var(--status-error-bg);
+  color: var(--status-error-text);
+  border: 1px solid var(--status-error-border);
+}
+
+.status-info, .status-clusterip {
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
+  border: 1px solid var(--status-info-border);
+}
+
+/* Background Utilities */
+.bg-primary { background: var(--background-primary); }
+.bg-secondary { background: var(--background-secondary); }
+.bg-card { background: var(--background-card); }
+
+/* Text Utilities */
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-muted { color: var(--text-muted); }
+
+/* Border Utilities */
+.border-primary { border-color: var(--border-primary); }
+.border-secondary { border-color: var(--border-secondary); }

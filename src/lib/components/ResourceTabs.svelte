@@ -12,6 +12,7 @@
     disabled?: boolean;
   }> = [
     { id: 'workloads', label: 'Workloads', icon: '⚙️', count: 0 },
+    { id: 'nodes', label: 'Nodes', icon: '🖥️', count: 0 },
     { id: 'config', label: 'Config', icon: '⚙️', count: 0 },
     { id: 'network', label: 'Network', icon: '🌐', count: 0 },
     { id: 'storage', label: 'Storage', icon: '💾', count: 0 },
@@ -24,9 +25,10 @@
 
   // Tab click handler
   function selectTab(tabId: string) {
-    if (tabs.find(t => t.id === tabId)?.disabled) return;
+    if (tabs.find(t => t.id === tabId)?.disabled) {
+      return;
+    }
     
-    activeTab = tabId;
     dispatch('tabChange', { tabId });
   }
 

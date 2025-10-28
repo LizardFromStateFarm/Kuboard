@@ -3,12 +3,14 @@
   import { invoke } from '@tauri-apps/api/core';
   import ResourceTabs from './ResourceTabs.svelte';
   import WorkloadsTab from './WorkloadsTab.svelte';
+  import NodesTab from './NodesTab.svelte';
   import ConfigTab from './ConfigTab.svelte';
   import NetworkTab from './NetworkTab.svelte';
   import CustomResourcesTab from './CustomResourcesTab.svelte';
 
   // Props
   export let currentContext: any = null;
+  export let nodes: any[] = [];
 
   // State
   let activeTab: string = 'workloads';
@@ -17,6 +19,7 @@
   // Tab definitions
   const tabs = [
     { id: 'workloads', label: 'Workloads', icon: '⚙️', count: 0 },
+    { id: 'nodes', label: 'Nodes', icon: '🖥️', count: 0 },
     { id: 'config', label: 'Config', icon: '⚙️', count: 0 },
     { id: 'network', label: 'Network', icon: '🌐', count: 0 },
     { id: 'storage', label: 'Storage', icon: '💾', count: 0, disabled: true },
@@ -26,6 +29,7 @@
 
   // Tab change handler
   function handleTabChange(event: CustomEvent<{ tabId: string }>) {
+    console.log('🔄 TabbedContent tab change:', event.detail.tabId);
     activeTab = event.detail.tabId;
   }
 
@@ -46,15 +50,17 @@
 
     try {
       // Load counts for available tabs
-      const [pods, deployments, services, configmaps, secrets] = await Promise.all([
+      const [pods, deployments, services, nodes, configmaps, secrets] = await Promise.all([
         invoke('kuboard_get_pods').catch(() => []),
         invoke('kuboard_get_deployments').catch(() => []),
         invoke('kuboard_get_services').catch(() => []),
+        invoke('kuboard_get_nodes').catch(() => []),
         invoke('kuboard_get_configmaps').catch(() => []),
         invoke('kuboard_get_secrets').catch(() => [])
       ]);
 
       updateTabCount('workloads', (pods as any[]).length + (deployments as any[]).length + (services as any[]).length);
+      updateTabCount('nodes', (nodes as any[]).length);
       updateTabCount('config', (configmaps as any[]).length + (secrets as any[]).length);
       updateTabCount('network', (services as any[]).length);
     } catch (error) {
@@ -64,8 +70,12 @@
 
   // Reactive updates
   $: if (currentContext) {
+    console.log('🔄 TabbedContent: Context changed, loading counts...');
     loadInitialCounts();
   }
+  
+  // Debug: Log when component mounts
+  console.log('🚀 TabbedContent component mounted');
 </script>
 
 <div class="tabbed-content">
@@ -76,31 +86,35 @@
   />
 
   <div class="tab-content">
-    {#if activeTab === 'workloads'}
-      <WorkloadsTab {currentContext} />
-    {:else if activeTab === 'config'}
-      <ConfigTab {currentContext} />
-    {:else if activeTab === 'network'}
-      <NetworkTab {currentContext} />
-    {:else if activeTab === 'storage'}
-      <div class="coming-soon-tab">
-        <div class="coming-soon-content">
-          <div class="coming-soon-icon">💾</div>
-          <h4>Storage Management</h4>
-          <p>Storage resources including PersistentVolumes, PersistentVolumeClaims, and StorageClasses will be available in a future update.</p>
+    {#key activeTab}
+      {#if activeTab === 'workloads'}
+        <WorkloadsTab {currentContext} />
+          {:else if activeTab === 'nodes'}
+            <NodesTab {currentContext} {nodes} />
+      {:else if activeTab === 'config'}
+        <ConfigTab {currentContext} />
+      {:else if activeTab === 'network'}
+        <NetworkTab {currentContext} />
+      {:else if activeTab === 'storage'}
+        <div class="coming-soon-tab">
+          <div class="coming-soon-content">
+            <div class="coming-soon-icon">💾</div>
+            <h4>Storage Management</h4>
+            <p>Storage resources including PersistentVolumes, PersistentVolumeClaims, and StorageClasses will be available in a future update.</p>
+          </div>
         </div>
-      </div>
-    {:else if activeTab === 'custom'}
-      <CustomResourcesTab {currentContext} />
-    {:else if activeTab === 'security'}
-      <div class="coming-soon-tab">
-        <div class="coming-soon-content">
-          <div class="coming-soon-icon">🔒</div>
-          <h4>Security Management</h4>
-          <p>Security resources including RBAC, SecurityContexts, and PodSecurityPolicies will be available in a future update.</p>
+      {:else if activeTab === 'custom'}
+        <CustomResourcesTab {currentContext} />
+      {:else if activeTab === 'security'}
+        <div class="coming-soon-tab">
+          <div class="coming-soon-content">
+            <div class="coming-soon-icon">🔒</div>
+            <h4>Security Management</h4>
+            <p>Security resources including RBAC, SecurityContexts, and PodSecurityPolicies will be available in a future update.</p>
+          </div>
         </div>
-      </div>
-    {/if}
+      {/if}
+    {/key}
   </div>
 </div>
 

@@ -2,26 +2,29 @@
 
 /**
  * Format memory bytes into human-readable string
- * @param bytes - Number of bytes
+ * @param bytes - Number of bytes (string or number)
  * @returns Formatted memory string (e.g., "1.5 GB")
  */
-export function formatMemory(bytes: number): string {
-  if (bytes === 0) return '0 B';
+export function formatMemory(bytes: number | string): string {
+  const numBytes = typeof bytes === 'string' ? parseFloat(bytes) : bytes;
+  if (isNaN(numBytes) || numBytes === 0) return '0 B';
   
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const i = Math.floor(Math.log(numBytes) / Math.log(k));
   
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  return parseFloat((numBytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 /**
  * Format CPU cores into human-readable string
- * @param cores - Number of CPU cores
+ * @param cores - Number of CPU cores (string or number)
  * @returns Formatted CPU string (e.g., "2.5 cores")
  */
-export function formatCPU(cores: number): string {
-  return cores.toFixed(1) + ' cores';
+export function formatCPU(cores: number | string): string {
+  const numCores = typeof cores === 'string' ? parseFloat(cores) : cores;
+  if (isNaN(numCores)) return '0 cores';
+  return numCores.toFixed(1) + ' cores';
 }
 
 /**

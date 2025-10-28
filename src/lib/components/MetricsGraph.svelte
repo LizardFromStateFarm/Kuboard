@@ -86,14 +86,15 @@
             callbacks: {
               label: function(context) {
                 const value = context.parsed.y;
+                const numValue = typeof value === 'number' ? value : parseFloat(value) || 0;
                 if (type === 'cpu') {
-                  return `${getResourceLabel(type)}: ${value.toFixed(2)} cores`;
+                  return `${getResourceLabel(type)}: ${numValue.toFixed(2)} cores`;
                 } else if (type === 'memory') {
-                  return `${getResourceLabel(type)}: ${value.toFixed(2)} GB`;
+                  return `${getResourceLabel(type)}: ${numValue.toFixed(2)} GB`;
                 } else if (type === 'disk') {
-                  return `${getResourceLabel(type)}: ${value.toFixed(2)} GB`;
+                  return `${getResourceLabel(type)}: ${numValue.toFixed(2)} GB`;
                 }
-                return `${getResourceLabel(type)}: ${value.toFixed(2)}`;
+                return `${getResourceLabel(type)}: ${numValue.toFixed(2)}`;
               }
             }
           }
@@ -113,6 +114,7 @@
           y: {
             display: true,
             min: 0,
+            max: getMaxValue(),
             grid: {
               color: 'rgba(255, 255, 255, 0.1)',
               drawBorder: false
@@ -120,14 +122,15 @@
             ticks: {
               color: 'rgba(255, 255, 255, 0.7)',
               callback: function(value) {
+                const numValue = typeof value === 'number' ? value : parseFloat(value) || 0;
                 if (type === 'cpu') {
-                  return value.toFixed(2) + ' cores';
+                  return numValue.toFixed(2) + ' cores';
                 } else if (type === 'memory') {
-                  return value.toFixed(2) + ' GB';
+                  return numValue.toFixed(2) + ' GB';
                 } else if (type === 'disk') {
-                  return value.toFixed(2) + ' GB';
+                  return numValue.toFixed(2) + ' GB';
                 }
-                return value.toFixed(2);
+                return numValue.toFixed(2);
               }
             }
           }
@@ -146,12 +149,15 @@
 
   // Update chart when data changes
   $: if (chartInstance && data.length > 0) {
+    console.log('📊 MetricsGraph: Data received:', data);
+    console.log('📊 MetricsGraph: First data point:', data[0]);
     updateChart();
   }
 
   // Update chart when type changes
-  $: if (chartInstance) {
-    initializeChart();
+  $: if (chartInstance && data.length > 0) {
+    console.log('📊 MetricsGraph: Type changed to:', type);
+    updateChart();
   }
 
   function updateChart() {
@@ -168,7 +174,43 @@
       }]
     };
 
+    // Update chart data
     chartInstance.data = newData;
+    
+    // Update y-axis maximum and ticks callback to use the new type
+    if (chartInstance.options.scales?.y) {
+      chartInstance.options.scales.y.max = getMaxValue();
+      if (chartInstance.options.scales.y.ticks) {
+        chartInstance.options.scales.y.ticks.callback = function(value) {
+          const numValue = typeof value === 'number' ? value : parseFloat(value) || 0;
+          if (type === 'cpu') {
+            return numValue.toFixed(2) + ' cores';
+          } else if (type === 'memory') {
+            return numValue.toFixed(2) + ' GB';
+          } else if (type === 'disk') {
+            return numValue.toFixed(2) + ' GB';
+          }
+          return numValue.toFixed(2);
+        };
+      }
+    }
+
+    // Update tooltip callback to use the new type
+    if (chartInstance.options.plugins?.tooltip?.callbacks) {
+      chartInstance.options.plugins.tooltip.callbacks.label = function(context) {
+        const value = context.parsed.y;
+        const numValue = typeof value === 'number' ? value : parseFloat(value) || 0;
+        if (type === 'cpu') {
+          return `${getResourceLabel(type)}: ${numValue.toFixed(2)} cores`;
+        } else if (type === 'memory') {
+          return `${getResourceLabel(type)}: ${numValue.toFixed(2)} GB`;
+        } else if (type === 'disk') {
+          return `${getResourceLabel(type)}: ${numValue.toFixed(2)} GB`;
+        }
+        return `${getResourceLabel(type)}: ${numValue.toFixed(2)}`;
+      };
+    }
+
     chartInstance.update('active');
   }
 
@@ -182,12 +224,50 @@
     }
   }
 
-  function getResourceValue(point: MetricsDataPoint, type: ResourceTab): number {
+  function getMaxValue(): number {
     switch (type) {
-      case 'cpu': return point.cpu_usage_cores;
-      case 'memory': return point.memory_usage_bytes / (1024 * 1024 * 1024); // Convert to GB
-      case 'disk': return point.disk_usage_bytes / (1024 * 1024 * 1024); // Convert to GB
-      default: return 0;
+      case 'cpu': return maxCpuCores || 1;
+      case 'memory': return (maxMemoryBytes || 1073741824) / (1024 * 1024 * 1024); // Convert to GB
+      case 'disk': return (maxDiskBytes || 1073741824) / (1024 * 1024 * 1024); // Convert to GB
+      default: return 1;
+    }
+  }
+
+  function getResourceValue(point: any, type: ResourceTab): number {
+    try {
+      switch (type) {
+        case 'cpu': 
+          // Handle both old format (cpu_usage_cores) and new format (cpu.usage)
+          if (point.cpu_usage_cores !== undefined) {
+            return point.cpu_usage_cores;
+          } else if (point.cpu?.usage !== undefined) {
+            // Convert from millicores to cores
+            return parseFloat(point.cpu.usage.replace('m', '')) / 1000;
+          }
+          return 0;
+        case 'memory': 
+          // Handle both old format (memory_usage_bytes) and new format (memory.usage)
+          if (point.memory_usage_bytes !== undefined) {
+            return point.memory_usage_bytes / (1024 * 1024 * 1024); // Convert to GB
+          } else if (point.memory?.usage !== undefined) {
+            // Convert from Gi to GB
+            return parseFloat(point.memory.usage.replace('Gi', ''));
+          }
+          return 0;
+        case 'disk': 
+          // Handle both old format (disk_usage_bytes) and new format (disk.usage)
+          if (point.disk_usage_bytes !== undefined) {
+            return point.disk_usage_bytes / (1024 * 1024 * 1024); // Convert to GB
+          } else if (point.disk?.usage !== undefined) {
+            // Convert from Gi to GB
+            return parseFloat(point.disk.usage.replace('Gi', ''));
+          }
+          return 0;
+        default: return 0;
+      }
+    } catch (error) {
+      console.error('Error parsing resource value:', error, point);
+      return 0;
     }
   }
 
@@ -205,8 +285,9 @@
   }
 
   function getCurrentValue(): number {
-    if (data.length === 0) return 0;
+    if (!data || data.length === 0) return 0;
     const latest = data[data.length - 1];
+    if (!latest) return 0;
     return getResourceValue(latest, type);
   }
 
@@ -238,6 +319,9 @@
         {:else}
           {getCurrentValue().toFixed(2)}
         {/if}
+        <div class="utilization-percentage">
+          ({((getCurrentValue() / getMaxValue()) * 100).toFixed(1)}% utilized)
+        </div>
       </div>
       {#if loading}
         <div class="loading-indicator">🔄</div>
@@ -332,6 +416,17 @@
     color: var(--primary-color);
     font-size: 1.5em;
     font-weight: 700;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .utilization-percentage {
+    font-size: 0.6em;
+    font-weight: 400;
+    color: var(--text-secondary);
+    opacity: 0.8;
   }
 
   .loading-indicator {

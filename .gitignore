@@ -125,3 +125,6 @@ temp/
 *.njsproj
 *.sln
 *.sw?
+
+# AI Assistant Documentation
+AI_SUMMARY.md

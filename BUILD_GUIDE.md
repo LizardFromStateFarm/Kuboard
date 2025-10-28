@@ -24,6 +24,12 @@ npm install
 npm run tauri dev
 ```
 
+**New Features in Development:**
+- **Resource Management Tabs**: Comprehensive tabbed interface for managing K8s resources
+- **Centralized Theming**: Real-time color editing with ThemeSwitcher component
+- **Cluster Metrics**: Real-time donut charts for cluster resource usage
+- **Enhanced Node Management**: Dedicated nodes tab with detailed information
+
 ### 3. Build for Production
 ```bash
 # Build desktop application
@@ -83,13 +89,35 @@ npm install
 ```
 kuboard/
 ├── src/                    # SvelteKit frontend
-│   ├── lib/components/     # UI components
-│   ├── lib/utils/         # Utility functions
-│   └── routes/            # SvelteKit routes
-├── src-tauri/             # Tauri backend
-│   ├── src/               # Rust source code
-│   └── tauri.conf.json    # Tauri configuration
-└── package.json           # Node.js dependencies
+│   ├── lib/
+│   │   ├── components/     # UI components
+│   │   │   ├── Header.svelte
+│   │   │   ├── ClusterOverview.svelte
+│   │   │   ├── ClusterMetrics.svelte
+│   │   │   ├── TabbedContent.svelte
+│   │   │   ├── WorkloadsTab.svelte
+│   │   │   ├── NodesTab.svelte
+│   │   │   ├── ConfigTab.svelte
+│   │   │   ├── NetworkTab.svelte
+│   │   │   ├── CustomResourcesTab.svelte
+│   │   │   ├── DonutChart.svelte
+│   │   │   └── ThemeSwitcher.svelte
+│   │   ├── styles/         # CSS and styling
+│   │   │   ├── color-palette.css  # Centralized colors
+│   │   │   ├── variables.css      # CSS variables
+│   │   │   └── README.md          # Color guide
+│   │   ├── types/          # TypeScript types
+│   │   └── utils/          # Utility functions
+│   └── routes/             # SvelteKit routes
+├── src-tauri/              # Tauri backend
+│   ├── src/                # Rust source code
+│   │   ├── commands/       # Tauri command handlers
+│   │   ├── kubernetes/     # K8s API integration
+│   │   ├── metrics/        # Metrics collection
+│   │   └── types.rs        # Rust type definitions
+│   └── tauri.conf.json     # Tauri configuration
+├── AI_SUMMARY.md           # AI assistant documentation (gitignored)
+└── package.json            # Node.js dependencies
 ```
 
 ## 🤝 Contributing
