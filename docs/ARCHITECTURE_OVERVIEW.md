@@ -34,6 +34,7 @@ src/lib/components/
 ├── TabbedContent.svelte    # Main tabbed interface container
 ├── ResourceTabs.svelte     # Tab navigation component
 ├── WorkloadsTab.svelte     # Workloads management (pods, deployments, services)
+├── PodsPanel.svelte        # Advanced pod management with events and container metrics
 ├── NodesTab.svelte         # Advanced node management and details
 ├── ConfigTab.svelte        # Configuration management (ConfigMaps, Secrets)
 ├── NetworkTab.svelte       # Network resources and services
@@ -104,6 +105,16 @@ src/lib/components/
 - Lazy loading of resource types
 - Detailed resource information display
 - Status filtering and sorting
+
+#### **PodsPanel Component**
+- Advanced pod management with interactive selection
+- Comprehensive pod information display (basic info, controller, labels, annotations)
+- Pod events section with color-coded event types and troubleshooting info
+- Container-specific metrics with click functionality
+- Pod conditions, tolerations, and affinity rules display
+- Pod volumes and container details
+- Real-time metrics integration with higher precision for pod CPU usage
+- Accessibility features with keyboard navigation and proper ARIA roles
 
 #### **NodesTab Component**
 - Advanced node management interface with simplified card-based layout
@@ -216,16 +227,22 @@ src-tauri/src/
 - `kuboard_get_custom_resources` - Fetch custom resources
 - `kuboard_get_node_metrics` - Get current node metrics
 - `kuboard_get_node_metrics_history` - Get historical metrics
+- `kuboard_get_pod_metrics` - Get current pod metrics
+- `kuboard_get_pod_metrics_history` - Get historical pod metrics
+- `kuboard_get_pod_events` - Get pod events for troubleshooting
 - `kuboard_check_metrics_availability` - Check metrics server
 
 #### **Kubernetes Integration** (`kubernetes/mod.rs`)
 - `kuboard_load_kubeconfig` - Load kubeconfig
 - `kuboard_create_client_from_context` - Create Kubernetes client
 - `kuboard_calculate_cluster_metrics` - Calculate cluster metrics
+- `kuboard_fetch_pod_events` - Fetch pod events from Kubernetes API
 
 #### **Metrics Server Integration** (`metrics/mod.rs`)
 - `kuboard_fetch_node_metrics_real` - Fetch real-time metrics
 - `kuboard_fetch_node_metrics_history` - Fetch historical metrics
+- `kuboard_fetch_pod_metrics_real` - Fetch real-time pod metrics
+- `kuboard_fetch_pod_metrics_history` - Fetch historical pod metrics
 - `kuboard_check_metrics_server_availability` - Check availability
 - `parse_cpu_quantity` - Parse CPU quantities
 - `parse_memory_quantity` - Parse memory quantities
@@ -403,7 +420,19 @@ This modular architecture has successfully transformed Kuboard into a comprehens
 
 ## 🆕 **Recent Major Updates**
 
-### **Advanced Nodes Management (Latest)**
+### **Comprehensive Pod Management (Latest)**
+- Complete pod management interface with interactive selection
+- Pod events section with color-coded event types and troubleshooting info
+- Container-specific metrics with click functionality for individual monitoring
+- Comprehensive pod information display (basic info, controller, labels, annotations)
+- Pod conditions, tolerations, and affinity rules display
+- Pod volumes and container details
+- Real-time metrics integration with higher precision for pod CPU usage
+- Backend support for pod events API with proper Kubernetes integration
+- Mock data fallback for events when API is unavailable
+- Accessibility features with keyboard navigation and proper ARIA roles
+
+### **Advanced Nodes Management**
 - Complete nodes tab functionality with simplified card-based layout
 - Capacity-based metrics visualization with utilization percentages
 - Resource type switching (CPU/Memory/Disk) with dynamic graph updates

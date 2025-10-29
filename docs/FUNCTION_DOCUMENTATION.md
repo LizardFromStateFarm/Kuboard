@@ -23,12 +23,20 @@
 | `kuboard_get_namespaces` | Fetches all namespaces in the cluster | ✅ Working | `commands` |
 | `kuboard_get_pods` | Fetches all pods in the cluster | ✅ Working | `commands` |
 | `kuboard_get_deployments` | Fetches all deployments in the cluster | ✅ Working | `commands` |
+| `kuboard_get_services` | Fetches all services in the cluster | ✅ Working | `commands` |
+| `kuboard_get_configmaps` | Fetches all ConfigMaps in the cluster | ✅ Working | `commands` |
+| `kuboard_get_secrets` | Fetches all Secrets in the cluster | ✅ Working | `commands` |
+| `kuboard_get_custom_resources` | Fetches custom resources in the cluster | ✅ Working | `commands` |
 
 #### **Metrics Commands (Real Implementation)**
 | Function Name | Description | Status | Module |
 |---------------|-------------|--------|--------|
 | `kuboard_get_node_metrics` | Fetches current node metrics from metrics server | ✅ Working | `commands` |
 | `kuboard_get_node_metrics_history` | Fetches historical node metrics data | ✅ Working | `commands` |
+| `kuboard_get_pod_metrics` | Fetches current pod metrics from metrics server | ✅ Working | `commands` |
+| `kuboard_get_pod_metrics_history` | Fetches historical pod metrics data | ✅ Working | `commands` |
+| `kuboard_get_pod_events` | Fetches pod events for troubleshooting | ✅ Working | `commands` |
+| `kuboard_get_cluster_metrics` | Fetches cluster-wide metrics | ✅ Working | `commands` |
 | `kuboard_check_metrics_availability` | Checks if metrics server is available | ✅ Working | `commands` |
 
 ### 🔧 **Backend Helper Functions (Rust)**
@@ -40,15 +48,19 @@
 | `kuboard_create_client_from_context` | Creates Kubernetes client from context | ✅ Working | `kubernetes` |
 | `kuboard_fetch_node_metrics` | Fetches node metrics (currently mock data) | ⚠️ Mock | `kubernetes` |
 | `kuboard_calculate_cluster_metrics` | Calculates cluster-wide metrics from nodes | ✅ Working | `kubernetes` |
+| `kuboard_fetch_pod_events` | Fetches pod events from Kubernetes API | ✅ Working | `kubernetes` |
 
 #### **Metrics Server Integration**
 | Function Name | Description | Status | Module |
 |---------------|-------------|--------|--------|
 | `kuboard_fetch_node_metrics_real` | Fetches real-time metrics from metrics server | ✅ Working | `metrics` |
 | `kuboard_fetch_node_metrics_history` | Fetches historical metrics data | ✅ Working | `metrics` |
+| `kuboard_fetch_pod_metrics_real` | Fetches real-time pod metrics from metrics server | ✅ Working | `metrics` |
+| `kuboard_fetch_pod_metrics_history` | Fetches historical pod metrics data | ✅ Working | `metrics` |
 | `kuboard_check_metrics_server_availability` | Checks if metrics server is available | ✅ Working | `metrics` |
 | `metrics_api_available` | Internal function to check metrics API availability | ✅ Working | `metrics` |
 | `get_node_metrics_by_name` | Internal function to fetch node metrics by name | ✅ Working | `metrics` |
+| `get_pod_metrics_by_name` | Internal function to fetch pod metrics by name | ✅ Working | `metrics` |
 | `parse_cpu_quantity` | Parses CPU quantity strings (150m, 1.5, etc.) | ✅ Working | `metrics` |
 | `parse_memory_quantity` | Parses memory quantity strings (1Gi, 1024Mi, etc.) | ✅ Working | `metrics` |
 
@@ -61,6 +73,27 @@
 | `kuboard_format_cpu` | Formats CPU cores into human-readable string | ✅ Working | `utils` |
 
 ### 🎨 **Frontend Functions (Svelte/TypeScript)**
+
+#### **PodsPanel Component** (`src/lib/components/PodsPanel.svelte`)
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `showFullPodDetails` | Shows detailed pod information and loads metrics/events | ✅ Working | `PodsPanel` |
+| `loadPodMetrics` | Loads pod metrics from backend | ✅ Working | `PodsPanel` |
+| `loadPodEvents` | Loads pod events from backend | ✅ Working | `PodsPanel` |
+| `loadContainerMetrics` | Loads metrics for specific container | ✅ Working | `PodsPanel` |
+| `selectContainer` | Selects container and loads its metrics | ✅ Working | `PodsPanel` |
+| `changeResourceType` | Changes resource type for metrics graph | ✅ Working | `PodsPanel` |
+| `changeContainerResourceType` | Changes resource type for container metrics | ✅ Working | `PodsPanel` |
+| `backToPodsList` | Returns to pods list view | ✅ Working | `PodsPanel` |
+| `getControllerInfo` | Extracts controller information from pod | ✅ Working | `PodsPanel` |
+| `getQoSClassClass` | Gets CSS class for QoS class | ✅ Working | `PodsPanel` |
+| `getConditionStatusClass` | Gets CSS class for condition status | ✅ Working | `PodsPanel` |
+| `getTolerationEffectClass` | Gets CSS class for toleration effect | ✅ Working | `PodsPanel` |
+| `formatObject` | Formats object for display | ✅ Working | `PodsPanel` |
+| `formatEventTime` | Formats event timestamp | ✅ Working | `PodsPanel` |
+| `getEventTypeClass` | Gets CSS class for event type | ✅ Working | `PodsPanel` |
+| `getEventReasonClass` | Gets CSS class for event reason | ✅ Working | `PodsPanel` |
+| `generateMockEvents` | Generates mock events for demonstration | ✅ Working | `PodsPanel` |
 
 #### **Main Page Orchestration** (`src/routes/+page.svelte`)
 | Function Name | Description | Status | Module |
@@ -136,7 +169,18 @@ src/
 │   │   ├── Header.svelte
 │   │   ├── ClusterOverview.svelte
 │   │   ├── ResourceOverview.svelte
-│   │   └── MetricsGraph.svelte
+│   │   ├── MetricsGraph.svelte
+│   │   ├── PodsPanel.svelte
+│   │   ├── WorkloadsTab.svelte
+│   │   ├── NodesTab.svelte
+│   │   ├── ConfigTab.svelte
+│   │   ├── NetworkTab.svelte
+│   │   ├── CustomResourcesTab.svelte
+│   │   ├── TabbedContent.svelte
+│   │   ├── ResourceTabs.svelte
+│   │   ├── DonutChart.svelte
+│   │   ├── ClusterMetrics.svelte
+│   │   └── ThemeSwitcher.svelte
 │   ├── styles/
 │   │   └── variables.css # CSS custom properties
 │   ├── types/
