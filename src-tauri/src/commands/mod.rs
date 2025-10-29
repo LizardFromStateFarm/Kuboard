@@ -26,7 +26,7 @@ use crate::metrics::{
     kuboard_fetch_pod_metrics_history,
     kuboard_check_metrics_server_availability,
 };
-use crate::kubernetes::kuboard_fetch_pod_events;
+use crate::kubernetes::{kuboard_fetch_pod_events, kuboard_fetch_pod_logs};
 
 // Context Management Commands
 #[tauri::command]
@@ -573,6 +573,34 @@ pub async fn kuboard_get_pod_events(
         }
         Err(e) => {
             error!("Failed to fetch events for pod: {}/{}: {}", namespace, podName, e);
+            Err(e.to_string())
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_pod_logs(
+    podName: String,
+    namespace: String,
+    containerName: Option<String>,
+    tailLines: Option<u32>,
+    follow: Option<bool>,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Fetching logs for pod: {}/{}", namespace, podName);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    match kuboard_fetch_pod_logs(client, &podName, &namespace, containerName.as_deref(), tailLines, follow.unwrap_or(false)).await {
+        Ok(logs) => {
+            info!("✅ Successfully fetched logs for pod: {}/{}", namespace, podName);
+            Ok(logs)
+        }
+        Err(e) => {
+            error!("Failed to fetch logs for pod: {}/{}: {}", namespace, podName, e);
             Err(e.to_string())
         }
     }

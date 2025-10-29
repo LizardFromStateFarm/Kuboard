@@ -4,6 +4,7 @@
   import { createEventDispatcher } from 'svelte';
   import { formatMemory, formatCPU } from '$lib/utils/formatters';
   import MetricsGraph from './MetricsGraph.svelte';
+  import LogsWindow from './LogsWindow.svelte';
 
   // Props
   export let currentContext: any = null;
@@ -13,6 +14,8 @@
   let selectedPod: any = null;
   let showFullDetails: boolean = false;
   let refreshTimer: any;
+  let logsWindowOpen = false;
+  let logsWindowRef: LogsWindow;
   let isLoading: boolean = false;
   
   // Metrics state
@@ -306,6 +309,19 @@
     eventsLoading = false;
     eventsError = null;
   }
+  
+  function openPodLogs(pod: any, containerName?: string) {
+    if (logsWindowRef) {
+      logsWindowRef.openPodLogs(pod.metadata?.name || 'Unknown', pod.metadata?.namespace || 'default', containerName);
+      logsWindowOpen = true;
+    }
+  }
+  
+  function openContainerLogs(container: any) {
+    if (selectedPod) {
+      openPodLogs(selectedPod, container.name);
+    }
+  }
 
   // Change resource type for metrics graph
   function changeResourceType(type: 'cpu' | 'memory') {
@@ -469,11 +485,18 @@
       <!-- Full Details View -->
       <div class="full-details-view">
         <div class="details-header">
-          <button class="back-button" onclick={backToPodsList}>
-            ← Back to Pods
-          </button>
-          <h3>{selectedPod.name}</h3>
-          <span class="pod-namespace">({selectedPod.namespace})</span>
+          <div class="header-left">
+            <button class="back-button" onclick={backToPodsList}>
+              ← Back to Pods
+            </button>
+            <button class="logs-button" onclick={() => openPodLogs(selectedPod)}>
+              📋 View Logs
+            </button>
+          </div>
+          <div class="header-right">
+            <h3>{selectedPod.name}</h3>
+            <span class="pod-namespace">({selectedPod.namespace})</span>
+          </div>
         </div>
         
         <div class="pod-details-content">
@@ -914,7 +937,16 @@
                       <div class="container-header">
                         <h6 class="container-name">{container.name}</h6>
                         <span class="container-image">{container.image}</span>
-                        <span class="click-hint">Click for metrics</span>
+                        <div class="container-actions">
+                          <span class="click-hint">Click for metrics</span>
+                          <button 
+                            class="container-logs-button" 
+                            onclick={(e) => { e.stopPropagation(); openContainerLogs(container); }}
+                            title="View container logs"
+                          >
+                            📋 Logs
+                          </button>
+                        </div>
                       </div>
                       {#if selectedPod.containerStatuses && selectedPod.containerStatuses[index]}
                         <div class="container-status">
@@ -1142,6 +1174,13 @@
     {/if}
   </div>
 </div>
+
+<!-- Logs Window -->
+<LogsWindow 
+  bind:this={logsWindowRef}
+  bind:isOpen={logsWindowOpen}
+  onClose={() => logsWindowOpen = false}
+/>
 
 <style>
   /* Import CSS variables */
@@ -1436,10 +1475,22 @@
 
   .details-header {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: var(--spacing-md);
     padding-bottom: var(--spacing-md);
     border-bottom: 1px solid var(--border-primary);
+  }
+  
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+  
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
   }
 
   .back-button {
@@ -1457,6 +1508,23 @@
     background: var(--accent-color);
     border-color: var(--accent-color);
     color: white;
+  }
+  
+  .logs-button {
+    background: var(--primary-color);
+    border: 1px solid var(--primary-color);
+    border-radius: var(--radius-sm);
+    color: white;
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    transition: all 0.2s ease;
+  }
+  
+  .logs-button:hover {
+    background: var(--primary-dark);
+    border-color: var(--primary-dark);
   }
 
   .details-header h3 {
@@ -1576,6 +1644,12 @@
     align-items: center;
     margin-bottom: var(--spacing-xs);
   }
+  
+  .container-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+  }
 
   .container-name {
     margin: 0;
@@ -1625,6 +1699,23 @@
     font-size: 0.8rem;
     font-style: italic;
     opacity: 0.7;
+  }
+  
+  .container-logs-button {
+    background: var(--background-card);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-xs);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    transition: all 0.2s ease;
+  }
+  
+  .container-logs-button:hover {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
   }
 
   /* Container Metrics Section */

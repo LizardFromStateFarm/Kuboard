@@ -58,6 +58,7 @@ pub fn run() {
         commands::kuboard_get_pod_metrics,
         commands::kuboard_get_pod_metrics_history,
         commands::kuboard_get_pod_events,
+        commands::kuboard_get_pod_logs,
         commands::kuboard_check_metrics_availability,
         commands::kuboard_get_cluster_metrics,
         ])

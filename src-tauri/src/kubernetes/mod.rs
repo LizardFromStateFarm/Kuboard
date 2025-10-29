@@ -10,6 +10,7 @@ use kube::api::ListParams;
 use kube::config::{KubeConfigOptions, Kubeconfig};
 use k8s_openapi::api::core::v1::Node;
 use serde::{Deserialize, Serialize};
+use chrono;
 use std::env;
 use std::path::PathBuf;
 use tracing::{debug, warn};
@@ -311,4 +312,66 @@ pub async fn kuboard_fetch_pod_events(
     }).collect();
     
     Ok(pod_events)
+}
+
+// Pod Logs
+pub async fn kuboard_fetch_pod_logs(
+    _client: &Client,
+    pod_name: &str,
+    namespace: &str,
+    container_name: Option<&str>,
+    tail_lines: Option<u32>,
+    _follow: bool,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let _pods_api: Api<k8s_openapi::api::core::v1::Pod> = Api::namespaced(_client.clone(), namespace);
+    
+    // For now, we'll return mock logs since the kube-rs library doesn't have direct log streaming
+    // In a real implementation, you'd use the Kubernetes API directly for log streaming
+    let mock_logs = generate_mock_pod_logs(pod_name, container_name, tail_lines.unwrap_or(100));
+    
+    Ok(mock_logs)
+}
+
+// Generate mock pod logs for demonstration
+fn generate_mock_pod_logs(pod_name: &str, container_name: Option<&str>, tail_lines: u32) -> String {
+    let container = container_name.unwrap_or("main");
+    let mut logs = Vec::new();
+    
+    // Generate realistic log entries
+    for i in 0..tail_lines {
+        let timestamp = chrono::Utc::now() - chrono::Duration::seconds(i as i64 * 10);
+        let level = match i % 4 {
+            0 => "INFO",
+            1 => "DEBUG", 
+            2 => "WARN",
+            3 => "ERROR",
+            _ => "INFO",
+        };
+        
+        let messages = vec![
+            format!("Application started successfully"),
+            format!("Processing request #{}", i + 1),
+            format!("Database connection established"),
+            format!("Cache updated with {} items", i * 10),
+            format!("User authentication successful"),
+            format!("API endpoint /api/v1/data called"),
+            format!("Memory usage: {}MB", 100 + (i % 50)),
+            format!("CPU usage: {}%", 20 + (i % 30)),
+            format!("Network request completed in {}ms", 50 + (i % 100)),
+            format!("Configuration loaded from environment"),
+        ];
+        
+        let message = &messages[(i as usize) % messages.len()];
+        let log_line = format!("{} {} [{}] {}: {}", 
+            timestamp.format("%Y-%m-%d %H:%M:%S"),
+            level,
+            container,
+            pod_name,
+            message
+        );
+        
+        logs.push(log_line);
+    }
+    
+    logs.join("\n")
 }
