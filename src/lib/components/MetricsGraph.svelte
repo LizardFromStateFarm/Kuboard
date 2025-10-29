@@ -18,6 +18,7 @@
   export let maxCpuCores: number = 0;
   export let maxMemoryBytes: number = 0;
   export let maxDiskBytes: number = 0;
+  export let isPodMetrics: boolean = false; // Flag to indicate if this is for pod metrics
 
   // Events
   const dispatch = createEventDispatcher();
@@ -124,7 +125,8 @@
                 const numValue = typeof value === 'number' ? value : parseFloat(String(value)) || 0;
                 const label = getResourceLabel(type) || 'Usage';
                 if (type === 'cpu') {
-                  return `${label}: ${numValue.toFixed(2)} cores`;
+                  const precision = isPodMetrics ? 3 : 2;
+                  return `${label}: ${numValue.toFixed(precision)} cores`;
                 } else if (type === 'memory') {
                   return `${label}: ${numValue.toFixed(2)} GB`;
                 } else if (type === 'disk') {
@@ -249,7 +251,8 @@
         const numValue = typeof value === 'number' ? value : parseFloat(String(value)) || 0;
         const label = getResourceLabel(type) || 'Usage';
         if (type === 'cpu') {
-          return `${label}: ${numValue.toFixed(2)} cores`;
+          const precision = isPodMetrics ? 3 : 2;
+          return `${label}: ${numValue.toFixed(precision)} cores`;
         } else if (type === 'memory') {
           return `${label}: ${numValue.toFixed(2)} GB`;
         } else if (type === 'disk') {
@@ -359,7 +362,11 @@
     <div class="graph-stats">
       <div class="current-value">
         {#if type === 'cpu'}
-          {getCurrentValue().toFixed(2)} cores
+          {#if isPodMetrics}
+            {getCurrentValue().toFixed(3)} cores
+          {:else}
+            {getCurrentValue().toFixed(2)} cores
+          {/if}
         {:else if type === 'memory'}
           {getCurrentValue().toFixed(2)} GB
         {:else if type === 'disk'}

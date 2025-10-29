@@ -6,8 +6,10 @@
 
 use anyhow::{anyhow, Result};
 use kube::{Client, Config, Api};
+use kube::api::ListParams;
 use kube::config::{KubeConfigOptions, Kubeconfig};
 use k8s_openapi::api::core::v1::Node;
+use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::PathBuf;
 use tracing::{debug, warn};
@@ -258,4 +260,55 @@ pub async fn kuboard_calculate_cluster_metrics(client: &Client) -> Result<Cluste
         active_nodes,
         nodes: node_details,
     })
+}
+
+// Pod Events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PodEvent {
+    pub type_: String,
+    pub reason: String,
+    pub message: String,
+    pub first_timestamp: Option<String>,
+    pub last_timestamp: Option<String>,
+    pub count: Option<i32>,
+    pub involved_object: Option<InvolvedObject>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InvolvedObject {
+    pub kind: String,
+    pub name: String,
+    pub namespace: Option<String>,
+}
+
+pub async fn kuboard_fetch_pod_events(
+    client: &Client,
+    pod_name: &str,
+    namespace: &str,
+) -> Result<Vec<PodEvent>, Box<dyn std::error::Error + Send + Sync>> {
+    let events_api: Api<k8s_openapi::api::core::v1::Event> = Api::namespaced(client.clone(), namespace);
+    
+    // Create a field selector to get events for this specific pod
+    let field_selector = format!("involvedObject.name={}", pod_name);
+    let list_params = ListParams::default().fields(&field_selector);
+    
+    let events = events_api.list(&list_params).await?;
+    
+    let pod_events: Vec<PodEvent> = events.items.into_iter().map(|event| {
+        PodEvent {
+            type_: event.type_.unwrap_or_default(),
+            reason: event.reason.unwrap_or_default(),
+            message: event.message.unwrap_or_default(),
+            first_timestamp: event.first_timestamp.map(|ts| ts.0.to_rfc3339()),
+            last_timestamp: event.last_timestamp.map(|ts| ts.0.to_rfc3339()),
+            count: event.count,
+            involved_object: Some(InvolvedObject {
+                kind: event.involved_object.kind.unwrap_or_default(),
+                name: event.involved_object.name.unwrap_or_default(),
+                namespace: event.involved_object.namespace,
+            }),
+        }
+    }).collect();
+    
+    Ok(pod_events)
 }

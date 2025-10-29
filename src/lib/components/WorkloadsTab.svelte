@@ -2,6 +2,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
+  import PodsPanel from './PodsPanel.svelte';
 
   // Props
   export let currentContext: any = null;
@@ -32,20 +33,20 @@
     error = null;
     
     try {
-      let data: any[] = [];
+      let data: unknown;
       
       switch (type) {
         case 'pods':
           data = await invoke('kuboard_get_pods').catch(() => []);
-          pods = data as any[] || [];
+          pods = Array.isArray(data) ? data : [];
           break;
         case 'deployments':
           data = await invoke('kuboard_get_deployments').catch(() => []);
-          deployments = data as any[] || [];
+          deployments = Array.isArray(data) ? data : [];
           break;
         case 'services':
           data = await invoke('kuboard_get_services').catch(() => []);
-          services = data as any[] || [];
+          services = Array.isArray(data) ? data : [];
           break;
       }
       
@@ -253,32 +254,12 @@
       </div>
 
       {#if selectedWorkloadType === 'pods'}
-        <!-- Pods List -->
-        <div class="workload-list">
-          {#each pods as pod}
-            <div class="workload-item">
-              <div class="workload-info">
-                <span class="workload-name">{pod.metadata?.name || 'Unknown'}</span>
-                <span class="workload-namespace">{pod.metadata?.namespace || 'default'}</span>
-              </div>
-              <div class="workload-details">
-                <div class="workload-status">
-                  <span class="status-badge status-{getPodStatusClass(pod.status?.phase || 'Unknown')}">
-                    {pod.status?.phase || 'Unknown'}
-                  </span>
-                </div>
-                <div class="workload-age">
-                  <span class="age-info">{formatAge(pod.metadata?.creationTimestamp)}</span>
-                </div>
-                <div class="workload-restarts">
-                  <span class="restart-info">
-                    Restarts: {pod.status?.containerStatuses?.[0]?.restartCount || 0}
-                  </span>
-                </div>
-              </div>
-            </div>
-          {/each}
-        </div>
+        <!-- Pods Panel -->
+        <PodsPanel 
+          currentContext={currentContext} 
+          pods={pods}
+          on:podSelect={(e) => console.log('Pod selected:', e.detail)}
+        />
 
       {:else if selectedWorkloadType === 'deployments'}
         <!-- Deployments List -->

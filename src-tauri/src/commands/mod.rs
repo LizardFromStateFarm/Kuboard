@@ -22,8 +22,11 @@ use crate::kubernetes::{
 use crate::metrics::{
     kuboard_fetch_node_metrics_real,
     kuboard_fetch_node_metrics_history,
+    kuboard_fetch_pod_metrics_real,
+    kuboard_fetch_pod_metrics_history,
     kuboard_check_metrics_server_availability,
 };
+use crate::kubernetes::kuboard_fetch_pod_events;
 
 // Context Management Commands
 #[tauri::command]
@@ -457,6 +460,120 @@ pub async fn kuboard_check_metrics_availability(state: State<'_, AppState>) -> R
                 "using_mock_data": true
             });
             Ok(response)
+        }
+    }
+}
+
+// Pod metrics commands
+#[tauri::command]
+pub async fn kuboard_get_pod_metrics(podName: String, namespace: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    info!("Fetching real-time metrics for pod: {}/{}", namespace, podName);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    // Check if metrics server is available
+    match kuboard_check_metrics_server_availability(client).await {
+        Ok(true) => {
+            info!("Metrics server is available, fetching real metrics");
+        }
+        Ok(false) => {
+            warn!("Metrics server is not available, using mock data");
+        }
+        Err(e) => {
+            warn!("Error checking metrics server availability: {}, using mock data", e);
+        }
+    }
+
+    // Fetch real metrics (with fallback to mock data)
+    match kuboard_fetch_pod_metrics_real(client, &podName, &namespace).await {
+        Ok(metrics) => {
+            info!("✅ Successfully fetched real pod metrics for: {}/{}", namespace, podName);
+            Ok(serde_json::to_value(metrics).unwrap())
+        }
+        Err(e) => {
+            warn!("Failed to fetch real pod metrics, using mock data: {}", e);
+            // Generate mock data as fallback
+            let mock_metrics = crate::metrics::generate_mock_metrics_data_point();
+            Ok(serde_json::to_value(mock_metrics).unwrap())
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_pod_metrics_history(
+    podName: String,
+    namespace: String,
+    durationMinutes: u32,
+    state: State<'_, AppState>
+) -> Result<Vec<serde_json::Value>, String> {
+    info!("Fetching {} minutes of pod metrics history for: {}/{}", durationMinutes, namespace, podName);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    // Check if metrics server is available
+    match kuboard_check_metrics_server_availability(client).await {
+        Ok(true) => {
+            info!("Metrics server is available, fetching real metrics history");
+        }
+        Ok(false) => {
+            warn!("Metrics server is not available, using mock data");
+        }
+        Err(e) => {
+            warn!("Error checking metrics server availability: {}, using mock data", e);
+        }
+    }
+
+    // Fetch real metrics history (with fallback to mock data)
+    match kuboard_fetch_pod_metrics_history(client, &podName, &namespace, durationMinutes).await {
+        Ok(history) => {
+            info!("✅ Successfully fetched real pod metrics history for: {}/{}", namespace, podName);
+            let json_history: Vec<serde_json::Value> = history.into_iter()
+                .map(|dp| serde_json::to_value(dp).unwrap())
+                .collect();
+            Ok(json_history)
+        }
+        Err(e) => {
+            warn!("Failed to fetch real pod metrics history, using mock data: {}", e);
+            // Generate mock data as fallback
+            let mock_history = crate::metrics::generate_mock_metrics_history(durationMinutes);
+            let json_history: Vec<serde_json::Value> = mock_history.into_iter()
+                .map(|dp| serde_json::to_value(dp).unwrap())
+                .collect();
+            Ok(json_history)
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_pod_events(
+    podName: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<Vec<serde_json::Value>, String> {
+    info!("Fetching events for pod: {}/{}", namespace, podName);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    match kuboard_fetch_pod_events(client, &podName, &namespace).await {
+        Ok(events) => {
+            info!("✅ Successfully fetched events for pod: {}/{}", namespace, podName);
+            let json_events: Vec<serde_json::Value> = events.into_iter()
+                .map(|event| serde_json::to_value(event).unwrap())
+                .collect();
+            Ok(json_events)
+        }
+        Err(e) => {
+            error!("Failed to fetch events for pod: {}/{}: {}", namespace, podName, e);
+            Err(e.to_string())
         }
     }
 }
