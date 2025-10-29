@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: advanced-log-generator
+  labels:
+    app: advanced-log-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: advanced-log-generator
+  template:
+    metadata:
+      labels:
+        app: advanced-log-generator
+    spec:
+      containers:
+      - name: advanced-log-generator
+        image: busybox
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          i=0
+          while true; do
+            # Traditional log format
+            echo "$(date): INFO [advanced-log-generator] Application started - iteration $((i=i+1))"
+            
+            # JSON log format
+            echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)\",\"level\":\"info\",\"msg\":\"Processing request\",\"request_id\":\"req-$((i*1000+$(shuf -i 1-999 -n 1)))\",\"duration_ms\":$(shuf -i 10-500 -n 1)}"
+            
+            # Error log
+            echo "$(date): ERROR [advanced-log-generator] Failed to connect to database - attempt $((i%3+1))"
+            
+            # Debug log with multiline content
+            echo "$(date): DEBUG [advanced-log-generator] Stack trace:"
+            echo "  at functionA (file.js:123:45)"
+            echo "  at functionB (file.js:67:23)"
+            echo "  at main (file.js:12:1)"
+            
+            # Warning with structured data
+            echo "$(date): WARN [advanced-log-generator] High memory usage detected - Usage: $((70+$(shuf -i 1-20 -n 1)))%"
+            
+            # JSON error log
+            echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)\",\"level\":\"error\",\"msg\":\"Database connection failed\",\"error\":\"connection timeout\",\"retry_count\":$((i%5+1))}"
+            
+            sleep 5
+          done
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"

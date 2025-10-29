@@ -13,7 +13,16 @@
   export let onClose: () => void = () => {};
   
   // State
-  let logs: { [key: string]: string } = {};
+  type LogEntry = {
+    id: string;
+    timestamp: string;
+    level?: string;
+    message: string;
+    isExpanded: boolean;
+    isJson: boolean;
+  };
+
+  let logs: { [key: string]: string } = {}; // legacy; will be phased out
   let loading: { [key: string]: boolean } = {};
   let errors: { [key: string]: string } = {};
   let activeTab = '';
@@ -24,17 +33,26 @@
   let logContainers: Record<string, HTMLElement> = {};
   let isUserScrolling = false;
   let isResizing = false;
-  let windowHeight = 70; // Default height as percentage of viewport
+  let windowHeight = 30; // Default height as percentage of viewport
+  
+  // Incremental log tracking (append-only entries)
+  let logLines: Record<string, string[]> = {}; // legacy; will be phased out
+  let lastSeenLine: Record<string, string> = {};
+  let newLogLines: Record<string, Set<number>> = {}; // legacy highlight
+
+  let entriesByTab: Record<string, LogEntry[]> = {};
+  let nextEntryIdByTab: Record<string, number> = {};
+  const MAX_LINES = 5000;
   
   // Tab management
   function addLogTab(podName: string, namespace: string, containerName?: string) {
     const tabId = `${namespace}/${podName}${containerName ? `/${containerName}` : ''}`;
-    console.log('Adding tab:', { tabId, podName, namespace, containerName });
-    console.log('Current tabs:', tabs.map(t => t.id));
+    console.log('🔍 Adding tab:', { tabId, podName, namespace, containerName });
+    console.log('🔍 Current tabs before:', tabs.map(t => t.id));
     
     // Check if tab already exists
     if (tabs.find(tab => tab.id === tabId)) {
-      console.log('Tab already exists, switching to it');
+      console.log('🔍 Tab already exists, switching to it');
       activeTab = tabId;
       return;
     }
@@ -49,23 +67,35 @@
     
     tabs = [...tabs, newTab];
     activeTab = tabId;
-    console.log('Added new tab, total tabs:', tabs.length);
+    console.log('✅ Added new tab, total tabs:', tabs.length);
+    console.log('✅ Updated tabs array:', tabs.map(t => t.id));
     
-    // Load logs for this tab
-    loadLogs(tabId, podName, namespace, containerName);
+    // Load logs for this tab (initial load)
+    loadLogs(tabId, podName, namespace, containerName, true);
   }
   
   function closeTab(tabId: string) {
+    console.log('🗑️ Closing tab:', tabId);
+    console.log('🗑️ Tabs before close:', tabs.map(t => t.id));
+    
     tabs = tabs.filter(tab => tab.id !== tabId);
+    
+    console.log('🗑️ Tabs after close:', tabs.map(t => t.id));
     
     // Clean up state
     delete logs[tabId];
     delete loading[tabId];
     delete errors[tabId];
+    delete logLines[tabId];
+    delete lastSeenLine[tabId];
+    delete newLogLines[tabId];
+    delete entriesByTab[tabId];
+    delete nextEntryIdByTab[tabId];
     
     // Switch to another tab if this was active
     if (activeTab === tabId) {
       activeTab = tabs.length > 0 ? tabs[0].id : '';
+      console.log('🗑️ Switched to new active tab:', activeTab);
     }
   }
   
@@ -73,26 +103,75 @@
     activeTab = tabId;
   }
   
-  // Log loading
-  async function loadLogs(tabId: string, podName: string, namespace: string, containerName?: string) {
+  // Log loading - incremental approach
+  async function loadLogs(tabId: string, podName: string, namespace: string, containerName?: string, isInitial = false) {
+    console.log(`📥 Loading logs for ${tabId}, isInitial: ${isInitial}, followMode: ${followMode}`);
     loading[tabId] = true;
     errors[tabId] = '';
     
     try {
-      const logData = await invoke('kuboard_get_pod_logs', {
+      const rawLogData = await invoke('kuboard_get_pod_logs', {
         podName,
         namespace,
         containerName: containerName || null,
-        tailLines: tailLines,
+        tailLines: isInitial ? tailLines : 50,
         follow: followMode
       });
-      
-      logs[tabId] = logData as string;
-      
-      // Auto-scroll to bottom after loading
-      setTimeout(() => {
-        autoScrollToBottom(tabId);
-      }, 100);
+
+      const newLogData = String(rawLogData);
+      console.log(`📊 Log data received for ${tabId}, length: ${newLogData.length}`);
+
+      const incomingLines = newLogData.split('\n').filter((line) => line.trim());
+      const existingLines = logLines[tabId] || [];
+      const lastSeen =
+        lastSeenLine[tabId] || (existingLines.length > 0 ? existingLines[existingLines.length - 1] : '');
+      const idx = lastSeen ? incomingLines.lastIndexOf(lastSeen) : -1;
+      const linesToAdd = isInitial
+        ? incomingLines
+        : idx >= 0
+          ? incomingLines.slice(idx + 1)
+          : existingLines.length === 0
+            ? incomingLines
+            : [];
+
+      if (linesToAdd.length > 0) {
+        // Update last seen line for delta calculation
+        lastSeenLine[tabId] = incomingLines[incomingLines.length - 1] || lastSeenLine[tabId];
+
+        // Build entries append-only
+        if (!entriesByTab[tabId]) entriesByTab[tabId] = [];
+        if (nextEntryIdByTab[tabId] === undefined) nextEntryIdByTab[tabId] = 0;
+
+        const newEntries: LogEntry[] = linesToAdd.map((line) => {
+          const info = formatLogLine(line);
+          const idNum = nextEntryIdByTab[tabId]++;
+          return {
+            id: `${tabId}:${idNum}`,
+            timestamp: info.timestamp || new Date().toLocaleString(),
+            level: info.level,
+            message: info.message,
+            isExpanded: false,
+            isJson: info.isJson
+          };
+        });
+
+        entriesByTab[tabId] = [...entriesByTab[tabId], ...newEntries];
+
+        // Trim buffer if exceeding MAX_LINES
+        const overage = Math.max(0, entriesByTab[tabId].length - MAX_LINES);
+        if (overage > 0) {
+          entriesByTab[tabId].splice(0, overage);
+        }
+
+        // Trigger reactivity only for the specific tab
+        entriesByTab = { ...entriesByTab };
+
+        if (followMode) {
+          setTimeout(() => {
+            autoScrollToBottom(tabId);
+          }, 50);
+        }
+      }
     } catch (error) {
       console.error('Failed to load logs:', error);
       errors[tabId] = `Failed to load logs: ${error}`;
@@ -101,16 +180,43 @@
     }
   }
   
+  // Find new lines by comparing arrays
+  function findNewLines(existing: string[], newLines: string[]): string[] {
+    if (existing.length === 0) return newLines;
+    
+    // Find the last few lines of existing logs to match against new logs
+    const lastExistingLines = existing.slice(-10); // Check last 10 lines
+    const newLinesToAdd: string[] = [];
+    
+    // Find where the new logs start (skip overlapping lines)
+    let startIndex = 0;
+    for (let i = 0; i < newLines.length; i++) {
+      const found = lastExistingLines.some(existingLine => 
+        existingLine === newLines[i] || 
+        existingLine.includes(newLines[i]) || 
+        newLines[i].includes(existingLine)
+      );
+      if (!found) {
+        startIndex = i;
+        break;
+      }
+    }
+    
+    // Return only truly new lines
+    return newLines.slice(startIndex);
+  }
+  
   function refreshCurrentLogs() {
     const activeTabData = tabs.find(tab => tab.id === activeTab);
     if (activeTabData) {
-      loadLogs(activeTabData.id, activeTabData.podName, activeTabData.namespace, activeTabData.containerName);
+      loadLogs(activeTabData.id, activeTabData.podName, activeTabData.namespace, activeTabData.containerName, false);
     }
   }
   
   function refreshAllLogs() {
+    console.log('🔄 Refreshing all logs, followMode:', followMode, 'tabs:', tabs.length);
     tabs.forEach(tab => {
-      loadLogs(tab.id, tab.podName, tab.namespace, tab.containerName);
+      loadLogs(tab.id, tab.podName, tab.namespace, tab.containerName, false);
     });
   }
   
@@ -123,6 +229,13 @@
       refreshInterval = setInterval(() => {
         refreshAllLogs();
       }, 2000); // Refresh every 2 seconds
+      
+      // Immediately scroll to bottom when enabling follow mode
+      if (activeTab) {
+        setTimeout(() => {
+          autoScrollToBottom(activeTab);
+        }, 100);
+      }
     } else {
       // Stop refresh interval
       if (refreshInterval) {
@@ -139,6 +252,21 @@
     
     if (isAtBottom) {
       isUserScrolling = false;
+      // Re-enable follow mode when user scrolls back to bottom
+      if (!followMode) {
+        followMode = true;
+        // Restart refresh interval if it was stopped
+        if (!refreshInterval) {
+          refreshInterval = setInterval(() => {
+            if (activeTab) {
+              const tab = tabs.find(t => t.id === activeTab);
+              if (tab) {
+                loadLogs(activeTab, tab.podName, tab.namespace, tab.containerName);
+              }
+            }
+          }, 2000); // 2 second refresh interval
+        }
+      }
     } else {
       isUserScrolling = true;
       // Exit follow mode when user scrolls up
@@ -200,9 +328,11 @@
   
   // Expose function for external use
   export function openPodLogs(podName: string, namespace: string, containerName?: string) {
-    console.log('Opening logs for:', { podName, namespace, containerName });
+    console.log('🚀 Opening logs for:', { podName, namespace, containerName });
+    console.log('🚀 Current state - isOpen:', isOpen, 'tabs count:', tabs.length);
     addLogTab(podName, namespace, containerName);
     isOpen = true;
+    console.log('🚀 After opening - isOpen:', isOpen, 'tabs count:', tabs.length);
     
     // Start follow mode if not already running
     if (followMode && !refreshInterval) {
@@ -213,19 +343,23 @@
   }
   
   // Format log line for display
-  function formatLogLine(line: string): { timestamp: string, level: string, message: string, isError: boolean } {
-    // Parse log line format: "2025-01-28 10:30:45 INFO [container] pod-name: message"
-    const parts = line.split(' ');
-    if (parts.length >= 4) {
-      const timestamp = `${parts[0]} ${parts[1]}`;
-      const level = parts[2];
-      const message = parts.slice(3).join(' ');
-      const isError = level === 'ERROR' || level === 'FATAL';
-      
-      return { timestamp, level, message, isError };
+  function formatLogLine(line: string): { timestamp: string, level: string, message: string, isError: boolean, isJson: boolean } {
+    if (!line.trim()) {
+      return { timestamp: '', level: 'INFO', message: '', isError: false, isJson: false };
     }
+
+    // Simple approach: use the raw log line as-is
+    // Most logs already have timestamps at the front, so we'll display them as-is
+    const isJson = line.trim().startsWith('{') && line.trim().endsWith('}');
+    const isError = line.toLowerCase().includes('error') || line.toLowerCase().includes('fatal') || line.toLowerCase().includes('panic');
     
-    return { timestamp: '', level: 'INFO', message: line, isError: false };
+    return { 
+      timestamp: '', // No custom timestamp parsing - use raw log
+      level: 'INFO', // Default level - logs will show their own levels
+      message: line, // Use the full log line as-is
+      isError, 
+      isJson 
+    };
   }
   
   // Get level color class
@@ -243,6 +377,7 @@
         return 'log-info';
     }
   }
+
 </script>
 
 {#if isOpen}
@@ -258,73 +393,66 @@
         class="resize-handle" 
         onmousedown={startResize}
         title="Drag to resize window height"
+        role="button"
+        tabindex="0"
       ></div>
       
-      <!-- Header -->
+      <!-- Combined Header with Tabs and Controls -->
       <div class="logs-header">
-        <div class="logs-title">
-          <h3>📋 Pod Logs</h3>
-          <span class="logs-subtitle">{tabs.length} tab{tabs.length !== 1 ? 's' : ''} open</span>
+        <!-- Tabs Section -->
+        <div class="logs-tabs-container">
+          {#if tabs.length > 0}
+            <div class="logs-tabs" role="tablist">
+              {#each tabs as tab}
+                <div 
+                  class="log-tab {activeTab === tab.id ? 'active' : ''}"
+                  onclick={() => setActiveTab(tab.id)}
+                  onkeydown={(e) => e.key === 'Enter' && setActiveTab(tab.id)}
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  tabindex="0"
+                  id="log-tab-{tab.id}"
+                >
+                  <span class="tab-name">
+                    {tab.podName}
+                    {#if tab.containerName}
+                      <span class="container-name">/{tab.containerName}</span>
+                    {/if}
+                  </span>
+                  <button 
+                    class="tab-close" 
+                    onclick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                    title="Close tab"
+                  >
+                    ✕
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
+        
+        <!-- Controls Section -->
         <div class="logs-controls">
-          <div class="height-controls">
-            <button class="control-button" onclick={() => adjustHeight(-10)} title="Decrease height">
-              📉
-            </button>
-            <span class="height-indicator">{Math.round(windowHeight)}%</span>
-            <button class="control-button" onclick={() => adjustHeight(10)} title="Increase height">
-              📈
-            </button>
-          </div>
           <button 
-            class="control-button {followMode ? 'active' : ''}" 
+            class="control-button compact {followMode ? 'active' : ''}" 
             onclick={toggleFollowMode}
             title={followMode ? 'Stop following logs' : 'Follow logs (auto-refresh)'}
           >
-            {followMode ? '⏸️' : '▶️'} {followMode ? 'Following' : 'Follow'}
+            {followMode ? '⏸️' : '▶️'}
           </button>
-          <button class="control-button" onclick={refreshCurrentLogs} title="Refresh current logs">
-            🔄 Refresh
+          <button class="control-button compact" onclick={refreshCurrentLogs} title="Refresh current logs">
+            🔄
           </button>
-          <button class="control-button" onclick={onClose} title="Close logs window">
-            ✕ Close
+          <button class="control-button compact" onclick={onClose} title="Close logs window">
+            ✕
           </button>
         </div>
       </div>
-      
-      <!-- Tabs -->
-      {#if tabs.length > 0}
-        <div class="logs-tabs" role="tablist">
-          {#each tabs as tab}
-            <div 
-              class="log-tab {activeTab === tab.id ? 'active' : ''}"
-              onclick={() => setActiveTab(tab.id)}
-              onkeydown={(e) => e.key === 'Enter' && setActiveTab(tab.id)}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              tabindex="0"
-              id="log-tab-{tab.id}"
-            >
-              <span class="tab-name">
-                {tab.podName}
-                {#if tab.containerName}
-                  <span class="container-name">/{tab.containerName}</span>
-                {/if}
-              </span>
-              <button 
-                class="tab-close" 
-                onclick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
-                title="Close tab"
-              >
-                ✕
-              </button>
-            </div>
-          {/each}
-        </div>
         
         <!-- Log Content -->
         <div class="logs-content" role="tabpanel" aria-labelledby="log-tab-{activeTab}">
-          {#if loading[activeTab]}
+          {#if loading[activeTab] && !(entriesByTab[activeTab] && entriesByTab[activeTab].length > 0)}
             <div class="logs-loading">
               <div class="loading-spinner">⏳</div>
               <p>Loading logs...</p>
@@ -337,18 +465,17 @@
                 Retry
               </button>
             </div>
-          {:else if logs[activeTab]}
+          {:else if entriesByTab[activeTab] && entriesByTab[activeTab].length > 0}
             <div 
               class="logs-viewer"
               bind:this={logContainers[activeTab]}
               onscroll={(e) => handleScroll(e, activeTab)}
             >
-              {#each logs[activeTab].split('\n').reverse() as line, index}
-                {@const logData = formatLogLine(line)}
-                <div class="log-line {getLevelClass(logData.level)}">
-                  <span class="log-timestamp">{logData.timestamp}</span>
-                  <span class="log-level">{logData.level}</span>
-                  <span class="log-message">{logData.message}</span>
+              {#each (entriesByTab[activeTab] || []) as entry (entry.id)}
+                <div class="log-line {getLevelClass(entry.level || 'INFO')} {entry.isJson ? 'log-json' : ''}">
+                  <span class="log-message" role="button" tabindex="0" onclick={() => entry.isExpanded = !entry.isExpanded} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (entry.isExpanded = !entry.isExpanded)}>
+                    {entry.isExpanded ? entry.message : (entry.message.split('\n')[0].length > 300 ? entry.message.split('\n')[0].slice(0, 300) + '…' : entry.message.split('\n')[0])}
+                  </span>
                 </div>
               {/each}
             </div>
@@ -371,19 +498,16 @@
             </select>
           </div>
           <div class="logs-info">
-            {#if logs[activeTab]}
-              {@const lineCount = logs[activeTab].split('\n').length}
-              <span>{lineCount} lines</span>
+            {#if entriesByTab[activeTab]}
+              <span>{entriesByTab[activeTab].length} lines</span>
+              {#if followMode}
+                <span class="follow-indicator">📡 Following</span>
+              {:else}
+                <span class="follow-indicator paused">⏸️ Paused</span>
+              {/if}
             {/if}
           </div>
         </div>
-      {:else}
-        <div class="logs-empty">
-          <div class="empty-icon">📋</div>
-          <p>No log tabs open</p>
-          <p class="empty-hint">Click "View Logs" on a pod to open its logs</p>
-        </div>
-      {/if}
   </div>
 {/if}
 
@@ -436,44 +560,24 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 20px;
+    padding: 4px 12px;
     border-bottom: 1px solid var(--border-color);
     background: var(--background-secondary);
+    min-height: 32px;
   }
   
-  .logs-title h3 {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 18px;
-  }
-  
-  .logs-subtitle {
-    color: var(--text-muted);
-    font-size: 12px;
-    margin-left: 8px;
+  .logs-tabs-container {
+    flex: 1;
+    overflow-x: auto;
+    margin-right: 12px;
+    min-width: 0; /* Allow flex item to shrink below content size */
   }
   
   .logs-controls {
     display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-  
-  .height-controls {
-    display: flex;
-    align-items: center;
     gap: 4px;
-    margin-right: 16px;
-    padding-right: 16px;
-    border-right: 1px solid var(--border-color);
-  }
-  
-  .height-indicator {
-    font-size: 11px;
-    color: var(--text-muted);
-    min-width: 30px;
-    text-align: center;
-    font-weight: 500;
+    align-items: center;
+    flex-shrink: 0; /* Prevent controls from shrinking */
   }
   
   .control-button {
@@ -485,6 +589,13 @@
     cursor: pointer;
     font-size: 12px;
     transition: all 0.2s ease;
+  }
+  
+  .control-button.compact {
+    padding: 4px 8px;
+    font-size: 11px;
+    min-width: 28px;
+    text-align: center;
   }
   
   .control-button:hover {
@@ -500,20 +611,22 @@
   
   .logs-tabs {
     display: flex;
-    background: var(--background-secondary);
-    border-bottom: 1px solid var(--border-color);
+    background: transparent;
+    border-bottom: none;
     overflow-x: auto;
+    min-width: max-content; /* Ensure tabs don't compress too much */
   }
   
   .log-tab {
     display: flex;
     align-items: center;
-    padding: 8px 16px;
+    padding: 4px 12px;
     background: var(--background-secondary);
     border-right: 1px solid var(--border-color);
     cursor: pointer;
     transition: all 0.2s ease;
-    min-width: 120px;
+    min-width: 100px;
+    white-space: nowrap;
   }
   
   .log-tab:hover {
@@ -527,8 +640,11 @@
   
   .tab-name {
     color: var(--text-primary);
-    font-size: 12px;
+    font-size: 11px;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80px;
   }
   
   .container-name {
@@ -541,10 +657,15 @@
     border: none;
     color: var(--text-muted);
     cursor: pointer;
-    margin-left: 8px;
-    padding: 2px;
+    margin-left: 4px;
+    padding: 1px 2px;
     border-radius: 2px;
-    font-size: 10px;
+    font-size: 9px;
+    min-width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   
   .tab-close:hover {
@@ -566,6 +687,29 @@
     justify-content: center;
     height: 100%;
     color: var(--text-muted);
+  }
+  
+  .logs-refreshing {
+    position: sticky;
+    top: 0;
+    background: var(--background-card);
+    border-bottom: 1px solid var(--border-primary);
+    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    z-index: 10;
+  }
+  
+  .refresh-indicator {
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
   
   .loading-spinner, .error-icon, .empty-icon {
@@ -597,43 +741,47 @@
     margin-bottom: 2px;
     padding: 2px 4px;
     border-radius: 2px;
+    opacity: 0;
+    animation: fadeInUp 0.3s ease-out forwards;
+    transition: background-color 0.2s ease, border-left 0.3s ease;
+  }
+  
+  .log-line.new-log {
+    border-left: 3px solid var(--info-color);
+    background: rgba(59, 130, 246, 0.05);
   }
   
   .log-line:hover {
     background: var(--background-secondary);
   }
   
-  .log-timestamp {
-    color: var(--text-muted);
-    margin-right: 8px;
-    min-width: 150px;
+  .log-json {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   }
   
-  .log-level {
-    margin-right: 8px;
-    min-width: 60px;
-    font-weight: bold;
+  .log-json .log-message {
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
   
   .log-message {
     color: var(--text-primary);
     flex: 1;
-  }
-  
-  .log-info .log-level {
-    color: var(--info-color);
-  }
-  
-  .log-debug .log-level {
-    color: var(--text-muted);
-  }
-  
-  .log-warn .log-level {
-    color: var(--warning-color);
-  }
-  
-  .log-error .log-level {
-    color: var(--error-color);
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 13px;
+    line-height: 1.4;
   }
   
   .log-error {
@@ -667,6 +815,24 @@
   
   .logs-info {
     color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  .follow-indicator {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(34, 197, 94, 0.1);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+  
+  .follow-indicator.paused {
+    background: rgba(156, 163, 175, 0.1);
+    color: #9ca3af;
+    border: 1px solid rgba(156, 163, 175, 0.2);
   }
   
   .empty-hint {
@@ -674,3 +840,4 @@
     margin-top: 4px;
   }
 </style>
+

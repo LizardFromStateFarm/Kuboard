@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: log-generator
+  labels:
+    app: log-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: log-generator
+  template:
+    metadata:
+      labels:
+        app: log-generator
+    spec:
+      containers:
+      - name: log-generator
+        image: busybox
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          i=0
+          while true; do
+            echo "$(date): INFO [log-generator] Test log message - iteration $((i=i+1)) - Random data: $(shuf -i 1-1000 -n 1)"
+            echo "$(date): DEBUG [log-generator] Debug message with more details - PID: $$, Hostname: $(hostname)"
+            echo "$(date): WARN [log-generator] Warning message - This is a test warning"
+            sleep 5
+          done
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"

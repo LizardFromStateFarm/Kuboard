@@ -6,11 +6,10 @@
 
 use anyhow::{anyhow, Result};
 use kube::{Client, Config, Api};
-use kube::api::ListParams;
+use kube::api::{ListParams, LogParams};
 use kube::config::{KubeConfigOptions, Kubeconfig};
 use k8s_openapi::api::core::v1::Node;
 use serde::{Deserialize, Serialize};
-use chrono;
 use std::env;
 use std::path::PathBuf;
 use tracing::{debug, warn};
@@ -316,62 +315,29 @@ pub async fn kuboard_fetch_pod_events(
 
 // Pod Logs
 pub async fn kuboard_fetch_pod_logs(
-    _client: &Client,
+    client: &Client,
     pod_name: &str,
     namespace: &str,
     container_name: Option<&str>,
     tail_lines: Option<u32>,
-    _follow: bool,
+    follow: bool,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let _pods_api: Api<k8s_openapi::api::core::v1::Pod> = Api::namespaced(_client.clone(), namespace);
-    
-    // For now, we'll return mock logs since the kube-rs library doesn't have direct log streaming
-    // In a real implementation, you'd use the Kubernetes API directly for log streaming
-    let mock_logs = generate_mock_pod_logs(pod_name, container_name, tail_lines.unwrap_or(100));
-    
-    Ok(mock_logs)
-}
+    let pods_api: Api<k8s_openapi::api::core::v1::Pod> = Api::namespaced(client.clone(), namespace);
 
-// Generate mock pod logs for demonstration
-fn generate_mock_pod_logs(pod_name: &str, container_name: Option<&str>, tail_lines: u32) -> String {
-    let container = container_name.unwrap_or("main");
-    let mut logs = Vec::new();
-    
-    // Generate realistic log entries
-    for i in 0..tail_lines {
-        let timestamp = chrono::Utc::now() - chrono::Duration::seconds(i as i64 * 10);
-        let level = match i % 4 {
-            0 => "INFO",
-            1 => "DEBUG", 
-            2 => "WARN",
-            3 => "ERROR",
-            _ => "INFO",
-        };
-        
-        let messages = vec![
-            format!("Application started successfully"),
-            format!("Processing request #{}", i + 1),
-            format!("Database connection established"),
-            format!("Cache updated with {} items", i * 10),
-            format!("User authentication successful"),
-            format!("API endpoint /api/v1/data called"),
-            format!("Memory usage: {}MB", 100 + (i % 50)),
-            format!("CPU usage: {}%", 20 + (i % 30)),
-            format!("Network request completed in {}ms", 50 + (i % 100)),
-            format!("Configuration loaded from environment"),
-        ];
-        
-        let message = &messages[(i as usize) % messages.len()];
-        let log_line = format!("{} {} [{}] {}: {}", 
-            timestamp.format("%Y-%m-%d %H:%M:%S"),
-            level,
-            container,
-            pod_name,
-            message
-        );
-        
-        logs.push(log_line);
+    let mut lp = LogParams::default();
+    if let Some(container) = container_name {
+        lp.container = Some(container.to_string());
     }
-    
-    logs.join("\n")
+    if let Some(tl) = tail_lines {
+        // kube's LogParams.tail_lines is Option<i64>
+        lp.tail_lines = Some(tl as i64);
+    }
+    // We snapshot logs and refresh in the UI; avoid server-side stream here.
+    let _ = follow; // avoid unused warning; follow handled client-side
+
+    // Note: pods_api.log returns the latest logs as a String. For follow=true,
+    // streaming would require a different API; here we respect the flag for
+    // server compatibility but still return a snapshot per request.
+    let logs = pods_api.logs(pod_name, &lp).await?;
+    Ok(logs)
 }

@@ -41,6 +41,7 @@ src/lib/components/
 ├── CustomResourcesTab.svelte # Custom Resource Definitions (CRDs)
 ├── DonutChart.svelte       # Resource usage donut charts
 ├── ClusterMetrics.svelte   # Cluster-wide metrics display
+├── LogsWindow.svelte       # Advanced logs panel with structured entries and smart follow mode
 └── ThemeSwitcher.svelte    # Development theme switching tool
 ```
 
@@ -115,6 +116,8 @@ src/lib/components/
 - Pod volumes and container details
 - Real-time metrics integration with higher precision for pod CPU usage
 - Accessibility features with keyboard navigation and proper ARIA roles
+- Integrated logs viewing with "View Logs" button for pod and container logs
+- Proper pod name extraction for unique tab identification
 
 #### **NodesTab Component**
 - Advanced node management interface with simplified card-based layout
@@ -155,6 +158,22 @@ src/lib/components/
 - Resource utilization overview
 - Performance monitoring
 - Alert integration
+
+#### **LogsWindow Component**
+- Advanced logs panel with structured LogEntry model and append-only updates
+- Timestamp-first display using raw log lines (no custom parsing required)
+- Expandable/collapsible log entries with click-to-expand functionality
+- Smart follow mode that auto-re-enables when scrolling back to bottom
+- Visual follow mode indicator (📡 Following / ⏸️ Paused) in footer
+- Log line capping (5000 lines per tab) with automatic trimming of oldest entries
+- Keyed list rendering for optimal performance and no UI flickering
+- Monospace font styling for better log readability
+- JSON log detection and special formatting
+- Tab management with unique tab IDs based on namespace/pod/container names
+- Container-specific log viewing with proper namespace/pod name handling
+- Follow mode with 2-second refresh interval and smart pause/resume
+- Close tab functionality with proper state cleanup
+- Keyboard navigation and accessibility features
 
 #### **ThemeSwitcher Component**
 - Development theme switching
@@ -230,6 +249,7 @@ src-tauri/src/
 - `kuboard_get_pod_metrics` - Get current pod metrics
 - `kuboard_get_pod_metrics_history` - Get historical pod metrics
 - `kuboard_get_pod_events` - Get pod events for troubleshooting
+- `kuboard_get_pod_logs` - Get pod logs with container support
 - `kuboard_check_metrics_availability` - Check metrics server
 
 #### **Kubernetes Integration** (`kubernetes/mod.rs`)
@@ -237,6 +257,7 @@ src-tauri/src/
 - `kuboard_create_client_from_context` - Create Kubernetes client
 - `kuboard_calculate_cluster_metrics` - Calculate cluster metrics
 - `kuboard_fetch_pod_events` - Fetch pod events from Kubernetes API
+- `kuboard_fetch_pod_logs` - Fetch pod logs from Kubernetes API
 
 #### **Metrics Server Integration** (`metrics/mod.rs`)
 - `kuboard_fetch_node_metrics_real` - Fetch real-time metrics
@@ -420,17 +441,23 @@ This modular architecture has successfully transformed Kuboard into a comprehens
 
 ## 🆕 **Recent Major Updates**
 
-### **Comprehensive Pod Management (Latest)**
-- Complete pod management interface with interactive selection
-- Pod events section with color-coded event types and troubleshooting info
-- Container-specific metrics with click functionality for individual monitoring
-- Comprehensive pod information display (basic info, controller, labels, annotations)
-- Pod conditions, tolerations, and affinity rules display
-- Pod volumes and container details
-- Real-time metrics integration with higher precision for pod CPU usage
-- Backend support for pod events API with proper Kubernetes integration
-- Mock data fallback for events when API is unavailable
-- Accessibility features with keyboard navigation and proper ARIA roles
+### **Advanced Logs Panel System (Latest)**
+- **Redesigned**: Complete logs panel with structured LogEntry model and append-only updates
+- **Implemented**: Timestamp-first display using raw log lines (no custom parsing)
+- **Added**: Expandable/collapsible log entries with click-to-expand functionality
+- **Enhanced**: Append-only log ingestion to prevent UI flashing and preserve scroll position
+- **Added**: Smart follow mode that auto-re-enables when scrolling back to bottom
+- **Implemented**: Visual follow mode indicator (📡 Following / ⏸️ Paused)
+- **Added**: Log line capping (5000 lines per tab) with automatic trimming of oldest entries
+- **Enhanced**: Keyed list rendering for optimal performance and no UI flickering
+- **Improved**: Monospace font styling for better log readability
+- **Added**: JSON log detection and special formatting
+- **Fixed**: UI reactivity issues that caused logs list to "freak out" during updates
+- **Enhanced**: Scroll management with user scroll detection and auto-scroll when following
+- **Added**: Comprehensive error handling and loading states for log operations
+- **Improved**: Tab management with unique IDs and proper state cleanup
+- **Added**: Container-specific log viewing with proper namespace/pod name handling
+- **Enhanced**: Follow mode with 2-second refresh interval and smart pause/resume
 
 ### **Advanced Nodes Management**
 - Complete nodes tab functionality with simplified card-based layout

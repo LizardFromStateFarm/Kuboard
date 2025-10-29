@@ -312,7 +312,11 @@
   
   function openPodLogs(pod: any, containerName?: string) {
     if (logsWindowRef) {
-      logsWindowRef.openPodLogs(pod.metadata?.name || 'Unknown', pod.metadata?.namespace || 'default', containerName);
+      // Handle both raw pod objects (with metadata) and processed pod objects (with direct properties)
+      const podName = pod.metadata?.name || pod.name || 'Unknown';
+      const podNamespace = pod.metadata?.namespace || pod.namespace || 'default';
+      console.log('🔍 Pod data for logs:', { pod, podName, podNamespace, containerName });
+      logsWindowRef.openPodLogs(podName, podNamespace, containerName);
       logsWindowOpen = true;
     }
   }
