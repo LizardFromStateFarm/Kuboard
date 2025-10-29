@@ -19,15 +19,22 @@
   let activeTab = '';
   let tabs: Array<{id: string, podName: string, namespace: string, containerName?: string}> = [];
   let tailLines = 100;
-  let followMode = false;
+  let followMode = true; // Enable follow mode by default
   let refreshInterval: number | null = null;
+  let logContainers: Record<string, HTMLElement> = {};
+  let isUserScrolling = false;
+  let isResizing = false;
+  let windowHeight = 70; // Default height as percentage of viewport
   
   // Tab management
   function addLogTab(podName: string, namespace: string, containerName?: string) {
     const tabId = `${namespace}/${podName}${containerName ? `/${containerName}` : ''}`;
+    console.log('Adding tab:', { tabId, podName, namespace, containerName });
+    console.log('Current tabs:', tabs.map(t => t.id));
     
     // Check if tab already exists
     if (tabs.find(tab => tab.id === tabId)) {
+      console.log('Tab already exists, switching to it');
       activeTab = tabId;
       return;
     }
@@ -42,6 +49,7 @@
     
     tabs = [...tabs, newTab];
     activeTab = tabId;
+    console.log('Added new tab, total tabs:', tabs.length);
     
     // Load logs for this tab
     loadLogs(tabId, podName, namespace, containerName);
@@ -80,6 +88,11 @@
       });
       
       logs[tabId] = logData as string;
+      
+      // Auto-scroll to bottom after loading
+      setTimeout(() => {
+        autoScrollToBottom(tabId);
+      }, 100);
     } catch (error) {
       console.error('Failed to load logs:', error);
       errors[tabId] = `Failed to load logs: ${error}`;
@@ -119,6 +132,65 @@
     }
   }
   
+  // Scroll detection and auto-scroll
+  function handleScroll(event: Event, tabId: string) {
+    const container = event.target as HTMLElement;
+    const isAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 10;
+    
+    if (isAtBottom) {
+      isUserScrolling = false;
+    } else {
+      isUserScrolling = true;
+      // Exit follow mode when user scrolls up
+      if (followMode) {
+        followMode = false;
+        if (refreshInterval) {
+          clearInterval(refreshInterval);
+          refreshInterval = null;
+        }
+      }
+    }
+  }
+  
+  function scrollToBottom(tabId: string) {
+    const container = logContainers[tabId];
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }
+  
+  function autoScrollToBottom(tabId: string) {
+    if (!isUserScrolling) {
+      scrollToBottom(tabId);
+    }
+  }
+  
+  // Resize functionality
+  function startResize(event: MouseEvent) {
+    isResizing = true;
+    event.preventDefault();
+    
+    function handleMouseMove(e: MouseEvent) {
+      if (!isResizing) return;
+      
+      const newHeight = ((window.innerHeight - e.clientY) / window.innerHeight) * 100;
+      windowHeight = Math.max(20, Math.min(90, newHeight)); // Clamp between 20% and 90%
+    }
+    
+    function handleMouseUp() {
+      isResizing = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    }
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }
+  
+  function adjustHeight(delta: number) {
+    windowHeight = Math.max(20, Math.min(90, windowHeight + delta));
+  }
+  
   // Cleanup on destroy
   onDestroy(() => {
     if (refreshInterval) {
@@ -128,8 +200,16 @@
   
   // Expose function for external use
   export function openPodLogs(podName: string, namespace: string, containerName?: string) {
+    console.log('Opening logs for:', { podName, namespace, containerName });
     addLogTab(podName, namespace, containerName);
     isOpen = true;
+    
+    // Start follow mode if not already running
+    if (followMode && !refreshInterval) {
+      refreshInterval = setInterval(() => {
+        refreshAllLogs();
+      }, 2000);
+    }
   }
   
   // Format log line for display
@@ -167,19 +247,19 @@
 
 {#if isOpen}
   <div 
-    class="logs-window-overlay" 
-    onclick={onClose}
+    class="logs-window" 
     onkeydown={(e) => e.key === 'Escape' && onClose()}
     role="dialog"
-    aria-modal="true"
     tabindex="-1"
+    style="height: {windowHeight}vh;"
   >
-    <div 
-      class="logs-window" 
-      onclick={(e) => e.stopPropagation()}
-      onkeydown={(e) => e.stopPropagation()}
-      role="document"
-    >
+      <!-- Resize Handle -->
+      <div 
+        class="resize-handle" 
+        onmousedown={startResize}
+        title="Drag to resize window height"
+      ></div>
+      
       <!-- Header -->
       <div class="logs-header">
         <div class="logs-title">
@@ -187,6 +267,15 @@
           <span class="logs-subtitle">{tabs.length} tab{tabs.length !== 1 ? 's' : ''} open</span>
         </div>
         <div class="logs-controls">
+          <div class="height-controls">
+            <button class="control-button" onclick={() => adjustHeight(-10)} title="Decrease height">
+              📉
+            </button>
+            <span class="height-indicator">{Math.round(windowHeight)}%</span>
+            <button class="control-button" onclick={() => adjustHeight(10)} title="Increase height">
+              📈
+            </button>
+          </div>
           <button 
             class="control-button {followMode ? 'active' : ''}" 
             onclick={toggleFollowMode}
@@ -249,8 +338,12 @@
               </button>
             </div>
           {:else if logs[activeTab]}
-            <div class="logs-viewer">
-              {#each logs[activeTab].split('\n') as line, index}
+            <div 
+              class="logs-viewer"
+              bind:this={logContainers[activeTab]}
+              onscroll={(e) => handleScroll(e, activeTab)}
+            >
+              {#each logs[activeTab].split('\n').reverse() as line, index}
                 {@const logData = formatLogLine(line)}
                 <div class="log-line {getLevelClass(logData.level)}">
                   <span class="log-timestamp">{logData.timestamp}</span>
@@ -291,34 +384,52 @@
           <p class="empty-hint">Click "View Logs" on a pod to open its logs</p>
         </div>
       {/if}
-    </div>
   </div>
 {/if}
 
 <style>
-  .logs-window-overlay {
+  .logs-window {
     position: fixed;
-    top: 0;
+    bottom: 0;
     left: 0;
     right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
-    z-index: 1000;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-  }
-  
-  .logs-window {
     background: var(--background-card);
     border: 1px solid var(--border-color);
     border-radius: 8px 8px 0 0;
-    width: 90%;
-    max-width: 1200px;
+    width: 100%;
     height: 70vh;
     display: flex;
     flex-direction: column;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+  }
+  
+  .resize-handle {
+    height: 4px;
+    background: var(--border-color);
+    cursor: ns-resize;
+    position: relative;
+    transition: background-color 0.2s ease;
+  }
+  
+  .resize-handle:hover {
+    background: var(--primary-color);
+  }
+  
+  .resize-handle::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 8px;
+    background: var(--border-color);
+    border-radius: 2px;
+  }
+  
+  .resize-handle:hover::before {
+    background: var(--primary-color);
   }
   
   .logs-header {
@@ -345,6 +456,24 @@
   .logs-controls {
     display: flex;
     gap: 8px;
+    align-items: center;
+  }
+  
+  .height-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 16px;
+    padding-right: 16px;
+    border-right: 1px solid var(--border-color);
+  }
+  
+  .height-indicator {
+    font-size: 11px;
+    color: var(--text-muted);
+    min-width: 30px;
+    text-align: center;
+    font-weight: 500;
   }
   
   .control-button {
