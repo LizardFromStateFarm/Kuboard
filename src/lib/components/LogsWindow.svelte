@@ -44,6 +44,13 @@
   let nextEntryIdByTab: Record<string, number> = {};
   const MAX_LINES = 5000;
   
+  // Search functionality
+  let searchQuery = '';
+  let searchCaseSensitive = false;
+  let currentMatchIndex = 0;
+  let matchIndices: number[] = [];
+  let filteredEntriesByTab: Record<string, LogEntry[]> = {};
+  
   // Tab management
   function addLogTab(podName: string, namespace: string, containerName?: string) {
     const tabId = `${namespace}/${podName}${containerName ? `/${containerName}` : ''}`;
@@ -232,9 +239,16 @@
       
       // Immediately scroll to bottom when enabling follow mode
       if (activeTab) {
+        // Reset user scrolling flag so auto-scroll works
+        isUserScrolling = false;
+        // Force scroll to bottom
         setTimeout(() => {
-          autoScrollToBottom(activeTab);
+          scrollToBottom(activeTab);
         }, 100);
+        // Also try again after a longer delay to ensure we get to the very bottom
+        setTimeout(() => {
+          scrollToBottom(activeTab);
+        }, 300);
       }
     } else {
       // Stop refresh interval
@@ -283,7 +297,14 @@
   function scrollToBottom(tabId: string) {
     const container = logContainers[tabId];
     if (container) {
+      // Force scroll to absolute bottom
       container.scrollTop = container.scrollHeight;
+      // Use requestAnimationFrame to ensure DOM is updated
+      requestAnimationFrame(() => {
+        if (container) {
+          container.scrollTop = container.scrollHeight;
+        }
+      });
     }
   }
   
@@ -378,6 +399,105 @@
     }
   }
 
+  // Search functionality
+  function performSearch() {
+    if (!activeTab || !searchQuery.trim()) {
+      filteredEntriesByTab[activeTab] = entriesByTab[activeTab] || [];
+      matchIndices = [];
+      currentMatchIndex = 0;
+      return;
+    }
+
+    const entries = entriesByTab[activeTab] || [];
+    const query = searchCaseSensitive ? searchQuery : searchQuery.toLowerCase();
+    const filtered: LogEntry[] = [];
+    const matches: number[] = [];
+
+    entries.forEach((entry, index) => {
+      const message = searchCaseSensitive ? entry.message : entry.message.toLowerCase();
+      if (message.includes(query)) {
+        filtered.push(entry);
+        matches.push(index);
+      }
+    });
+
+    filteredEntriesByTab[activeTab] = filtered;
+    matchIndices = matches;
+    currentMatchIndex = matches.length > 0 ? 0 : -1;
+
+    // Scroll to first match
+    if (matches.length > 0 && logContainers[activeTab]) {
+      setTimeout(() => {
+        const container = logContainers[activeTab];
+        if (container) {
+          const logLines = container.querySelectorAll('.log-line');
+          // First match will be at index 0 in filtered view
+          if (logLines.length > 0) {
+            logLines[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      }, 150);
+    }
+  }
+
+  function navigateMatch(direction: 'next' | 'prev') {
+    if (matchIndices.length === 0) return;
+
+    if (direction === 'next') {
+      currentMatchIndex = (currentMatchIndex + 1) % matchIndices.length;
+    } else {
+      currentMatchIndex = currentMatchIndex <= 0 ? matchIndices.length - 1 : currentMatchIndex - 1;
+    }
+
+    // Scroll to match
+    setTimeout(() => {
+      const container = logContainers[activeTab];
+      if (container && matchIndices.length > 0 && currentMatchIndex >= 0) {
+        const logLines = container.querySelectorAll('.log-line');
+        // Find the line that corresponds to the current match index
+        const targetOriginalIndex = matchIndices[currentMatchIndex];
+        const filteredEntries = filteredEntriesByTab[activeTab] || [];
+        const filteredIndex = filteredEntries.findIndex((entry) => {
+          const originalIndex = entriesByTab[activeTab]?.indexOf(entry) ?? -1;
+          return originalIndex === targetOriginalIndex;
+        });
+        
+        if (filteredIndex >= 0 && logLines[filteredIndex]) {
+          logLines[filteredIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    }, 50);
+  }
+
+  function clearSearch() {
+    searchQuery = '';
+    searchCaseSensitive = false;
+    currentMatchIndex = 0;
+    matchIndices = [];
+    if (activeTab && entriesByTab[activeTab]) {
+      filteredEntriesByTab[activeTab] = entriesByTab[activeTab];
+    }
+  }
+
+  function highlightText(text: string, query: string): string {
+    if (!query.trim()) return text;
+    const queryRegex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, searchCaseSensitive ? 'g' : 'gi');
+    return text.replace(queryRegex, '<mark class="search-highlight">$1</mark>');
+  }
+
+  // Reactive: update filtered entries when search query or active tab changes
+  $: {
+    if (activeTab && entriesByTab[activeTab] !== undefined) {
+      if (searchQuery.trim()) {
+        performSearch();
+      } else {
+        filteredEntriesByTab[activeTab] = entriesByTab[activeTab] || [];
+        matchIndices = [];
+        currentMatchIndex = 0;
+      }
+    }
+  }
+
 </script>
 
 {#if isOpen}
@@ -434,6 +554,63 @@
         
         <!-- Controls Section -->
         <div class="logs-controls">
+          <!-- Search Box -->
+          <div class="search-container">
+            <input
+              type="text"
+              class="search-input"
+              placeholder="Search logs..."
+              bind:value={searchQuery}
+              oninput={performSearch}
+              onkeydown={(e) => {
+                if (e.key === 'Enter' && e.shiftKey) {
+                  e.preventDefault();
+                  navigateMatch('prev');
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
+                  navigateMatch('next');
+                } else if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  clearSearch();
+                }
+              }}
+            />
+            {#if searchQuery}
+              <span class="search-results">
+                {matchIndices.length > 0 ? `${currentMatchIndex + 1}/${matchIndices.length}` : '0'}
+              </span>
+              <button
+                class="control-button compact search-nav"
+                onclick={() => navigateMatch('prev')}
+                title="Previous match (Shift+Enter)"
+                disabled={matchIndices.length === 0}
+              >
+                ↑
+              </button>
+              <button
+                class="control-button compact search-nav"
+                onclick={() => navigateMatch('next')}
+                title="Next match (Enter)"
+                disabled={matchIndices.length === 0}
+              >
+                ↓
+              </button>
+              <button
+                class="control-button compact search-nav"
+                onclick={clearSearch}
+                title="Clear search (Esc)"
+              >
+                ✕
+              </button>
+            {/if}
+            <button
+              class="control-button compact {searchCaseSensitive ? 'active' : ''}"
+              onclick={() => { searchCaseSensitive = !searchCaseSensitive; performSearch(); }}
+              title="Case sensitive search"
+            >
+              Aa
+            </button>
+          </div>
           <button 
             class="control-button compact {followMode ? 'active' : ''}" 
             onclick={toggleFollowMode}
@@ -471,13 +648,27 @@
               bind:this={logContainers[activeTab]}
               onscroll={(e) => handleScroll(e, activeTab)}
             >
-              {#each (entriesByTab[activeTab] || []) as entry (entry.id)}
-                <div class="log-line {getLevelClass(entry.level || 'INFO')} {entry.isJson ? 'log-json' : ''}">
-                  <span class="log-message" role="button" tabindex="0" onclick={() => entry.isExpanded = !entry.isExpanded} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (entry.isExpanded = !entry.isExpanded)}>
-                    {entry.isExpanded ? entry.message : (entry.message.split('\n')[0].length > 300 ? entry.message.split('\n')[0].slice(0, 300) + '…' : entry.message.split('\n')[0])}
+              {#each (searchQuery.trim() ? (filteredEntriesByTab[activeTab] || []) : (entriesByTab[activeTab] || [])) as entry, idx (entry.id)}
+                {@const originalIndex = entriesByTab[activeTab]?.indexOf(entry) ?? -1}
+                {@const isCurrentMatch = searchQuery.trim() && matchIndices.length > 0 && currentMatchIndex >= 0 && matchIndices[currentMatchIndex] === originalIndex}
+                {@const displayMessage = entry.isExpanded ? entry.message : (entry.message.split('\n')[0].length > 300 ? entry.message.split('\n')[0].slice(0, 300) + '…' : entry.message.split('\n')[0])}
+                <div class="log-line {getLevelClass(entry.level || 'INFO')} {entry.isJson ? 'log-json' : ''} {isCurrentMatch ? 'highlight-match' : ''}">
+                  <span 
+                    class="log-message" 
+                    role="button" 
+                    tabindex="0" 
+                    onclick={() => entry.isExpanded = !entry.isExpanded} 
+                    onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (entry.isExpanded = !entry.isExpanded)}
+                  >
+                    {@html searchQuery.trim() ? highlightText(displayMessage, searchQuery) : displayMessage}
                   </span>
                 </div>
               {/each}
+              {#if searchQuery.trim() && (!filteredEntriesByTab[activeTab] || filteredEntriesByTab[activeTab].length === 0)}
+                <div class="search-no-results">
+                  <p>No results found for "{searchQuery}"</p>
+                </div>
+              {/if}
             </div>
           {:else}
             <div class="logs-placeholder">
@@ -578,6 +769,53 @@
     gap: 4px;
     align-items: center;
     flex-shrink: 0; /* Prevent controls from shrinking */
+  }
+
+  .search-container {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 8px;
+    background: var(--background-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 2px 4px;
+  }
+
+  .search-input {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    padding: 4px 8px;
+    font-size: 12px;
+    min-width: 150px;
+    outline: none;
+  }
+
+  .search-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .search-input:focus {
+    outline: none;
+  }
+
+  .search-results {
+    color: var(--text-secondary);
+    font-size: 11px;
+    padding: 0 4px;
+    white-space: nowrap;
+  }
+
+  .search-nav {
+    padding: 2px 6px;
+    min-width: 24px;
+    height: 20px;
+  }
+
+  .search-nav:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
   
   .control-button {
@@ -753,6 +991,38 @@
   
   .log-line:hover {
     background: var(--background-secondary);
+  }
+
+  .log-line.highlight-match {
+    background: rgba(245, 158, 11, 0.2);
+    border-left: 3px solid #f59e0b;
+    animation: highlightPulse 1s ease-out;
+  }
+
+  @keyframes highlightPulse {
+    0% {
+      background: rgba(245, 158, 11, 0.4);
+    }
+    100% {
+      background: rgba(245, 158, 11, 0.2);
+    }
+  }
+
+  .search-highlight {
+    background: rgba(245, 158, 11, 0.3);
+    color: var(--text-primary);
+    padding: 1px 2px;
+    border-radius: 2px;
+    font-weight: 600;
+  }
+
+  .search-no-results {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: var(--text-muted);
+    font-size: 14px;
   }
   
   .log-json {
