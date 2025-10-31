@@ -63,17 +63,12 @@
     
     <div class="header-right">
       <div class="app-version">v1.0.0</div>
+      <button onclick={handleRefresh} disabled={loading} class="header-refresh-button" title="Refresh cluster data">
+        {loading ? "⏳" : "↻"}
+      </button>
     </div>
   </div>
 </header>
-
-<div class="mode-indicator" class:desktop-mode={isTauriAvailable} class:demo-mode={!isTauriAvailable}>
-  <strong>Mode:</strong> {isTauriAvailable ? '🖥️ Desktop Application' : '🌐 Web Development Mode (Demo Data)'}
-</div>
-
-<button onclick={handleRefresh} disabled={loading} class="refresh-button">
-  {loading ? "Loading..." : "Refresh"}
-</button>
 
 <style>
   /* Modern Header Styles */
@@ -188,47 +183,31 @@
     opacity: 0.8;
   }
 
-  .refresh-button {
-    background: var(--primary-color);
-    border: none;
+  .header-refresh-button {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: var(--radius-md);
-    color: white;
+    color: var(--text-color);
+    font-size: 1.2em;
     font-weight: 600;
-    padding: 10px 20px;
+    padding: 8px 12px;
     cursor: pointer;
     transition: var(--transition-normal);
-    margin: 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
   }
 
-  .refresh-button:hover {
-    background: var(--accent-color);
-    transform: translateY(-1px);
+  .header-refresh-button:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.2);
+    transform: rotate(180deg);
   }
 
-  .refresh-button:disabled {
-    opacity: 0.6;
+  .header-refresh-button:disabled {
+    opacity: 0.5;
     cursor: not-allowed;
     transform: none;
-  }
-
-  .mode-indicator {
-    padding: 12px 20px;
-    border-radius: var(--radius-md);
-    font-size: 0.9em;
-    font-weight: 500;
-    margin: 20px 0;
-    text-align: center;
-  }
-
-  .mode-indicator.desktop-mode {
-    background: var(--soft-green);
-    border: 1px solid var(--success-color);
-    color: var(--accent-color);
-  }
-
-  .mode-indicator.demo-mode {
-    background: var(--soft-yellow);
-    border: 1px solid var(--warning-color);
-    color: #92400e;
   }
 </style>

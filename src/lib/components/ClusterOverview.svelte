@@ -134,13 +134,12 @@
 {:else if clusterOverview}
   <div class="cluster-overview">
     <div class="cluster-header">
-      <h2>🏗️ Cluster Overview</h2>
-      <div class="cluster-info-card">
-        <div class="cluster-basic-info">
-          <h3>{clusterOverview.cluster_info.name}</h3>
-          <p class="cluster-server">{clusterOverview.cluster_info.server}</p>
+      <div class="cluster-header-content">
+        <h2>🏗️ Cluster Overview</h2>
+        <div class="cluster-info-inline">
+          <span class="cluster-name">{clusterOverview.cluster_info.name}</span>
           {#if clusterOverview.kubernetes_version}
-            <span class="k8s-version">Kubernetes {clusterOverview.kubernetes_version}</span>
+            <span class="k8s-version">v{clusterOverview.kubernetes_version}</span>
           {/if}
         </div>
       </div>
@@ -237,44 +236,45 @@
   }
 
   .cluster-header {
-    text-align: center;
-    margin-bottom: var(--spacing-xl);
+    margin-bottom: var(--spacing-md);
+  }
+
+  .cluster-header-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    flex-wrap: wrap;
   }
 
   .cluster-header h2 {
-    font-size: 2em;
-    margin-bottom: var(--spacing-md);
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  }
-
-  .cluster-info-card {
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-lg);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    position: relative;
-    z-index: 1;
-  }
-
-  .cluster-basic-info h3 {
     font-size: 1.5em;
-    margin-bottom: var(--spacing-sm);
-    color: white;
+    margin: 0;
+    color: var(--text-primary);
+    font-weight: 600;
   }
 
-  .cluster-server {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 0.9em;
-    margin-bottom: var(--spacing-sm);
+  .cluster-info-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+  }
+
+  .cluster-name {
+    color: var(--text-primary);
+    font-size: 1em;
+    font-weight: 500;
   }
 
   .k8s-version {
-    background: rgba(255, 255, 255, 0.2);
-    padding: 4px 8px;
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--primary-color);
+    padding: 4px 10px;
     border-radius: var(--radius-sm);
-    font-size: 0.8em;
-    font-weight: 600;
+    font-size: 0.85em;
+    font-weight: 500;
+    border: 1px solid rgba(59, 130, 246, 0.3);
   }
 
   /* Nodes Layout */

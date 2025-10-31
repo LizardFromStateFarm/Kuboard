@@ -105,7 +105,9 @@
       //   selectedContextName = response.current_context;
       // }
       
+      // Auto-dismiss success message after 2 seconds
       success = `Loaded ${contexts.length} contexts`;
+      setTimeout(() => success = '', 2000);
       console.log('✅ Contexts loaded:', contexts);
     } catch (err) {
       error = `Failed to load contexts: ${err}`;
@@ -142,7 +144,9 @@
       // Start auto-refresh for cluster data
       startAutoRefresh();
       
+      // Auto-dismiss success message after 3 seconds
       success = `Switched to context: ${contextName}`;
+      setTimeout(() => success = '', 3000);
       console.log('✅ Context switched to:', contextName);
     } catch (err) {
       error = `Failed to set context: ${err}`;
@@ -167,7 +171,9 @@
       console.log('🔄 Loading resource details...');
       await loadResourceDetails();
       
+      // Auto-dismiss success message
       success = "Cluster overview loaded successfully";
+      setTimeout(() => success = '', 2000);
     } catch (err) {
       error = `Failed to load cluster overview: ${err}`;
       console.error('❌ Error loading cluster overview:', err);
@@ -324,7 +330,9 @@
       }
     ];
     
+    // Auto-dismiss success message
     success = "Demo data loaded successfully";
+    setTimeout(() => success = '', 2000);
   }
 
   // Event handlers for components
@@ -572,16 +580,11 @@
     on:refresh={handleRefresh}
   />
 
-  <!-- Error and Success Messages -->
+  <!-- Error Message (shown as toast) -->
   {#if error}
-    <div class="error-message">
+    <div class="error-message toast">
       <strong>Error:</strong> {error}
-    </div>
-  {/if}
-
-  {#if success}
-    <div class="success-message">
-      <strong>Success:</strong> {success}
+      <button class="toast-close" onclick={() => error = ''}>×</button>
     </div>
   {/if}
 
@@ -659,21 +662,58 @@
   }
 
   .error-message {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    max-width: 400px;
     color: var(--error-color);
-    margin: 10px 0;
-    padding: 10px;
+    padding: 12px 16px;
     border: 1px solid var(--error-color);
-    border-radius: var(--radius-sm);
-    background: rgba(239, 68, 68, 0.1);
+    border-radius: var(--radius-md);
+    background: rgba(239, 68, 68, 0.15);
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    animation: slideInRight 0.3s ease-out;
   }
 
-  .success-message {
-    color: var(--success-color);
-    margin: 10px 0;
-    padding: 10px;
-    border: 1px solid var(--success-color);
-    border-radius: var(--radius-sm);
-    background: rgba(16, 185, 129, 0.1);
+  .error-message.toast {
+    display: flex;
+  }
+
+  .toast-close {
+    background: transparent;
+    border: none;
+    color: var(--error-color);
+    font-size: 1.5em;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+  }
+
+  .toast-close:hover {
+    opacity: 1;
+  }
+
+  @keyframes slideInRight {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
   }
 
   .loading-cluster {
