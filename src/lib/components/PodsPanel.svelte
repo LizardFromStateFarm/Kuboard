@@ -6,6 +6,7 @@
   import MetricsGraph from './MetricsGraph.svelte';
   import LogsWindow from './LogsWindow.svelte';
   import PodDetails from './PodDetails.svelte';
+  import QuickActionsMenu from './QuickActionsMenu.svelte';
 
   // Props
   export let currentContext: any = null;
@@ -39,14 +40,11 @@
   let eventsLoading: boolean = false;
   let eventsError: string | null = null;
 
-  // Live update state
+  // Watch-based live update state
   let livePods: any[] | null = null;
-  let pollingTimer: any = null;
-  let baseIntervalMs = 3000;
-  let currentIntervalMs = baseIntervalMs;
-  let maxBackoffMs = 30000;
-  let liveError: string | null = null;
-  let isPausedForVisibility = false;
+  let watchError: string | null = null;
+  let watchActive = false;
+  let podsMap = new Map<string, any>(); // Track pods by key for efficient updates
 
   // Sorting state
   let sortColumn: string | null = null;
@@ -54,6 +52,78 @@
 
   // Search state
   let searchQuery: string = '';
+
+  // Quick Actions Menu state
+  let contextMenuVisible = false;
+  let contextMenuPosition = { x: 0, y: 0 };
+  let contextMenuPod: any = null;
+  let yamlViewerVisible = false;
+  let yamlContent = '';
+
+  function handleContextMenu(event: MouseEvent, pod: any) {
+    event.preventDefault();
+    event.stopPropagation();
+    contextMenuPod = pod;
+    contextMenuPosition = { x: event.clientX, y: event.clientY };
+    contextMenuVisible = true;
+  }
+
+  function handleActionMenuClose() {
+    contextMenuVisible = false;
+    contextMenuPod = null;
+  }
+
+  function handleActionDeleted(event: CustomEvent) {
+    // Watch will handle the update automatically, but we can optimistically remove
+    if (contextMenuPod) {
+      const keyToRemove = getPodKey(contextMenuPod);
+      podsMap.delete(keyToRemove);
+      livePods = [...Array.from(podsMap.values())]; // Force new array reference
+      console.log(`🗑️ Optimistically deleted pod: ${keyToRemove}, total: ${livePods.length}`);
+    }
+    handleActionMenuClose();
+  }
+
+  function handleActionRestarted(event: CustomEvent) {
+    // Optimistically remove (controller will recreate, watch will detect)
+    if (contextMenuPod) {
+      const keyToRemove = getPodKey(contextMenuPod);
+      podsMap.delete(keyToRemove);
+      livePods = [...Array.from(podsMap.values())]; // Force new array reference
+      console.log(`🔄 Optimistically removed pod for restart: ${keyToRemove}, total: ${livePods.length}`);
+    }
+    handleActionMenuClose();
+  }
+
+  function handleViewYaml(event: CustomEvent) {
+    yamlContent = event.detail.yaml;
+    yamlViewerVisible = true;
+    // Don't close menu for view-yaml, it opens a modal
+  }
+
+  function closeYamlViewer() {
+    yamlViewerVisible = false;
+    yamlContent = '';
+    handleActionMenuClose();
+  }
+
+  function handleActionCopied(event: CustomEvent) {
+    // Show a brief notification (could enhance later)
+    console.log(`Copied ${event.detail.type}: ${event.detail.value}`);
+    handleActionMenuClose();
+  }
+
+  function handleActionDescribe(event: CustomEvent) {
+    // For now, just log - will implement describe view later
+    console.log('Describe action for:', event.detail.resource);
+    handleActionMenuClose();
+  }
+
+  function handleActionEdit(event: CustomEvent) {
+    // For now, just log - will implement edit view later
+    console.log('Edit action for:', event.detail.resource);
+    handleActionMenuClose();
+  }
 
   function getRenderPods(): any[] {
     return livePods ?? pods ?? [];
@@ -63,60 +133,106 @@
     return pod?.metadata?.uid || `${pod?.metadata?.namespace || 'default'}/${pod?.metadata?.name || ''}`;
   }
 
-  function jitter(ms: number): number {
-    const delta = ms * 0.2;
-    return ms + (Math.random() * 2 - 1) * delta;
+  // Handle watch events
+  function handleWatchEvent(event: any) {
+    console.log('📡 Raw watch event received:', event);
+    const { event_type, pod } = event;
+    
+    if (!pod || !pod.metadata) {
+      console.error('⚠️ Invalid watch event: missing pod or metadata', event);
+      return;
+    }
+    
+    const key = getPodKey(pod);
+    const eventTypeStr = String(event_type); // Ensure it's a string
+    
+    console.log(`📡 Watch event: ${eventTypeStr} for pod ${key}`);
+    console.log(`📊 Current podsMap size: ${podsMap.size}, livePods length: ${livePods?.length ?? 0}`);
+    
+    switch (eventTypeStr) {
+      case 'Added':
+        // Add new pod
+        if (!podsMap.has(key)) {
+          podsMap.set(key, pod);
+          livePods = [...Array.from(podsMap.values())]; // Force new array reference
+          console.log(`✅ Added pod: ${key}, total: ${livePods.length}`);
+        } else {
+          console.log(`ℹ️ Pod ${key} already exists, skipping add`);
+        }
+        break;
+        
+      case 'Modified':
+        // Update existing pod - this includes pods being terminated (have deletionTimestamp)
+        const isTerminating = pod.metadata?.deletionTimestamp ? 'Terminating' : pod.status?.phase;
+        podsMap.set(key, pod);
+        livePods = [...Array.from(podsMap.values())]; // Force new array reference
+        console.log(`🔄 Modified pod: ${key}, status: ${isTerminating}, total: ${livePods.length}`);
+        break;
+        
+      case 'Deleted':
+        // Remove pod
+        if (podsMap.has(key)) {
+          podsMap.delete(key);
+          livePods = [...Array.from(podsMap.values())]; // Force new array reference
+          console.log(`🗑️ Deleted pod: ${key}, total: ${livePods.length}`);
+        } else {
+          console.log(`ℹ️ Pod ${key} not in map, skipping delete`);
+        }
+        break;
+        
+      default:
+        console.warn(`⚠️ Unknown event type: ${eventTypeStr}`, event);
+    }
+    
+    console.log(`📊 After update - podsMap size: ${podsMap.size}, livePods length: ${livePods?.length ?? 0}`);
+    watchError = null;
   }
 
-  async function fetchPodsLive() {
+  function handleWatchError(error: any) {
+    console.error('Watch error:', error);
+    watchError = error?.error || String(error) || 'Watch connection error';
+  }
+
+  // Start watch stream
+  async function startWatch() {
+    if (!currentContext) return;
+    
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const result = await invoke('kuboard_get_pods');
-      const incoming = Array.isArray(result) ? result as any[] : [];
-
-      // Build map for diff
-      const oldList = getRenderPods();
-      const oldMap = new Map<string, any>(oldList.map((p) => [getPodKey(p), p]));
-      const newMap = new Map<string, any>(incoming.map((p) => [getPodKey(p), p]));
-
-      // Added pods (not in old)
-      const added: any[] = [];
-      for (const pod of incoming) {
-        const k = getPodKey(pod);
-        if (!oldMap.has(k)) added.push(pod);
-      }
-
-      // Updated or existing pods
-      const kept: any[] = [];
-      for (const pod of oldList) {
-        const k = getPodKey(pod);
-        const np = newMap.get(k);
-        if (np) kept.push(np);
-      }
-
-      // Compose: added first (newest), then kept (preserve user's mental order)
-      livePods = [...added, ...kept];
-
-      // Reset backoff on success
-      currentIntervalMs = baseIntervalMs;
-      liveError = null;
+      await invoke('kuboard_stop_pod_watch'); // Stop any existing watch
+      await invoke('kuboard_start_pod_watch');
+      watchActive = true;
+      watchError = null;
+      console.log('✅ Watch started');
     } catch (e: any) {
-      liveError = String(e);
-      // backoff increase
-      currentIntervalMs = Math.min(maxBackoffMs, Math.floor(currentIntervalMs * 1.8));
-    } finally {
-      scheduleNextPoll();
+      console.error('Failed to start watch:', e);
+      watchError = String(e);
+      watchActive = false;
     }
   }
 
-  function scheduleNextPoll() {
-    if (pollingTimer) clearTimeout(pollingTimer);
-    if (document.hidden) {
-      isPausedForVisibility = true;
-      return; // resume on visibility change
+  // Stop watch stream
+  async function stopWatch() {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('kuboard_stop_pod_watch');
+      watchActive = false;
+      console.log('🛑 Watch stopped');
+    } catch (e: any) {
+      console.error('Failed to stop watch:', e);
     }
-    const next = Math.max(1000, Math.floor(jitter(currentIntervalMs)));
-    pollingTimer = setTimeout(fetchPodsLive, next);
+  }
+
+  // Initialize pods from initial list
+  function initializePods() {
+    if (pods && pods.length > 0) {
+      podsMap.clear();
+      for (const pod of pods) {
+        podsMap.set(getPodKey(pod), pod);
+      }
+      livePods = [...Array.from(podsMap.values())]; // Force new array reference
+      console.log(`📋 Initialized ${livePods.length} pods`);
+    }
   }
 
   // Event dispatcher
@@ -424,12 +540,21 @@
   }
 
   // Get status class
+  // Get effective pod status (checks for deletionTimestamp to show Terminating)
+  function getEffectivePodStatus(pod: any): string {
+    if (pod.metadata?.deletionTimestamp) {
+      return 'Terminating';
+    }
+    return pod.status?.phase || 'Unknown';
+  }
+
   function getStatusClass(status: string): string {
     switch (status?.toLowerCase()) {
       case 'running': return 'running';
       case 'pending': return 'pending';
       case 'succeeded': return 'ready';
       case 'failed': return 'failed';
+      case 'terminating': return 'terminating';
       case 'unknown': return 'unknown';
       default: return 'unknown';
     }
@@ -581,8 +706,9 @@
   }
 
   // Reactive sorted pods - automatically updates when sortColumn or sortDirection changes
+  // Directly reference livePods and pods so Svelte tracks changes
   $: sortedPods = (() => {
-    const podsToSort = getRenderPods();
+    const podsToSort = livePods ?? pods ?? [];
     
     if (!sortColumn || !sortDirection) {
       return podsToSort;
@@ -1015,34 +1141,68 @@
   }
 
   // Lifecycle
-  onMount(() => {
-    const visHandler = () => {
-      if (!document.hidden && isPausedForVisibility) {
-        isPausedForVisibility = false;
-        scheduleNextPoll();
-      }
-    };
-    document.addEventListener('visibilitychange', visHandler);
-    scheduleNextPoll();
+  let watchEventListenerUnsubscribe: (() => Promise<void>) | null = null;
+  let watchErrorListenerUnsubscribe: (() => Promise<void>) | null = null;
+  let lastContext: string | null = null;
 
-    return () => {
-      document.removeEventListener('visibilitychange', visHandler);
-    };
-  });
-
-  onDestroy(() => {
-    if (pollingTimer) {
-      clearTimeout(pollingTimer);
+  onMount(async () => {
+    // Initialize pods from props
+    initializePods();
+    
+    // Listen to watch events
+    const { listen } = await import('@tauri-apps/api/event');
+    
+    watchEventListenerUnsubscribe = await listen('pod-watch-event', (event: any) => {
+      handleWatchEvent(event.payload);
+    });
+    
+    watchErrorListenerUnsubscribe = await listen('pod-watch-error', (event: any) => {
+      handleWatchError(event.payload);
+    });
+    
+    // Start watch when context is available
+    if (currentContext && !watchActive) {
+      startWatch();
     }
+    
+    return async () => {
+      if (watchEventListenerUnsubscribe) await watchEventListenerUnsubscribe();
+      if (watchErrorListenerUnsubscribe) await watchErrorListenerUnsubscribe();
+      await stopWatch();
+    };
   });
+
+  onDestroy(async () => {
+    if (watchEventListenerUnsubscribe) await watchEventListenerUnsubscribe();
+    if (watchErrorListenerUnsubscribe) await watchErrorListenerUnsubscribe();
+    await stopWatch();
+  });
+
+  // Restart watch only when context actually changes
+  $: if (currentContext && currentContext !== lastContext) {
+    lastContext = currentContext;
+    if (watchActive) {
+      stopWatch().then(() => {
+        podsMap.clear();
+        livePods = [];
+        initializePods();
+        startWatch();
+      });
+    } else {
+      podsMap.clear();
+      livePods = [];
+      initializePods();
+      startWatch();
+    }
+  }
 </script>
 
 <div class="pods-panel">
   <div class="panel-header">
     <h4>🟢 Pods ({getRenderPods().length})</h4>
     <div class="panel-controls">
-      <span class="live-indicator {liveError ? 'error' : ''}">
-        {liveError ? 'Live (degraded)' : 'Live'}
+      <span class="live-indicator {watchError ? 'error' : watchActive ? 'active' : ''}">
+        {watchError ? 'Watch Error' : watchActive ? '🟢 Live' : '⏸️ Paused'}
       </span>
     </div>
   </div>
@@ -1192,9 +1352,16 @@
               <tbody>
                 {#each filteredPods as pod (getPodKey(pod))}
                   {@const errorInfo = getPodError(pod)}
-                  <tr class="pod-row" onclick={() => showFullPodDetails(pod)} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' || e.key === ' ' ? showFullPodDetails(pod) : null}>
+                  <tr 
+                    class="pod-row" 
+                    onclick={() => showFullPodDetails(pod)} 
+                    role="button" 
+                    tabindex="0" 
+                    onkeydown={(e) => e.key === 'Enter' || e.key === ' ' ? showFullPodDetails(pod) : null}
+                    oncontextmenu={(e) => handleContextMenu(e, pod)}
+                  >
                     <td class="pod-name-cell">{pod.metadata?.name || 'Unknown'}</td>
-                    <td><span class="status-badge status-{getStatusClass(pod.status?.phase || 'Unknown')}">{pod.status?.phase || 'Unknown'}</span></td>
+                    <td><span class="status-badge status-{getStatusClass(getEffectivePodStatus(pod))}">{getEffectivePodStatus(pod)}</span></td>
                     <td class="error-cell">
                       {#if errorInfo.hasError}
                         <span class="error-indicator" title={errorInfo.message}>⚠️</span>
@@ -1234,6 +1401,38 @@
   bind:isOpen={logsWindowOpen}
   onClose={() => logsWindowOpen = false}
 />
+
+<!-- Quick Actions Menu -->
+{#if contextMenuPod}
+  <QuickActionsMenu
+    resource={contextMenuPod}
+    resourceType="pod"
+    position={contextMenuPosition}
+    bind:visible={contextMenuVisible}
+    on:close={handleActionMenuClose}
+    on:deleted={handleActionDeleted}
+    on:restarted={handleActionRestarted}
+    on:view-yaml={handleViewYaml}
+    on:copied={handleActionCopied}
+    on:describe={handleActionDescribe}
+    on:edit={handleActionEdit}
+  />
+{/if}
+
+<!-- YAML Viewer Modal -->
+{#if yamlViewerVisible}
+  <div class="yaml-viewer-modal" onclick={closeYamlViewer}>
+    <div class="yaml-viewer-content" onclick={(e) => e.stopPropagation()}>
+      <div class="yaml-viewer-header">
+        <h3>Pod YAML</h3>
+        <button class="yaml-viewer-close" onclick={closeYamlViewer}>✕</button>
+      </div>
+      <div class="yaml-viewer-body">
+        <pre><code>{yamlContent}</code></pre>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   /* Import CSS variables */
@@ -1613,6 +1812,22 @@
     background: var(--status-pending-bg);
     color: var(--status-pending-text);
     border: 1px solid var(--status-pending-border);
+  }
+
+  .status-terminating {
+    background: rgba(255, 165, 0, 0.15);
+    color: #ffa500;
+    border: 1px solid rgba(255, 165, 0, 0.4);
+    animation: pulse-terminating 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-terminating {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
   }
 
   .status-failed {
@@ -2611,5 +2826,89 @@
       flex-direction: column;
       gap: var(--spacing-sm);
     }
+  }
+
+  /* YAML Viewer Modal */
+  .yaml-viewer-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10001;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .yaml-viewer-content {
+    background: var(--bg-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    width: 90%;
+    max-width: 900px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .yaml-viewer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .yaml-viewer-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  .yaml-viewer-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 1.2rem;
+    line-height: 1;
+    transition: all 0.2s;
+  }
+
+  .yaml-viewer-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+  }
+
+  .yaml-viewer-body {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+  }
+
+  .yaml-viewer-body pre {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .yaml-viewer-body code {
+    color: var(--text-primary);
   }
 </style>

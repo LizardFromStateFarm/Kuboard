@@ -61,6 +61,15 @@ pub fn run() {
         commands::kuboard_get_pod_logs,
         commands::kuboard_check_metrics_availability,
         commands::kuboard_get_cluster_metrics,
+        
+        // Pod Actions
+        commands::kuboard_delete_pod,
+        commands::kuboard_restart_pod,
+        commands::kuboard_get_pod_yaml,
+        
+        // Pod Watch
+        commands::kuboard_start_pod_watch,
+        commands::kuboard_stop_pod_watch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

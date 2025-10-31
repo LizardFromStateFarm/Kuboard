@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import MetricsGraph from './MetricsGraph.svelte';
+  import QuickActionsMenu from './QuickActionsMenu.svelte';
 
   export let pod: any;
   export let onBack: () => void;
@@ -15,6 +16,12 @@
   let podEvents: any[] = [];
   let eventsLoading = false;
   let eventsError: string | null = null;
+
+  // Quick Actions Menu state
+  let actionsMenuVisible = false;
+  let actionsMenuPosition = { x: 0, y: 0 };
+  let yamlViewerVisible = false;
+  let yamlContent = '';
 
   // Section collapse state
   let sectionsCollapsed = {
@@ -142,6 +149,59 @@
     sectionsCollapsed = { ...sectionsCollapsed };
   }
 
+  function openActionsMenu(event: MouseEvent) {
+    event.stopPropagation();
+    actionsMenuPosition = { x: event.clientX, y: event.clientY };
+    actionsMenuVisible = true;
+  }
+
+  function handleActionMenuClose() {
+    actionsMenuVisible = false;
+  }
+
+  function handleActionDeleted(event: CustomEvent) {
+    // After deletion, go back to pods list
+    handleActionMenuClose();
+    if (onBack) {
+      setTimeout(() => onBack(), 500);
+    }
+  }
+
+  function handleActionRestarted(event: CustomEvent) {
+    // Refresh pod details
+    handleActionMenuClose();
+    // Reload pod events/metrics
+    loadPodEvents();
+  }
+
+  function handleViewYaml(event: CustomEvent) {
+    yamlContent = event.detail.yaml;
+    yamlViewerVisible = true;
+  }
+
+  function closeYamlViewer() {
+    yamlViewerVisible = false;
+    yamlContent = '';
+    handleActionMenuClose();
+  }
+
+  function handleActionCopied(event: CustomEvent) {
+    console.log(`Copied ${event.detail.type}: ${event.detail.value}`);
+    handleActionMenuClose();
+  }
+
+  function handleActionDescribe(event: CustomEvent) {
+    // Will implement describe view later
+    console.log('Describe action for:', event.detail.resource);
+    handleActionMenuClose();
+  }
+
+  function handleActionEdit(event: CustomEvent) {
+    // Will implement edit view later
+    console.log('Edit action for:', event.detail.resource);
+    handleActionMenuClose();
+  }
+
   function getControllerInfo(pod: any) {
     const ownerReferences = pod.metadata?.ownerReferences || [];
     if (ownerReferences.length === 0) {
@@ -199,6 +259,7 @@
     <div class="header-left">
       <button class="back-button" onclick={onBack}>← Back to Pods</button>
       <button class="logs-button" onclick={() => onOpenLogs(pod)}>📋 View Logs</button>
+      <button class="actions-button" onclick={openActionsMenu}>⚙️ Actions</button>
     </div>
     <div class="header-right">
       <h3>{pod.metadata?.name}</h3>
@@ -259,7 +320,7 @@
             <div class="controls-row">
               <div class="time-range-selector">
                 <label for="timeRange">Time Range:</label>
-                <select id="timeRange" onchange={(e) => changeTimeRange(Number(e.target.value))} class="time-range-select">
+                <select id="timeRange" onchange={(e) => changeTimeRange(Number((e.target as HTMLSelectElement)?.value || 30))} class="time-range-select">
                   <option value="30">30 minutes</option>
                   <option value="60">1 hour</option>
                   <option value="120">2 hours</option>
@@ -437,7 +498,7 @@
             <div>Actions</div>
           </div>
           {#each pod.spec.containers as c, i}
-            {@const containerStatus = pod.status?.containerStatuses?.find(cs => cs.name === c.name)}
+            {@const containerStatus = pod.status?.containerStatuses?.find((cs: any) => cs.name === c.name)}
             {@const isSelected = selectedContainer?.name === c.name}
             <div class="container-row {isSelected ? 'selected' : ''}" role="button" tabindex="0" onclick={() => selectContainer(c)} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && selectContainer(c)}>
               <div class="c-name">{c.name}</div>
@@ -640,6 +701,36 @@
   </div>
 </div>
 
+<!-- Quick Actions Menu -->
+<QuickActionsMenu
+  resource={pod}
+  resourceType="pod"
+  position={actionsMenuPosition}
+  bind:visible={actionsMenuVisible}
+  on:close={handleActionMenuClose}
+  on:deleted={handleActionDeleted}
+  on:restarted={handleActionRestarted}
+  on:view-yaml={handleViewYaml}
+  on:copied={handleActionCopied}
+  on:describe={handleActionDescribe}
+  on:edit={handleActionEdit}
+/>
+
+<!-- YAML Viewer Modal -->
+{#if yamlViewerVisible}
+  <div class="yaml-viewer-modal" onclick={closeYamlViewer}>
+    <div class="yaml-viewer-content" onclick={(e) => e.stopPropagation()}>
+      <div class="yaml-viewer-header">
+        <h3>Pod YAML</h3>
+        <button class="yaml-viewer-close" onclick={closeYamlViewer}>✕</button>
+      </div>
+      <div class="yaml-viewer-body">
+        <pre><code>{yamlContent}</code></pre>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
   @import '../styles/variables.css';
   @import '../styles/color-palette.css';
@@ -667,17 +758,21 @@
   }
 
   .back-button,
-  .logs-button {
+  .logs-button,
+  .actions-button {
     padding: 6px 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-primary);
     background: transparent;
     color: var(--text-primary);
     cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
   }
 
   .back-button:hover,
-  .logs-button:hover {
+  .logs-button:hover,
+  .actions-button:hover {
     background: rgba(255, 255, 255, 0.06);
   }
 
@@ -1223,6 +1318,90 @@
   @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+  }
+
+  /* YAML Viewer Modal */
+  .yaml-viewer-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10001;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .yaml-viewer-content {
+    background: var(--bg-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    width: 90%;
+    max-width: 900px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .yaml-viewer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .yaml-viewer-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  .yaml-viewer-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 1.2rem;
+    line-height: 1;
+    transition: all 0.2s;
+  }
+
+  .yaml-viewer-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+  }
+
+  .yaml-viewer-body {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+  }
+
+  .yaml-viewer-body pre {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .yaml-viewer-body code {
+    color: var(--text-primary);
   }
 </style>
 

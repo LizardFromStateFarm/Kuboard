@@ -128,3 +128,8 @@ temp/
 
 # AI Assistant Documentation
 AI_SUMMARY.md
+
+# Feature Roadmap and Plans (private, not for public GitHub)
+docs/FEATURE_ROADMAP.md
+docs/PHASE_*.md
+docs/*_PLAN.md

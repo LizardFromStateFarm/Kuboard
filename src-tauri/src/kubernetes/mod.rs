@@ -4,6 +4,8 @@
 // Kuboard Kubernetes Integration Module
 // This module contains all Kubernetes-related helper functions
 
+pub mod watch;
+
 use anyhow::{anyhow, Result};
 use kube::{Client, Config, Api};
 use kube::api::{ListParams, LogParams};

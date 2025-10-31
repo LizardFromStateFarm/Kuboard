@@ -6,6 +6,7 @@
 
 use tauri::State;
 use kube::Api;
+use kube::api::DeleteParams;
 use k8s_openapi::api::{
     apps::v1::Deployment,
     core::v1::{Node, Namespace, Pod, Service, ConfigMap, Secret},
@@ -788,4 +789,150 @@ fn parse_memory_capacity(memory_str: &str) -> Result<u64, String> {
         memory_str.parse::<u64>()
             .map_err(|e| format!("Invalid memory bytes '{}': {}", memory_str, e))
     }
+}
+
+// Pod Actions Commands
+#[tauri::command]
+pub async fn kuboard_delete_pod(
+    pod_name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Deleting pod: {}/{}", namespace, pod_name);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &namespace);
+    
+    match pods_api.delete(&pod_name, &DeleteParams::default()).await {
+        Ok(_) => {
+            info!("✅ Successfully deleted pod: {}/{}", namespace, pod_name);
+            Ok(format!("Pod {}/{} deleted successfully", namespace, pod_name))
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            // Treat 404 as successful deletion (already gone)
+            warn!("Pod {}/{} not found during delete - treating as already deleted", namespace, pod_name);
+            Ok(format!("Pod {}/{} not found (already deleted)", namespace, pod_name))
+        }
+        Err(e) => {
+            error!("Failed to delete pod {}/{}: {}", namespace, pod_name, e);
+            Err(format!("Failed to delete pod: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_restart_pod(
+    pod_name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Restarting pod: {}/{}", namespace, pod_name);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &namespace);
+    // Delete directly to trigger recreation by controller. If already gone, treat as success.
+    match pods_api.delete(&pod_name, &DeleteParams::default()).await {
+        Ok(_) => {
+            info!("✅ Successfully restarted (deleted for recreation) pod: {}/{}", namespace, pod_name);
+            Ok(format!("Pod {}/{} restarted (deleted for recreation)", namespace, pod_name))
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            warn!("Pod {}/{} not found during restart - treating as already restarted", namespace, pod_name);
+            Ok(format!("Pod {}/{} not found (already restarted)", namespace, pod_name))
+        }
+        Err(e) => {
+            error!("Failed to restart pod {}/{}: {}", namespace, pod_name, e);
+            Err(format!("Failed to restart pod: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_pod_yaml(
+    pod_name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Getting YAML for pod: {}/{}", namespace, pod_name);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &namespace);
+    
+    match pods_api.get(&pod_name).await {
+        Ok(pod) => {
+            // Convert to JSON first, then format as YAML-like structure
+            // Note: We'll use JSON for now, YAML can be added later if needed
+            match serde_json::to_string_pretty(&pod) {
+                Ok(json) => {
+                    info!("✅ Successfully retrieved pod data: {}/{}", namespace, pod_name);
+                    Ok(json)
+                }
+                Err(e) => {
+                    error!("Failed to serialize pod to JSON: {}", e);
+                    Err(format!("Failed to serialize pod: {}", e))
+                }
+            }
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            Err(format!("Pod {}/{} not found", namespace, pod_name))
+        }
+        Err(e) => {
+            error!("Failed to get pod {}/{}: {}", namespace, pod_name, e);
+            Err(format!("Failed to get pod: {}", e))
+        }
+    }
+}
+
+// Pod Watch Commands
+#[tauri::command]
+pub async fn kuboard_start_pod_watch(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Starting pod watch");
+
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?
+        .clone();
+    drop(client_guard);
+
+    let mut watcher_guard = state.pod_watcher.write().await;
+    
+    match watcher_guard.start(client, app).await {
+        Ok(_) => {
+            info!("✅ Pod watch started successfully");
+            Ok("Pod watch started".to_string())
+        }
+        Err(e) => {
+            error!("Failed to start pod watch: {}", e);
+            Err(format!("Failed to start pod watch: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_stop_pod_watch(
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Stopping pod watch");
+
+    let mut watcher_guard = state.pod_watcher.write().await;
+    watcher_guard.stop();
+    
+    info!("✅ Pod watch stopped");
+    Ok("Pod watch stopped".to_string())
 }

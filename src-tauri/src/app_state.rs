@@ -7,6 +7,7 @@
 use kube::{Client, config::Kubeconfig};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use crate::kubernetes::watch::PodWatcher;
 // use crate::commands::optimized::ClusterCache;
 
 #[derive(Clone)]
@@ -14,6 +15,7 @@ pub struct AppState {
     pub current_client: Arc<RwLock<Option<Client>>>,
     pub current_context: Arc<RwLock<Option<String>>>,
     pub kubeconfig: Arc<RwLock<Option<Kubeconfig>>>,
+    pub pod_watcher: Arc<RwLock<PodWatcher>>,
     // pub cluster_cache: Arc<RwLock<Option<ClusterCache>>>,
 }
 
@@ -23,6 +25,7 @@ impl AppState {
             current_client: Arc::new(RwLock::new(None)),
             current_context: Arc::new(RwLock::new(None)),
             kubeconfig: Arc::new(RwLock::new(None)),
+            pod_watcher: Arc::new(RwLock::new(PodWatcher::new())),
             // cluster_cache: Arc::new(RwLock::new(Some(ClusterCache::new()))),
         }
     }
