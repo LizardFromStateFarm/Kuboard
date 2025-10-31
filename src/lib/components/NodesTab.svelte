@@ -514,17 +514,14 @@
   @import '../styles/color-palette.css';
 
   .nodes-tab {
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-md);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 0;
   }
 
   .tab-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: 5px;
     padding-bottom: var(--spacing-sm);
     border-bottom: 1px solid var(--border-primary);
   }
@@ -630,7 +627,7 @@
 
   .nodes-header {
     text-align: center;
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: 5px;
   }
 
   .nodes-header h5 {

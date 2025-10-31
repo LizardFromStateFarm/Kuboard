@@ -237,21 +237,21 @@
   {:else if loadedTypes.has(selectedWorkloadType) || (selectedWorkloadType === 'pods' && pods.length > 0)}
     <!-- Workload Content -->
     <div class="workload-content">
-      <div class="content-header">
-        <h5>
-          {workloadTypes.find(t => t.id === selectedWorkloadType)?.icon} 
-          {workloadTypes.find(t => t.id === selectedWorkloadType)?.label}
-          <span class="item-count">
-            {#if selectedWorkloadType === 'pods'}
-              ({pods.length})
-            {:else if selectedWorkloadType === 'deployments'}
-              ({deployments.length})
-            {:else if selectedWorkloadType === 'services'}
-              ({services.length})
-            {/if}
-          </span>
-        </h5>
-      </div>
+      {#if selectedWorkloadType !== 'pods'}
+        <div class="content-header">
+          <h5>
+            {workloadTypes.find(t => t.id === selectedWorkloadType)?.icon} 
+            {workloadTypes.find(t => t.id === selectedWorkloadType)?.label}
+            <span class="item-count">
+              {#if selectedWorkloadType === 'deployments'}
+                ({deployments.length})
+              {:else if selectedWorkloadType === 'services'}
+                ({services.length})
+              {/if}
+            </span>
+          </h5>
+        </div>
+      {/if}
 
       {#if selectedWorkloadType === 'pods'}
         <!-- Pods Panel -->
@@ -343,17 +343,14 @@
   @import '../styles/variables.css';
 
   .workloads-tab {
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-md);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 0;
   }
 
   .tab-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: 5px;
     padding-bottom: var(--spacing-sm);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
@@ -398,7 +395,7 @@
   }
 
   .workload-type-selector {
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: 5px;
   }
 
   .selector-header {

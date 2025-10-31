@@ -86,6 +86,21 @@
 | `changeContainerResourceType` | Changes resource type for container metrics | ✅ Working | `PodsPanel` |
 | `backToPodsList` | Returns to pods list view | ✅ Working | `PodsPanel` |
 | `getControllerInfo` | Extracts controller information from pod | ✅ Working | `PodsPanel` |
+| `getPodError` | Detects pod errors (CrashLoopBackOff, OOMKilled, etc.) | ✅ Working | `PodsPanel` |
+| `handleSort` | Handles column sorting with three-state cycle (asc → desc → unsorted) | ✅ Working | `PodsPanel` |
+| `getSortedPods` | Returns pods sorted by current sort column and direction | ✅ Working | `PodsPanel` |
+| `parseSearchQuery` | Parses search query to detect label, field, IP, or general search | ✅ Working | `PodsPanel` |
+| `matchLabels` | Matches pod labels against search query | ✅ Working | `PodsPanel` |
+| `searchPodFields` | Searches all pod fields and returns match count and locations | ✅ Working | `PodsPanel` |
+| `scorePod` | Scores pod relevance for search results (exact matches prioritized) | ✅ Working | `PodsPanel` |
+| `searchPods` | Main search function that filters pods based on query type | ✅ Working | `PodsPanel` |
+| `compareName` | Compares pod names for sorting | ✅ Working | `PodsPanel` |
+| `compareStatus` | Compares pod status for sorting | ✅ Working | `PodsPanel` |
+| `compareErrors` | Compares pod error states for sorting | ✅ Working | `PodsPanel` |
+| `compareNamespace` | Compares pod namespaces for sorting | ✅ Working | `PodsPanel` |
+| `compareRestarts` | Compares pod restart counts for sorting | ✅ Working | `PodsPanel` |
+| `compareAge` | Compares pod creation timestamps for sorting | ✅ Working | `PodsPanel` |
+| `compareNode` | Compares pod node names for sorting | ✅ Working | `PodsPanel` |
 | `getQoSClassClass` | Gets CSS class for QoS class | ✅ Working | `PodsPanel` |
 | `getConditionStatusClass` | Gets CSS class for condition status | ✅ Working | `PodsPanel` |
 | `getTolerationEffectClass` | Gets CSS class for toleration effect | ✅ Working | `PodsPanel` |

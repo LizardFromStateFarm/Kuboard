@@ -76,18 +76,15 @@
   @import '../styles/variables.css';
 
   .resource-tabs-container {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-lg);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: var(--spacing-lg);
+    padding: 5px;
+    margin-bottom: 5px;
   }
 
   .tabs-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--spacing-md);
+    margin-bottom: 5px;
     padding-bottom: var(--spacing-sm);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }

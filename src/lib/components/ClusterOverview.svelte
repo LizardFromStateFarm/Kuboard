@@ -221,26 +221,19 @@
   }
 
   .cluster-overview {
-    background: var(--gradient-primary);
-    border-radius: var(--radius-xl);
-    padding: var(--spacing-lg);
-    margin: 20px 0;
-    color: white;
-    box-shadow: 0 20px 25px rgba(59, 130, 246, 0.15);
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+    color: var(--text-primary);
+    box-shadow: none;
+    border: none;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .cluster-overview::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
-    pointer-events: none;
+    content: none;
   }
 
   .cluster-header {

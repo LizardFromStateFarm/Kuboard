@@ -8,6 +8,8 @@ A modern Kubernetes dashboard built with SvelteKit and Tauri.
 - **📊 Real-time Metrics** - Live resource usage graphs and cluster-wide donut charts
 - **🔄 Context Management** - Easy switching between Kubernetes contexts
 - **📋 Resource Management** - Tabbed interface for workloads, nodes, config, and networking
+- **🔍 Advanced Search** - Powerful pod search with relevance scoring, label filtering, and multi-field support
+- **📊 Sortable Tables** - Sort pods by any column with visual indicators
 - **🖥️ Node Management** - Comprehensive node information and detailed metrics
 - **🎨 Modern UI** - Clean, responsive interface with centralized theming system
 - **⚡ Fast Performance** - Built with Rust backend and SvelteKit frontend
@@ -44,6 +46,13 @@ Kuboard features a comprehensive tabbed interface for managing Kubernetes resour
 ### Key Features
 - **Lazy Loading** - Resources only load when tab is selected
 - **Real-time Counts** - Tab badges show current resource counts
+- **Advanced Pod Search** - Search pods by name, namespace, labels, IP addresses, or any field
+  - **Relevance Scoring** - Exact name matches appear first, then by occurrence count
+  - **Label Search** - Filter by labels using `key:value` or `key=value` syntax
+  - **Field-Specific** - Use `name:`, `namespace:`, `node:`, `ip:` prefixes for targeted searches
+  - **IP Address Detection** - Automatically detects and searches IP addresses
+- **Sortable Columns** - Click column headers to sort (ascending → descending → unsorted)
+- **Error Indicators** - Visual warnings for pods with errors (CrashLoopBackOff, OOMKilled, etc.)
 - **Detailed Views** - Comprehensive information for each resource type
 - **Copy to Clipboard** - Easy copying of resource details
 - **Responsive Design** - Works on different screen sizes

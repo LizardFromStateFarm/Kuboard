@@ -636,7 +636,7 @@
     width: 100vw;
     min-height: 100vh;
     margin: 0;
-    padding: 20px;
+    padding: 5px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: var(--background-color);
     color: var(--text-primary);

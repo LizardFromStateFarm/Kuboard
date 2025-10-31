@@ -123,15 +123,12 @@
   @import '../styles/variables.css';
 
   .tabbed-content {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-lg);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: var(--spacing-lg);
+    padding: 0;
+    margin-bottom: 5px;
   }
 
   .tab-content {
-    margin-top: var(--spacing-lg);
+    margin-top: 0;
   }
 
   .coming-soon-tab {
