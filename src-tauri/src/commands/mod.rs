@@ -895,6 +895,60 @@ pub async fn kuboard_get_pod_yaml(
     }
 }
 
+#[tauri::command]
+pub async fn kuboard_update_pod_from_yaml(
+    pod_name: String,
+    namespace: String,
+    yaml_content: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Updating pod from YAML: {}/{}", namespace, pod_name);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &namespace);
+    
+    // Parse JSON/YAML content
+    let mut updated_pod: Pod = match serde_json::from_str(&yaml_content) {
+        Ok(pod) => pod,
+        Err(e) => {
+            error!("Failed to parse YAML/JSON: {}", e);
+            return Err(format!("Invalid YAML/JSON format: {}", e));
+        }
+    };
+    
+    // Verify the pod name matches (metadata.name is Option<String>)
+    match &updated_pod.metadata.name {
+        Some(name) if name != &pod_name => {
+            return Err(format!("Pod name mismatch: expected {}, got {}", 
+                pod_name, name));
+        }
+        None => {
+            // If name is None, set it to the expected name
+            updated_pod.metadata.name = Some(pod_name.clone());
+        }
+        _ => {} // Name matches or will be set
+    }
+    
+    // Replace the pod
+    match pods_api.replace(&pod_name, &Default::default(), &updated_pod).await {
+        Ok(_) => {
+            info!("✅ Successfully updated pod: {}/{}", namespace, pod_name);
+            Ok(format!("Pod {}/{} updated successfully", namespace, pod_name))
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            Err(format!("Pod {}/{} not found", namespace, pod_name))
+        }
+        Err(e) => {
+            error!("Failed to update pod {}/{}: {}", namespace, pod_name, e);
+            Err(format!("Failed to update pod: {}", e))
+        }
+    }
+}
+
 // Pod Watch Commands
 #[tauri::command]
 pub async fn kuboard_start_pod_watch(

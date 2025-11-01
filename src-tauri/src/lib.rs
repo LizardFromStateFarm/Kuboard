@@ -66,6 +66,7 @@ pub fn run() {
         commands::kuboard_delete_pod,
         commands::kuboard_restart_pod,
         commands::kuboard_get_pod_yaml,
+        commands::kuboard_update_pod_from_yaml,
         
         // Pod Watch
         commands::kuboard_start_pod_watch,

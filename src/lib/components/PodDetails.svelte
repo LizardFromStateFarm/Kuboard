@@ -22,6 +22,10 @@
   let actionsMenuPosition = { x: 0, y: 0 };
   let yamlViewerVisible = false;
   let yamlContent = '';
+  let yamlEditorVisible = false;
+  let yamlEditorContent = '';
+  let yamlEditorLoading = false;
+  let yamlEditorError: string | null = null;
 
   // Section collapse state
   let sectionsCollapsed = {
@@ -197,9 +201,44 @@
   }
 
   function handleActionEdit(event: CustomEvent) {
-    // Will implement edit view later
-    console.log('Edit action for:', event.detail.resource);
+    yamlEditorContent = event.detail.yaml || '';
+    yamlEditorVisible = true;
+    yamlEditorError = null;
+  }
+
+  function closeYamlEditor() {
+    yamlEditorVisible = false;
+    yamlEditorContent = '';
+    yamlEditorError = null;
     handleActionMenuClose();
+  }
+
+  async function saveYaml() {
+    if (!pod?.metadata?.name || !pod?.metadata?.namespace) return;
+    
+    yamlEditorLoading = true;
+    yamlEditorError = null;
+    
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('kuboard_update_pod_from_yaml', {
+        podName: pod.metadata.name,
+        namespace: pod.metadata.namespace,
+        yamlContent: yamlEditorContent
+      });
+      
+      // Close editor and refresh pod details
+      closeYamlEditor();
+      
+      // Reload pod details - would need to trigger a refresh
+      // For now, just show success message
+      alert('Pod updated successfully! Please refresh the view.');
+    } catch (error: any) {
+      yamlEditorError = String(error);
+      console.error('Failed to update pod:', error);
+    } finally {
+      yamlEditorLoading = false;
+    }
   }
 
   function getControllerInfo(pod: any) {
@@ -726,6 +765,48 @@
       </div>
       <div class="yaml-viewer-body">
         <pre><code>{yamlContent}</code></pre>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- YAML Editor Modal -->
+{#if yamlEditorVisible}
+  <div class="yaml-viewer-modal" onclick={closeYamlEditor}>
+    <div class="yaml-viewer-content yaml-editor-content" onclick={(e) => e.stopPropagation()}>
+      <div class="yaml-viewer-header">
+        <h3>Edit Pod YAML</h3>
+        <button class="yaml-viewer-close" onclick={closeYamlEditor} disabled={yamlEditorLoading}>✕</button>
+      </div>
+      <div class="yaml-editor-body">
+        {#if yamlEditorError}
+          <div class="yaml-editor-error">
+            <span class="error-icon">⚠️</span>
+            <span class="error-text">{yamlEditorError}</span>
+          </div>
+        {/if}
+        <textarea
+          class="yaml-editor-textarea"
+          bind:value={yamlEditorContent}
+          disabled={yamlEditorLoading}
+          placeholder="Edit YAML content here..."
+        ></textarea>
+      </div>
+      <div class="yaml-editor-footer">
+        <button 
+          class="yaml-editor-button yaml-editor-cancel" 
+          onclick={closeYamlEditor}
+          disabled={yamlEditorLoading}
+        >
+          Cancel
+        </button>
+        <button 
+          class="yaml-editor-button yaml-editor-save" 
+          onclick={saveYaml}
+          disabled={yamlEditorLoading || !yamlEditorContent.trim()}
+        >
+          {yamlEditorLoading ? '⏳ Saving...' : '💾 Save'}
+        </button>
       </div>
     </div>
   </div>
@@ -1402,6 +1483,113 @@
 
   .yaml-viewer-body code {
     color: var(--text-primary);
+  }
+
+  /* YAML Editor Styles */
+  .yaml-editor-content {
+    display: flex;
+    flex-direction: column;
+    height: 90vh;
+  }
+
+  .yaml-editor-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 20px;
+  }
+
+  .yaml-editor-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 6px;
+    color: #ef4444;
+    font-size: 0.9rem;
+  }
+
+  .yaml-editor-error .error-icon {
+    font-size: 1.2rem;
+  }
+
+  .yaml-editor-error .error-text {
+    flex: 1;
+  }
+
+  .yaml-editor-textarea {
+    flex: 1;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    resize: none;
+    outline: none;
+    overflow-y: auto;
+    white-space: pre;
+    tab-size: 2;
+  }
+
+  .yaml-editor-textarea:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  }
+
+  .yaml-editor-textarea:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .yaml-editor-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .yaml-editor-button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .yaml-editor-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .yaml-editor-cancel {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+  }
+
+  .yaml-editor-cancel:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .yaml-editor-save {
+    background: var(--primary-color);
+    color: white;
+  }
+
+  .yaml-editor-save:hover:not(:disabled) {
+    background: var(--accent-color);
+    transform: translateY(-1px);
   }
 </style>
 

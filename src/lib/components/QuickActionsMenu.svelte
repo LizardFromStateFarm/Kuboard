@@ -147,7 +147,18 @@
           break;
         
         case 'edit':
-          dispatch('edit', { resource, resourceType });
+          // Fetch YAML for editing
+          if (resourceType === 'pod') {
+            const yaml = await invoke('kuboard_get_pod_yaml', {
+              podName: getResourceName(),
+              namespace: getResourceNamespace()
+            });
+            dispatch('edit', { yaml, resource, resourceType });
+          } else {
+            // For non-pod resources, use JSON as fallback
+            const json = JSON.stringify(resource, null, 2);
+            dispatch('edit', { yaml: json, resource, resourceType });
+          }
           break;
         
         default:
