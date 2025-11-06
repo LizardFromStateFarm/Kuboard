@@ -1,16 +1,16 @@
-<!-- Kuboard ReplicaSets Panel Component -->
+<!-- Kuboard Deployments Panel Component -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import ReplicaSetDetails from './ReplicaSetDetails.svelte';
+  import DeploymentDetails from './DeploymentDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
 
   // Props
   export let currentContext: any = null;
-  export let replicasets: any[] = [];
+  export let deployments: any[] = [];
 
   // State
-  let selectedReplicaSet: any = null;
+  let selectedDeployment: any = null;
   let showFullDetails: boolean = false;
   
   // Sorting state
@@ -23,23 +23,23 @@
   // Quick Actions Menu state
   let contextMenuVisible = false;
   let contextMenuPosition = { x: 0, y: 0 };
-  let contextMenuReplicaSet: any = null;
+  let contextMenuDeployment: any = null;
 
-  function handleContextMenu(event: MouseEvent, rs: any) {
+  function handleContextMenu(event: MouseEvent, dep: any) {
     event.preventDefault();
     event.stopPropagation();
-    contextMenuReplicaSet = rs;
+    contextMenuDeployment = dep;
     contextMenuPosition = { x: event.clientX, y: event.clientY };
     contextMenuVisible = true;
   }
 
   function handleActionMenuClose() {
     contextMenuVisible = false;
-    contextMenuReplicaSet = null;
+    contextMenuDeployment = null;
   }
 
   function handleActionDeleted(event: CustomEvent) {
-    // Reload replicasets would be needed
+    // Reload deployments would be needed
     handleActionMenuClose();
   }
 
@@ -58,33 +58,36 @@
     return `${diffMins}m`;
   }
 
-  // Get replica status
-  function getReplicaStatus(rs: any): string {
-    const desired = rs.spec?.replicas || 0;
-    const ready = rs.status?.readyReplicas || 0;
-    const current = rs.status?.replicas || 0;
+  // Get deployment status
+  function getDeploymentStatus(dep: any): string {
+    const available = dep.status?.conditions?.find((c: any) => c.type === 'Available');
+    const progressing = dep.status?.conditions?.find((c: any) => c.type === 'Progressing');
     
-    if (ready === desired && current === desired) return 'Ready';
-    if (current < desired) return 'Scaling';
-    if (ready < desired) return 'Not Ready';
+    if (available?.status === 'True' && progressing?.status === 'True') {
+      return 'Available';
+    }
+    if (progressing?.status === 'True') {
+      return 'Progressing';
+    }
+    if (available?.status === 'False') {
+      return 'Not Available';
+    }
     return 'Unknown';
   }
 
   function getStatusClass(status: string): string {
     switch (status?.toLowerCase()) {
-      case 'ready': return 'ready';
-      case 'scaling': return 'pending';
-      case 'not ready': return 'failed';
+      case 'available': return 'ready';
+      case 'progressing': return 'pending';
+      case 'not available': return 'failed';
       default: return 'unknown';
     }
   }
 
-  // Get owner reference (e.g., Deployment)
-  function getOwnerReference(rs: any): string {
-    const ownerRefs = rs.metadata?.ownerReferences || [];
-    if (ownerRefs.length === 0) return '-';
-    const owner = ownerRefs[0];
-    return `${owner.kind}/${owner.name}`;
+  // Get update strategy
+  function getUpdateStrategy(dep: any): string {
+    const strategy = dep.spec?.strategy?.type || 'RollingUpdate';
+    return strategy;
   }
 
   // Sorting functions
@@ -132,13 +135,13 @@
     return timeA - timeB;
   }
 
-  // Reactive sorted and filtered replicasets
-  $: sortedReplicaSets = (() => {
+  // Reactive sorted and filtered deployments
+  $: sortedDeployments = (() => {
     if (!sortColumn || !sortDirection) {
-      return replicasets;
+      return deployments;
     }
     
-    const sorted = [...replicasets];
+    const sorted = [...deployments];
     sorted.sort((a, b) => {
       let comparison = 0;
       
@@ -165,67 +168,66 @@
     return sorted;
   })();
 
-  $: filteredReplicaSets = (() => {
+  $: filteredDeployments = (() => {
     if (!searchQuery || !searchQuery.trim()) {
-      return sortedReplicaSets;
+      return sortedDeployments;
     }
 
     const query = searchQuery.toLowerCase().trim();
-    return sortedReplicaSets.filter(rs => {
-      const name = (rs.metadata?.name || '').toLowerCase();
-      const namespace = (rs.metadata?.namespace || '').toLowerCase();
-      const owner = getOwnerReference(rs).toLowerCase();
+    return sortedDeployments.filter(dep => {
+      const name = (dep.metadata?.name || '').toLowerCase();
+      const namespace = (dep.metadata?.namespace || '').toLowerCase();
       
-      return name.includes(query) || namespace.includes(query) || owner.includes(query);
+      return name.includes(query) || namespace.includes(query);
     });
   })();
 
   // Show full details view
-  function showFullReplicaSetDetails(rs: any) {
-    selectedReplicaSet = rs;
+  function showFullDeploymentDetails(dep: any) {
+    selectedDeployment = dep;
     showFullDetails = true;
   }
 
-  // Back to replicasets list
-  function backToReplicaSetsList() {
+  // Back to deployments list
+  function backToDeploymentsList() {
     showFullDetails = false;
-    selectedReplicaSet = null;
+    selectedDeployment = null;
   }
 
   // Loading state is managed by parent WorkloadsTab
   // This panel just displays the data it receives
 </script>
 
-{#if showFullDetails && selectedReplicaSet}
-  <ReplicaSetDetails replicaSet={selectedReplicaSet} onBack={backToReplicaSetsList} />
+{#if showFullDetails && selectedDeployment}
+  <DeploymentDetails deployment={selectedDeployment} onBack={backToDeploymentsList} />
 {:else}
-  <div class="replicasets-panel">
+  <div class="deployments-panel">
     <div class="panel-header">
-      <h4>📦 ReplicaSets ({filteredReplicaSets.length})</h4>
+      <h4>📦 Deployments ({filteredDeployments.length})</h4>
       <div class="header-controls">
         <input
           type="text"
           class="search-input"
-          placeholder="Search ReplicaSets..."
+          placeholder="Search Deployments..."
           bind:value={searchQuery}
         />
       </div>
     </div>
 
-    {#if replicasets.length === 0}
+    {#if deployments.length === 0}
       <div class="empty-state">
         <div class="empty-icon">📭</div>
-        <h5>No ReplicaSets Found</h5>
-        <p>No ReplicaSets are currently in this cluster</p>
+        <h5>No Deployments Found</h5>
+        <p>No Deployments are currently in this cluster</p>
       </div>
-    {:else if filteredReplicaSets.length === 0}
+    {:else if filteredDeployments.length === 0}
       <div class="empty-state">
         <div class="empty-icon">🔍</div>
-        <h5>No ReplicaSets Match</h5>
-        <p>No ReplicaSets match your search query: "{searchQuery}"</p>
+        <h5>No Deployments Match</h5>
+        <p>No Deployments match your search query: "{searchQuery}"</p>
       </div>
     {:else}
-      <div class="replicasets-table">
+      <div class="deployments-table">
         <div class="table-header">
           <div class="header-cell sortable" onclick={() => handleSort('name')} role="button" tabindex="0">
             Name
@@ -246,7 +248,7 @@
             {/if}
           </div>
           <div class="header-cell">Status</div>
-          <div class="header-cell">Owner</div>
+          <div class="header-cell">Strategy</div>
           <div class="header-cell sortable" onclick={() => handleSort('age')} role="button" tabindex="0">
             Age
             {#if sortColumn === 'age'}
@@ -257,27 +259,31 @@
         </div>
 
         <div class="table-body">
-          {#each filteredReplicaSets as rs}
-            {@const status = getReplicaStatus(rs)}
-            {@const desired = rs.spec?.replicas || 0}
-            {@const ready = rs.status?.readyReplicas || 0}
-            {@const current = rs.status?.replicas || 0}
+          {#each filteredDeployments as dep}
+            {@const status = getDeploymentStatus(dep)}
+            {@const desired = dep.spec?.replicas || 0}
+            {@const ready = dep.status?.readyReplicas || 0}
+            {@const current = dep.status?.replicas || 0}
+            {@const available = dep.status?.availableReplicas || 0}
             <div
               class="table-row"
               role="button"
               tabindex="0"
-              onclick={() => showFullReplicaSetDetails(rs)}
-              onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && showFullReplicaSetDetails(rs)}
-              oncontextmenu={(e) => handleContextMenu(e, rs)}
+              onclick={() => showFullDeploymentDetails(dep)}
+              onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && showFullDeploymentDetails(dep)}
+              oncontextmenu={(e) => handleContextMenu(e, dep)}
             >
               <div class="cell name-cell">
-                <span class="resource-name">{rs.metadata?.name || 'Unknown'}</span>
+                <span class="resource-name">{dep.metadata?.name || 'Unknown'}</span>
               </div>
               <div class="cell namespace-cell">
-                <span>{rs.metadata?.namespace || 'default'}</span>
+                <span>{dep.metadata?.namespace || 'default'}</span>
               </div>
               <div class="cell replicas-cell">
                 <span class="replica-info">{ready}/{desired}</span>
+                {#if available !== ready}
+                  <span class="replica-warning">({available} available)</span>
+                {/if}
                 {#if current !== desired}
                   <span class="replica-warning">({current} current)</span>
                 {/if}
@@ -285,13 +291,13 @@
               <div class="cell status-cell">
                 <span class="status-badge status-{getStatusClass(status)}">{status}</span>
               </div>
-              <div class="cell owner-cell">
-                <span>{getOwnerReference(rs)}</span>
+              <div class="cell strategy-cell">
+                <span>{getUpdateStrategy(dep)}</span>
               </div>
               <div class="cell age-cell">
-                <span>{formatAge(rs.metadata?.creationTimestamp)}</span>
+                <span>{formatAge(dep.metadata?.creationTimestamp)}</span>
               </div>
-              <div class="cell actions-cell" onclick={(e) => { e.stopPropagation(); handleContextMenu(e, rs); }}>
+              <div class="cell actions-cell" onclick={(e) => { e.stopPropagation(); handleContextMenu(e, dep); }}>
                 <button class="action-button" title="Actions">⚙️</button>
               </div>
             </div>
@@ -302,12 +308,12 @@
   </div>
 
   <!-- Quick Actions Menu -->
-  {#if contextMenuVisible && contextMenuReplicaSet}
+  {#if contextMenuVisible && contextMenuDeployment}
     <QuickActionsMenu
       x={contextMenuPosition.x}
       y={contextMenuPosition.y}
-      resource={contextMenuReplicaSet}
-      resourceType="replicaset"
+      resource={contextMenuDeployment}
+      resourceType="deployment"
       on:close={handleActionMenuClose}
       on:deleted={handleActionDeleted}
     />
@@ -317,7 +323,7 @@
 <style>
   @import '../styles/variables.css';
 
-  .replicasets-panel {
+  .deployments-panel {
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -400,7 +406,7 @@
     font-size: 0.9rem;
   }
 
-  .replicasets-table {
+  .deployments-table {
     flex: 1;
     overflow: auto;
     display: flex;
@@ -409,7 +415,7 @@
 
   .table-header {
     display: grid;
-    grid-template-columns: 2fr 1.5fr 1fr 1fr 1.5fr 1fr 80px;
+    grid-template-columns: 2fr 1.5fr 1fr 1fr 1.2fr 1fr 80px;
     gap: var(--spacing-sm);
     padding: var(--spacing-sm) var(--spacing-md);
     background: rgba(255, 255, 255, 0.05);
@@ -452,7 +458,7 @@
 
   .table-row {
     display: grid;
-    grid-template-columns: 2fr 1.5fr 1fr 1fr 1.5fr 1fr 80px;
+    grid-template-columns: 2fr 1.5fr 1fr 1fr 1.2fr 1fr 80px;
     gap: var(--spacing-sm);
     padding: var(--spacing-sm) var(--spacing-md);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -529,7 +535,7 @@
     color: #6b7280;
   }
 
-  .owner-cell {
+  .strategy-cell {
     color: var(--text-secondary);
     font-size: 0.85rem;
   }

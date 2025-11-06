@@ -4,6 +4,9 @@
   import { onMount } from 'svelte';
   import PodsPanel from './PodsPanel.svelte';
   import ReplicaSetsPanel from './ReplicaSetsPanel.svelte';
+  import DeploymentsPanel from './DeploymentsPanel.svelte';
+  import StatefulSetsPanel from './StatefulSetsPanel.svelte';
+  import DaemonSetsPanel from './DaemonSetsPanel.svelte';
 
   // Props
   export let currentContext: any = null;
@@ -13,6 +16,8 @@
   let deployments: any[] = [];
   let services: any[] = [];
   let replicasets: any[] = [];
+  let statefulsets: any[] = [];
+  let daemonsets: any[] = [];
   
   let loading: boolean = false;
   let error: string | null = null;
@@ -24,13 +29,17 @@
   const workloadTypes = [
     { id: 'pods', label: 'Pods', icon: '🟢', description: 'Running containers' },
     { id: 'deployments', label: 'Deployments', icon: '📦', description: 'Deployment controllers' },
+    { id: 'statefulsets', label: 'StatefulSets', icon: '📋', description: 'StatefulSet controllers' },
+    { id: 'daemonsets', label: 'DaemonSets', icon: '⚙️', description: 'DaemonSet controllers' },
     { id: 'replicasets', label: 'ReplicaSets', icon: '🔄', description: 'ReplicaSet controllers' },
     { id: 'services', label: 'Services', icon: '🌐', description: 'Network services' }
   ];
 
   // Load specific workload type
-  async function loadWorkloadType(type: string) {
-    if (!currentContext || loading || loadedTypes.has(type)) return;
+  async function loadWorkloadType(type: string, forceReload: boolean = false) {
+    if (!currentContext) return;
+    if (loading && !forceReload) return;
+    if (loadedTypes.has(type) && !forceReload) return;
     
     loading = true;
     error = null;
@@ -40,21 +49,32 @@
       
       switch (type) {
         case 'pods':
-          data = await invoke('kuboard_get_pods').catch(() => []);
+          data = await invoke('kuboard_get_pods');
           pods = Array.isArray(data) ? data : [];
           break;
         case 'deployments':
-          data = await invoke('kuboard_get_deployments').catch(() => []);
+          data = await invoke('kuboard_get_deployments');
           deployments = Array.isArray(data) ? data : [];
           break;
         case 'replicasets':
-          data = await invoke('kuboard_get_replicasets').catch(() => []);
+          data = await invoke('kuboard_get_replicasets');
           replicasets = Array.isArray(data) ? data : [];
           break;
+        case 'statefulsets':
+          data = await invoke('kuboard_get_statefulsets');
+          statefulsets = Array.isArray(data) ? data : [];
+          break;
+        case 'daemonsets':
+          data = await invoke('kuboard_get_daemonsets');
+          daemonsets = Array.isArray(data) ? data : [];
+          break;
         case 'services':
-          data = await invoke('kuboard_get_services').catch(() => []);
+          data = await invoke('kuboard_get_services');
           services = Array.isArray(data) ? data : [];
           break;
+        default:
+          console.warn(`Unknown workload type: ${type}`);
+          return;
       }
       
       loadedTypes.add(type);
@@ -62,6 +82,8 @@
     } catch (err) {
       error = err as string;
       console.error(`Failed to load ${type}:`, err);
+      // Remove from loadedTypes if it was previously loaded, so we can retry
+      loadedTypes.delete(type);
     } finally {
       loading = false;
     }
@@ -76,7 +98,8 @@
   // Switch workload type
   async function switchWorkloadType(type: string) {
     selectedWorkloadType = type;
-    await loadWorkloadType(type);
+    // Force reload when switching to ensure we get fresh data
+    await loadWorkloadType(type, true);
   }
 
   // Get current workload data
@@ -84,6 +107,8 @@
     switch (selectedWorkloadType) {
       case 'pods': return pods;
       case 'deployments': return deployments;
+      case 'statefulsets': return statefulsets;
+      case 'daemonsets': return daemonsets;
       case 'replicasets': return replicasets;
       case 'services': return services;
       default: return [];
@@ -95,6 +120,8 @@
     switch (type) {
       case 'pods': return pods.length;
       case 'deployments': return deployments.length;
+      case 'statefulsets': return statefulsets.length;
+      case 'daemonsets': return daemonsets.length;
       case 'replicasets': return replicasets.length;
       case 'services': return services.length;
       default: return 0;
@@ -243,7 +270,7 @@
       <div class="loading-spinner">🔄</div>
       <p>Loading {selectedWorkloadType}...</p>
     </div>
-  {:else if loadedTypes.has(selectedWorkloadType) || (selectedWorkloadType === 'pods' && pods.length > 0)}
+  {:else if loadedTypes.has(selectedWorkloadType)}
     <!-- Workload Content -->
     <div class="workload-content">
       {#if selectedWorkloadType !== 'pods'}
@@ -254,6 +281,10 @@
             <span class="item-count">
               {#if selectedWorkloadType === 'deployments'}
                 ({deployments.length})
+              {:else if selectedWorkloadType === 'statefulsets'}
+                ({statefulsets.length})
+              {:else if selectedWorkloadType === 'daemonsets'}
+                ({daemonsets.length})
               {:else if selectedWorkloadType === 'replicasets'}
                 ({replicasets.length})
               {:else if selectedWorkloadType === 'services'}
@@ -273,38 +304,31 @@
         />
 
       {:else if selectedWorkloadType === 'deployments'}
-        <!-- Deployments List -->
-        <div class="workload-list">
-          {#each deployments as deployment}
-            <div class="workload-item">
-              <div class="workload-info">
-                <span class="workload-name">{deployment.metadata?.name || 'Unknown'}</span>
-                <span class="workload-namespace">{deployment.metadata?.namespace || 'default'}</span>
-              </div>
-              <div class="workload-details">
-                <div class="workload-status">
-                  <span class="status-badge status-{getDeploymentStatusClass(deployment)}">
-                    {deployment.status?.conditions?.find((c: any) => c.type === 'Available')?.status === 'True' ? 'Available' : 'Not Available'}
-                  </span>
-                </div>
-                <div class="workload-replicas">
-                  <span class="replica-info">
-                    Replicas: {deployment.status?.readyReplicas || 0}/{deployment.spec?.replicas || 0}
-                  </span>
-                </div>
-                <div class="workload-age">
-                  <span class="age-info">{formatAge(deployment.metadata?.creationTimestamp)}</span>
-                </div>
-              </div>
-            </div>
-          {/each}
-        </div>
+        <!-- Deployments Panel -->
+        <DeploymentsPanel 
+          currentContext={currentContext} 
+          deployments={deployments}
+        />
 
       {:else if selectedWorkloadType === 'replicasets'}
         <!-- ReplicaSets Panel -->
         <ReplicaSetsPanel 
           currentContext={currentContext} 
           replicasets={replicasets}
+        />
+
+      {:else if selectedWorkloadType === 'statefulsets'}
+        <!-- StatefulSets Panel -->
+        <StatefulSetsPanel 
+          currentContext={currentContext} 
+          statefulsets={statefulsets}
+        />
+
+      {:else if selectedWorkloadType === 'daemonsets'}
+        <!-- DaemonSets Panel -->
+        <DaemonSetsPanel 
+          currentContext={currentContext} 
+          daemonsets={daemonsets}
         />
 
       {:else if selectedWorkloadType === 'services'}

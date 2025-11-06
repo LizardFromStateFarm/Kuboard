@@ -1,16 +1,16 @@
-<!-- Kuboard ReplicaSets Panel Component -->
+<!-- Kuboard StatefulSets Panel Component -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import ReplicaSetDetails from './ReplicaSetDetails.svelte';
+  import StatefulSetDetails from './StatefulSetDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
 
   // Props
   export let currentContext: any = null;
-  export let replicasets: any[] = [];
+  export let statefulsets: any[] = [];
 
   // State
-  let selectedReplicaSet: any = null;
+  let selectedStatefulSet: any = null;
   let showFullDetails: boolean = false;
   
   // Sorting state
@@ -23,23 +23,23 @@
   // Quick Actions Menu state
   let contextMenuVisible = false;
   let contextMenuPosition = { x: 0, y: 0 };
-  let contextMenuReplicaSet: any = null;
+  let contextMenuStatefulSet: any = null;
 
-  function handleContextMenu(event: MouseEvent, rs: any) {
+  function handleContextMenu(event: MouseEvent, ss: any) {
     event.preventDefault();
     event.stopPropagation();
-    contextMenuReplicaSet = rs;
+    contextMenuStatefulSet = ss;
     contextMenuPosition = { x: event.clientX, y: event.clientY };
     contextMenuVisible = true;
   }
 
   function handleActionMenuClose() {
     contextMenuVisible = false;
-    contextMenuReplicaSet = null;
+    contextMenuStatefulSet = null;
   }
 
   function handleActionDeleted(event: CustomEvent) {
-    // Reload replicasets would be needed
+    // Reload statefulsets would be needed
     handleActionMenuClose();
   }
 
@@ -58,11 +58,11 @@
     return `${diffMins}m`;
   }
 
-  // Get replica status
-  function getReplicaStatus(rs: any): string {
-    const desired = rs.spec?.replicas || 0;
-    const ready = rs.status?.readyReplicas || 0;
-    const current = rs.status?.replicas || 0;
+  // Get StatefulSet status
+  function getStatefulSetStatus(ss: any): string {
+    const desired = ss.spec?.replicas || 0;
+    const ready = ss.status?.readyReplicas || 0;
+    const current = ss.status?.currentReplicas || 0;
     
     if (ready === desired && current === desired) return 'Ready';
     if (current < desired) return 'Scaling';
@@ -79,12 +79,16 @@
     }
   }
 
-  // Get owner reference (e.g., Deployment)
-  function getOwnerReference(rs: any): string {
-    const ownerRefs = rs.metadata?.ownerReferences || [];
-    if (ownerRefs.length === 0) return '-';
-    const owner = ownerRefs[0];
-    return `${owner.kind}/${owner.name}`;
+  // Get update strategy
+  function getUpdateStrategy(ss: any): string {
+    const strategy = ss.spec?.updateStrategy?.type || 'RollingUpdate';
+    return strategy;
+  }
+
+  // Get pod management policy
+  function getPodManagementPolicy(ss: any): string {
+    const policy = ss.spec?.podManagementPolicy || 'OrderedReady';
+    return policy;
   }
 
   // Sorting functions
@@ -132,13 +136,13 @@
     return timeA - timeB;
   }
 
-  // Reactive sorted and filtered replicasets
-  $: sortedReplicaSets = (() => {
+  // Reactive sorted and filtered statefulsets
+  $: sortedStatefulSets = (() => {
     if (!sortColumn || !sortDirection) {
-      return replicasets;
+      return statefulsets;
     }
     
-    const sorted = [...replicasets];
+    const sorted = [...statefulsets];
     sorted.sort((a, b) => {
       let comparison = 0;
       
@@ -165,67 +169,66 @@
     return sorted;
   })();
 
-  $: filteredReplicaSets = (() => {
+  $: filteredStatefulSets = (() => {
     if (!searchQuery || !searchQuery.trim()) {
-      return sortedReplicaSets;
+      return sortedStatefulSets;
     }
 
     const query = searchQuery.toLowerCase().trim();
-    return sortedReplicaSets.filter(rs => {
-      const name = (rs.metadata?.name || '').toLowerCase();
-      const namespace = (rs.metadata?.namespace || '').toLowerCase();
-      const owner = getOwnerReference(rs).toLowerCase();
+    return sortedStatefulSets.filter(ss => {
+      const name = (ss.metadata?.name || '').toLowerCase();
+      const namespace = (ss.metadata?.namespace || '').toLowerCase();
       
-      return name.includes(query) || namespace.includes(query) || owner.includes(query);
+      return name.includes(query) || namespace.includes(query);
     });
   })();
 
   // Show full details view
-  function showFullReplicaSetDetails(rs: any) {
-    selectedReplicaSet = rs;
+  function showFullStatefulSetDetails(ss: any) {
+    selectedStatefulSet = ss;
     showFullDetails = true;
   }
 
-  // Back to replicasets list
-  function backToReplicaSetsList() {
+  // Back to statefulsets list
+  function backToStatefulSetsList() {
     showFullDetails = false;
-    selectedReplicaSet = null;
+    selectedStatefulSet = null;
   }
 
   // Loading state is managed by parent WorkloadsTab
   // This panel just displays the data it receives
 </script>
 
-{#if showFullDetails && selectedReplicaSet}
-  <ReplicaSetDetails replicaSet={selectedReplicaSet} onBack={backToReplicaSetsList} />
+{#if showFullDetails && selectedStatefulSet}
+  <StatefulSetDetails statefulSet={selectedStatefulSet} onBack={backToStatefulSetsList} />
 {:else}
-  <div class="replicasets-panel">
+  <div class="statefulsets-panel">
     <div class="panel-header">
-      <h4>📦 ReplicaSets ({filteredReplicaSets.length})</h4>
+      <h4>📦 StatefulSets ({filteredStatefulSets.length})</h4>
       <div class="header-controls">
         <input
           type="text"
           class="search-input"
-          placeholder="Search ReplicaSets..."
+          placeholder="Search StatefulSets..."
           bind:value={searchQuery}
         />
       </div>
     </div>
 
-    {#if replicasets.length === 0}
+    {#if statefulsets.length === 0}
       <div class="empty-state">
         <div class="empty-icon">📭</div>
-        <h5>No ReplicaSets Found</h5>
-        <p>No ReplicaSets are currently in this cluster</p>
+        <h5>No StatefulSets Found</h5>
+        <p>No StatefulSets are currently in this cluster</p>
       </div>
-    {:else if filteredReplicaSets.length === 0}
+    {:else if filteredStatefulSets.length === 0}
       <div class="empty-state">
         <div class="empty-icon">🔍</div>
-        <h5>No ReplicaSets Match</h5>
-        <p>No ReplicaSets match your search query: "{searchQuery}"</p>
+        <h5>No StatefulSets Match</h5>
+        <p>No StatefulSets match your search query: "{searchQuery}"</p>
       </div>
     {:else}
-      <div class="replicasets-table">
+      <div class="statefulsets-table">
         <div class="table-header">
           <div class="header-cell sortable" onclick={() => handleSort('name')} role="button" tabindex="0">
             Name
@@ -246,7 +249,7 @@
             {/if}
           </div>
           <div class="header-cell">Status</div>
-          <div class="header-cell">Owner</div>
+          <div class="header-cell">Policy</div>
           <div class="header-cell sortable" onclick={() => handleSort('age')} role="button" tabindex="0">
             Age
             {#if sortColumn === 'age'}
@@ -257,27 +260,31 @@
         </div>
 
         <div class="table-body">
-          {#each filteredReplicaSets as rs}
-            {@const status = getReplicaStatus(rs)}
-            {@const desired = rs.spec?.replicas || 0}
-            {@const ready = rs.status?.readyReplicas || 0}
-            {@const current = rs.status?.replicas || 0}
+          {#each filteredStatefulSets as ss}
+            {@const status = getStatefulSetStatus(ss)}
+            {@const desired = ss.spec?.replicas || 0}
+            {@const ready = ss.status?.readyReplicas || 0}
+            {@const current = ss.status?.currentReplicas || 0}
+            {@const updated = ss.status?.updatedReplicas || 0}
             <div
               class="table-row"
               role="button"
               tabindex="0"
-              onclick={() => showFullReplicaSetDetails(rs)}
-              onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && showFullReplicaSetDetails(rs)}
-              oncontextmenu={(e) => handleContextMenu(e, rs)}
+              onclick={() => showFullStatefulSetDetails(ss)}
+              onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && showFullStatefulSetDetails(ss)}
+              oncontextmenu={(e) => handleContextMenu(e, ss)}
             >
               <div class="cell name-cell">
-                <span class="resource-name">{rs.metadata?.name || 'Unknown'}</span>
+                <span class="resource-name">{ss.metadata?.name || 'Unknown'}</span>
               </div>
               <div class="cell namespace-cell">
-                <span>{rs.metadata?.namespace || 'default'}</span>
+                <span>{ss.metadata?.namespace || 'default'}</span>
               </div>
               <div class="cell replicas-cell">
                 <span class="replica-info">{ready}/{desired}</span>
+                {#if updated !== ready}
+                  <span class="replica-warning">({updated} updated)</span>
+                {/if}
                 {#if current !== desired}
                   <span class="replica-warning">({current} current)</span>
                 {/if}
@@ -285,13 +292,13 @@
               <div class="cell status-cell">
                 <span class="status-badge status-{getStatusClass(status)}">{status}</span>
               </div>
-              <div class="cell owner-cell">
-                <span>{getOwnerReference(rs)}</span>
+              <div class="cell strategy-cell">
+                <span>{getPodManagementPolicy(ss)}</span>
               </div>
               <div class="cell age-cell">
-                <span>{formatAge(rs.metadata?.creationTimestamp)}</span>
+                <span>{formatAge(ss.metadata?.creationTimestamp)}</span>
               </div>
-              <div class="cell actions-cell" onclick={(e) => { e.stopPropagation(); handleContextMenu(e, rs); }}>
+              <div class="cell actions-cell" onclick={(e) => { e.stopPropagation(); handleContextMenu(e, ss); }}>
                 <button class="action-button" title="Actions">⚙️</button>
               </div>
             </div>
@@ -302,12 +309,12 @@
   </div>
 
   <!-- Quick Actions Menu -->
-  {#if contextMenuVisible && contextMenuReplicaSet}
+  {#if contextMenuVisible && contextMenuStatefulSet}
     <QuickActionsMenu
       x={contextMenuPosition.x}
       y={contextMenuPosition.y}
-      resource={contextMenuReplicaSet}
-      resourceType="replicaset"
+      resource={contextMenuStatefulSet}
+      resourceType="statefulset"
       on:close={handleActionMenuClose}
       on:deleted={handleActionDeleted}
     />
@@ -317,7 +324,7 @@
 <style>
   @import '../styles/variables.css';
 
-  .replicasets-panel {
+  .statefulsets-panel {
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -400,7 +407,7 @@
     font-size: 0.9rem;
   }
 
-  .replicasets-table {
+  .statefulsets-table {
     flex: 1;
     overflow: auto;
     display: flex;
@@ -409,7 +416,7 @@
 
   .table-header {
     display: grid;
-    grid-template-columns: 2fr 1.5fr 1fr 1fr 1.5fr 1fr 80px;
+    grid-template-columns: 2fr 1.5fr 1fr 1fr 1.2fr 1fr 80px;
     gap: var(--spacing-sm);
     padding: var(--spacing-sm) var(--spacing-md);
     background: rgba(255, 255, 255, 0.05);
@@ -452,7 +459,7 @@
 
   .table-row {
     display: grid;
-    grid-template-columns: 2fr 1.5fr 1fr 1fr 1.5fr 1fr 80px;
+    grid-template-columns: 2fr 1.5fr 1fr 1fr 1.2fr 1fr 80px;
     gap: var(--spacing-sm);
     padding: var(--spacing-sm) var(--spacing-md);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -529,7 +536,7 @@
     color: #6b7280;
   }
 
-  .owner-cell {
+  .strategy-cell {
     color: var(--text-secondary);
     font-size: 0.85rem;
   }

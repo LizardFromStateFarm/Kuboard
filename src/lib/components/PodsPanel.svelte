@@ -19,7 +19,6 @@
   let refreshTimer: any;
   let logsWindowOpen = false;
   let logsWindowRef: LogsWindow;
-  let isLoading: boolean = false;
   
   // Metrics state
   let podMetrics: any = null;
@@ -273,12 +272,8 @@
   // Debug logging
   console.log('🚀 PodsPanel component script loaded');
   
-  // Set loading state when context changes but pods haven't loaded yet
-  $: if (currentContext && (!pods || pods.length === 0)) {
-    isLoading = true;
-  } else {
-    isLoading = false;
-  }
+  // Loading state is managed by parent WorkloadsTab
+  // This panel just displays the data it receives
 
   // Select pod (for dispatching to other components if needed)
   function selectPod(pod: any) {
@@ -1182,14 +1177,7 @@
       <!-- Pods List View (always show this) -->
       <div class="pods-list-view">
         
-        {#if isLoading}
-          <!-- Loading State -->
-          <div class="loading-pods">
-            <div class="loading-spinner">⏳</div>
-            <h5>Loading Pods...</h5>
-            <p>Please wait while we fetch the cluster pods information.</p>
-          </div>
-        {:else if getRenderPods() && getRenderPods().length > 0}
+        {#if getRenderPods() && getRenderPods().length > 0}
           <!-- Search Bar -->
           <div class="search-bar-container">
             <div class="search-input-wrapper">
