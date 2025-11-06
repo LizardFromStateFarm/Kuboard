@@ -276,12 +276,35 @@
   }
 
   function getMaxValue(): number {
+    // Get the configured max value
+    let configuredMax: number;
     switch (type) {
-      case 'cpu': return maxCpuCores || 1;
-      case 'memory': return (maxMemoryBytes || 1073741824) / (1024 * 1024 * 1024); // Convert to GB
-      case 'disk': return (maxDiskBytes || 1073741824) / (1024 * 1024 * 1024); // Convert to GB
-      default: return 1;
+      case 'cpu': 
+        configuredMax = maxCpuCores || 1;
+        break;
+      case 'memory': 
+        configuredMax = (maxMemoryBytes || 1073741824) / (1024 * 1024 * 1024); // Convert to GB
+        break;
+      case 'disk': 
+        configuredMax = (maxDiskBytes || 1073741824) / (1024 * 1024 * 1024); // Convert to GB
+        break;
+      default: 
+        configuredMax = 1;
     }
+    
+    // Calculate the actual max value from the data
+    if (data && data.length > 0) {
+      const actualMax = Math.max(...data.map(point => {
+        const value = getResourceValue(point, type);
+        return isNaN(value) ? 0 : value;
+      }));
+      
+      // Use the larger of configured max or actual max * 1.2 (20% padding)
+      // This ensures the graph scales to show all data even if it exceeds the configured max
+      return Math.max(configuredMax, actualMax * 1.2);
+    }
+    
+    return configuredMax;
   }
 
   function getResourceValue(point: any, type: ResourceTab): number {

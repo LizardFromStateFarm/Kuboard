@@ -2,6 +2,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
+  import ServiceDetails from './ServiceDetails.svelte';
 
   // Props
   export let currentContext: any = null;
@@ -15,6 +16,9 @@
   let loading: boolean = false;
   let error: string | null = null;
   let lastUpdate: string = '';
+  
+  // Service detail view state
+  let selectedService: any = null;
 
   // Load network data
   async function loadNetwork() {
@@ -94,31 +98,42 @@
   $: if (currentContext) {
     loadNetwork();
   }
+
+  function handleServiceClick(service: any) {
+    selectedService = service;
+  }
+
+  function handleBack() {
+    selectedService = null;
+  }
 </script>
 
 <div class="network-tab">
-  <div class="tab-header">
-    <h4>🌐 Network</h4>
-    <div class="tab-controls">
-      <button 
-        class="refresh-button" 
-        onclick={loadNetwork}
-        disabled={loading}
-        title="Refresh network resources"
-      >
-        {#if loading}
-          🔄
-        {:else}
-          ↻
+  {#if selectedService}
+    <ServiceDetails service={selectedService} onBack={handleBack} />
+  {:else}
+    <div class="tab-header">
+      <h4>🌐 Network</h4>
+      <div class="tab-controls">
+        <button 
+          class="refresh-button" 
+          onclick={loadNetwork}
+          disabled={loading}
+          title="Refresh network resources"
+        >
+          {#if loading}
+            🔄
+          {:else}
+            ↻
+          {/if}
+        </button>
+        {#if lastUpdate}
+          <span class="last-update">Last: {lastUpdate}</span>
         {/if}
-      </button>
-      {#if lastUpdate}
-        <span class="last-update">Last: {lastUpdate}</span>
-      {/if}
+      </div>
     </div>
-  </div>
 
-  {#if error}
+    {#if error}
     <div class="error-message">
       <div class="error-icon">⚠️</div>
       <div class="error-content">
@@ -143,7 +158,7 @@
         </div>
         <div class="network-list">
           {#each services.slice(0, 10) as service}
-            <div class="network-item">
+            <div class="network-item" role="button" tabindex="0" onclick={() => handleServiceClick(service)} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleServiceClick(service)}>
               <div class="network-info">
                 <span class="network-name">{service.metadata?.name || 'Unknown'}</span>
                 <span class="network-namespace">{service.metadata?.namespace || 'default'}</span>
@@ -198,6 +213,7 @@
         </div>
       </div>
     </div>
+  {/if}
   {/if}
 </div>
 
@@ -354,6 +370,19 @@
     background: rgba(255, 255, 255, 0.03);
     border-radius: var(--radius-sm);
     border: 1px solid rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .network-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    transform: translateY(-1px);
+  }
+
+  .network-item:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
   }
 
   .network-info {

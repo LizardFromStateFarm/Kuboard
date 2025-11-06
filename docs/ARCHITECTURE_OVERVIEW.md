@@ -2,16 +2,50 @@
 
 This document provides a comprehensive overview of the Kuboard application architecture, including both UI and backend structure, function organization, and documentation status.
 
+### **Key Architecture Points:**
+- **Backend (Rust/Tauri):** Modular structure with `kuboard_` prefixed functions organized into:
+  - `commands/mod.rs` - Tauri commands (context, cluster, resources, metrics, pod actions, watch)
+  - `kubernetes/mod.rs` - Kubernetes client and API integration
+  - `metrics/mod.rs` - Metrics server integration with real-time/historical data
+  - `utils.rs` - CPU/memory parsing and formatting utilities
+  - `types.rs` - Shared type definitions
+  - `app_state.rs` - Application state management with async locks
+
+- **Frontend (SvelteKit):** Component-based architecture with 18 specialized components:
+  - Resource management: `PodsPanel`, `NodesTab`, `WorkloadsTab`, `ConfigTab`, `NetworkTab`, `CustomResourcesTab`
+  - Visualization: `MetricsGraph`, `DonutChart`, `ClusterMetrics`, `LogsWindow`
+  - Layout: `Header`, `ClusterOverview`, `TabbedContent`, `ResourceTabs`, `ResourceOverview`
+  - Utilities: `ThemeSwitcher`, `PodDetails`, `QuickActionsMenu`
+
+- **Communication:** Tauri commands bridge frontend TypeScript and backend Rust
+- **State Management:** AppState with async RwLock for concurrent access
+- **Metrics:** Real-time metrics from Kubernetes metrics server API (`/apis/metrics.k8s.io/v1beta1`)
+- **Styling:** Centralized CSS variables with theme support (Dark/Light/High Contrast)
+
+### **Function Naming Convention:**
+- Backend: `kuboard_<action>_<resource>` (e.g., `kuboard_get_pods`, `kuboard_fetch_node_metrics_real`)
+- Frontend: `<action><Resource>` (e.g., `loadContexts`, `fetchNodeMetrics`)
+
+### **Key Backend Functions:**
+- **Context:** `kuboard_list_contexts`, `kuboard_set_context`, `kuboard_get_current_context`
+- **Cluster:** `kuboard_get_cluster_overview`, `kuboard_get_cluster_metrics`
+- **Resources:** `kuboard_get_nodes`, `kuboard_get_pods`, `kuboard_get_deployments`, etc.
+- **Metrics:** `kuboard_get_node_metrics`, `kuboard_get_pod_metrics`, `kuboard_get_node_metrics_history`
+- **Pod Actions:** `kuboard_delete_pod`, `kuboard_restart_pod`, `kuboard_get_pod_yaml`, `kuboard_get_pod_logs`, `kuboard_get_pod_events`
+- **Watch:** `kuboard_start_pod_watch`, `kuboard_stop_pod_watch`
+
 ## 📋 **Table of Contents**
 
-1. [Application Overview](#application-overview)
-2. [UI Architecture](#ui-architecture)
-3. [Styling Architecture](#styling-architecture)
-4. [Backend Architecture](#backend-architecture)
-5. [Function Organization](#function-organization)
-6. [Documentation Status](#documentation-status)
-7. [Build System](#build-system)
-8. [Development Guidelines](#development-guidelines)
+1. [AI Summary](#-ai-summary)
+2. [Application Overview](#application-overview)
+3. [UI Architecture](#ui-architecture)
+4. [UI Organization Guide](#ui-organization-guide)
+5. [Styling Architecture](#styling-architecture)
+6. [Backend Architecture](#backend-architecture)
+7. [Function Organization](#function-organization)
+8. [Documentation Status](#documentation-status)
+9. [Build System](#build-system)
+10. [Development Guidelines](#development-guidelines)
 
 ## 🎯 **Application Overview**
 
@@ -27,22 +61,24 @@ Kuboard is a modern Kubernetes dashboard built with:
 ### **Component Structure**
 ```
 src/lib/components/
-├── Header.svelte           # Main header with context selection
-├── ClusterOverview.svelte  # Cluster info and node management
-├── ResourceOverview.svelte # Resource panels (nodes, pods, etc.)
-├── MetricsGraph.svelte     # Real-time resource usage graphs
-├── TabbedContent.svelte    # Main tabbed interface container
-├── ResourceTabs.svelte     # Tab navigation component
-├── WorkloadsTab.svelte     # Workloads management (pods, deployments, services)
-├── PodsPanel.svelte        # Advanced pod management with events and container metrics
-├── NodesTab.svelte         # Advanced node management and details
-├── ConfigTab.svelte        # Configuration management (ConfigMaps, Secrets)
-├── NetworkTab.svelte       # Network resources and services
-├── CustomResourcesTab.svelte # Custom Resource Definitions (CRDs)
-├── DonutChart.svelte       # Resource usage donut charts
-├── ClusterMetrics.svelte   # Cluster-wide metrics display
-├── LogsWindow.svelte       # Advanced logs panel with structured entries and smart follow mode
-└── ThemeSwitcher.svelte    # Development theme switching tool
+├── Header.svelte              # Main header with context selection
+├── ClusterOverview.svelte     # Cluster info and node management
+├── ResourceOverview.svelte    # Resource panels (nodes, pods, etc.)
+├── MetricsGraph.svelte        # Real-time resource usage graphs
+├── TabbedContent.svelte       # Main tabbed interface container
+├── ResourceTabs.svelte        # Tab navigation component
+├── WorkloadsTab.svelte         # Workloads management (pods, deployments, services)
+├── PodsPanel.svelte           # Advanced pod management with events and container metrics
+├── PodDetails.svelte          # Detailed pod information display
+├── NodesTab.svelte            # Advanced node management and details
+├── ConfigTab.svelte           # Configuration management (ConfigMaps, Secrets)
+├── NetworkTab.svelte          # Network resources and services
+├── CustomResourcesTab.svelte  # Custom Resource Definitions (CRDs)
+├── DonutChart.svelte          # Resource usage donut charts
+├── ClusterMetrics.svelte      # Cluster-wide metrics display
+├── LogsWindow.svelte          # Advanced logs panel with structured entries and smart follow mode
+├── QuickActionsMenu.svelte    # Quick action menu for resources
+└── ThemeSwitcher.svelte       # Development theme switching tool
 ```
 
 ### **Key Features**
@@ -181,6 +217,118 @@ src/lib/components/
 - Theme persistence
 - Live theme preview
 
+#### **PodDetails Component**
+- Detailed pod information display
+- Container-specific details
+- Resource specifications
+- Status and conditions
+
+#### **QuickActionsMenu Component**
+- Context menu for resource actions
+- Pod management actions (delete, restart, view logs)
+- Resource-specific operations
+
+## 🎨 **UI Organization Guide**
+
+### **Component Hierarchy**
+
+```
+Main Page (+page.svelte)
+├── Header
+│   ├── Context selector
+│   ├── Refresh button
+│   └── Mode indicator
+├── ClusterOverview
+│   ├── ClusterMetrics (donut charts)
+│   └── TabbedContent
+│       ├── ResourceTabs (navigation)
+│       ├── WorkloadsTab
+│       │   └── PodsPanel
+│       │       ├── Pod list with search/sort
+│       │       ├── PodDetails (on selection)
+│       │       ├── MetricsGraph (pod metrics)
+│       │       └── LogsWindow (pod/container logs)
+│       ├── NodesTab
+│       │   ├── Node list (card-based)
+│       │   ├── Node details panel
+│       │   └── MetricsGraph (node metrics)
+│       ├── ConfigTab (ConfigMaps, Secrets)
+│       ├── NetworkTab (Services, networking)
+│       └── CustomResourcesTab (CRDs)
+└── ResourceOverview (legacy)
+```
+
+### **Component Communication Patterns**
+
+1. **Props Down, Events Up:** Parent components pass data via props, children emit events
+2. **Tauri Invoke:** Frontend calls backend via `invoke('kuboard_<command>', { ... })`
+3. **State Management:** Main page orchestrates state, components remain stateless where possible
+4. **Event Dispatchers:** Svelte `createEventDispatcher()` for component-to-component communication
+
+### **Component Responsibilities**
+
+#### **Layout Components**
+- **Header.svelte:** Top-level navigation and context management
+- **TabbedContent.svelte:** Main container for resource tabs
+- **ResourceTabs.svelte:** Tab navigation with counts and badges
+
+#### **Resource Management Components**
+- **PodsPanel.svelte:** Complete pod lifecycle management
+  - Search, filter, sort functionality
+  - Pod selection and details
+  - Container metrics and logs
+  - Pod actions (delete, restart, view YAML)
+- **NodesTab.svelte:** Node management with capacity-based metrics
+- **WorkloadsTab.svelte:** Deployments and Services management
+- **ConfigTab.svelte:** ConfigMaps and Secrets viewer/editor
+- **NetworkTab.svelte:** Services, endpoints, and networking resources
+- **CustomResourcesTab.svelte:** CRD discovery and management
+
+#### **Visualization Components**
+- **MetricsGraph.svelte:** Chart.js-based time-series graphs
+  - CPU, Memory, Disk metrics
+  - Capacity-based y-axis scaling
+  - Real-time and historical data
+- **DonutChart.svelte:** CSS-based donut charts for resource usage
+- **ClusterMetrics.svelte:** Cluster-wide metrics overview
+- **LogsWindow.svelte:** Advanced log viewer with follow mode
+
+#### **Utility Components**
+- **PodDetails.svelte:** Reusable pod information display
+- **QuickActionsMenu.svelte:** Context menu for resource actions
+- **ThemeSwitcher.svelte:** Development theme switching tool
+
+### **File Organization**
+
+```
+src/
+├── lib/
+│   ├── components/          # All UI components (18 files)
+│   ├── styles/
+│   │   ├── color-palette.css
+│   │   ├── variables.css
+│   │   └── README.md
+│   ├── types/
+│   │   └── index.ts         # TypeScript interfaces
+│   └── utils/
+│       ├── formatters.ts    # Data formatting utilities
+│       └── performance.ts   # Performance utilities
+└── routes/
+    ├── +layout.ts           # Layout configuration
+    └── +page.svelte         # Main dashboard (orchestrates components)
+```
+
+### **Component Development Guidelines**
+
+1. **Single Responsibility:** Each component handles one specific UI concern
+2. **Type Safety:** All props use TypeScript interfaces from `lib/types/index.ts`
+3. **Event-Driven:** Use Svelte dispatchers for parent-child communication
+4. **Accessibility:** Include ARIA roles, keyboard navigation, and semantic HTML
+5. **Responsive Design:** Use CSS variables and responsive breakpoints
+6. **Styling:** Use CSS custom properties from `variables.css` and `color-palette.css`
+7. **Error Handling:** Display loading states and error messages gracefully
+8. **Performance:** Use keyed lists, lazy loading, and memoization where appropriate
+
 ## 🎨 **Styling Architecture**
 
 ### **Color Palette System**
@@ -232,54 +380,145 @@ src-tauri/src/
 ### **Function Organization**
 
 #### **Tauri Commands** (`commands/mod.rs`)
-- `kuboard_list_contexts` - List available contexts
-- `kuboard_set_context` - Set active context
-- `kuboard_get_current_context` - Get current context
-- `kuboard_get_cluster_overview` - Get cluster information
-- `kuboard_get_nodes` - Fetch all nodes
-- `kuboard_get_namespaces` - Fetch all namespaces
-- `kuboard_get_pods` - Fetch all pods
-- `kuboard_get_deployments` - Fetch all deployments
-- `kuboard_get_services` - Fetch all services
-- `kuboard_get_configmaps` - Fetch all ConfigMaps
-- `kuboard_get_secrets` - Fetch all Secrets
-- `kuboard_get_custom_resources` - Fetch custom resources
-- `kuboard_get_node_metrics` - Get current node metrics
-- `kuboard_get_node_metrics_history` - Get historical metrics
-- `kuboard_get_pod_metrics` - Get current pod metrics
-- `kuboard_get_pod_metrics_history` - Get historical pod metrics
-- `kuboard_get_pod_events` - Get pod events for troubleshooting
-- `kuboard_get_pod_logs` - Get pod logs with container support
-- `kuboard_check_metrics_availability` - Check metrics server
+
+**Context Management:**
+- `kuboard_list_contexts` - List available Kubernetes contexts from kubeconfig
+- `kuboard_set_context` - Set active Kubernetes context and create client
+- `kuboard_get_current_context` - Get currently active context name
+
+**Cluster Operations:**
+- `kuboard_get_cluster_overview` - Get cluster information, resource counts, and Kubernetes version
+- `kuboard_get_cluster_metrics` - Calculate cluster-wide CPU, memory, and disk metrics
+
+**Resource Management:**
+- `kuboard_get_nodes` - Fetch all nodes in the cluster
+- `kuboard_get_namespaces` - Fetch all namespaces in the cluster
+- `kuboard_get_pods` - Fetch all pods in the cluster
+- `kuboard_get_deployments` - Fetch all deployments in the cluster
+- `kuboard_get_services` - Fetch all services in the cluster
+- `kuboard_get_configmaps` - Fetch all ConfigMaps in the cluster
+- `kuboard_get_secrets` - Fetch all Secrets in the cluster
+- `kuboard_get_custom_resources` - Fetch custom resources (CRDs) in the cluster
+
+**Metrics Operations:**
+- `kuboard_get_node_metrics` - Get current node metrics from metrics server (real-time)
+- `kuboard_get_node_metrics_history` - Get historical node metrics data (time-series)
+- `kuboard_get_pod_metrics` - Get current pod metrics from metrics server (real-time)
+- `kuboard_get_pod_metrics_history` - Get historical pod metrics data (time-series)
+- `kuboard_check_metrics_availability` - Check if metrics server is available
+
+**Pod Operations:**
+- `kuboard_get_pod_events` - Fetch pod events for troubleshooting (from Kubernetes API)
+- `kuboard_get_pod_logs` - Fetch pod logs with container support and follow mode
+- `kuboard_delete_pod` - Delete a pod by name and namespace
+- `kuboard_restart_pod` - Restart a pod (delete for recreation by controller)
+- `kuboard_get_pod_yaml` - Get pod YAML/JSON representation
+- `kuboard_update_pod_from_yaml` - Update pod from YAML/JSON content
+
+**Watch Operations:**
+- `kuboard_start_pod_watch` - Start watching pods for real-time updates
+- `kuboard_stop_pod_watch` - Stop pod watch
 
 #### **Kubernetes Integration** (`kubernetes/mod.rs`)
-- `kuboard_load_kubeconfig` - Load kubeconfig
-- `kuboard_create_client_from_context` - Create Kubernetes client
-- `kuboard_calculate_cluster_metrics` - Calculate cluster metrics
+
+**Client Management:**
+- `kuboard_load_kubeconfig` - Load kubeconfig from environment or default location (`~/.kube/config`)
+- `kuboard_create_client_from_context` - Create Kubernetes client from kubeconfig context
+
+**Cluster Metrics:**
+- `kuboard_calculate_cluster_metrics` - Calculate cluster-wide metrics from node data
+  - Aggregates CPU, memory, disk capacity and usage
+  - Calculates node readiness and status
+  - Generates node details with resource specifications
+
+**Pod Operations:**
 - `kuboard_fetch_pod_events` - Fetch pod events from Kubernetes API
+  - Returns events sorted by timestamp
+  - Includes event type, reason, message, and count
 - `kuboard_fetch_pod_logs` - Fetch pod logs from Kubernetes API
+  - Supports container-specific log fetching
+  - Supports tail lines and follow mode
+  - Returns log stream as string
+
+**Watch Module** (`kubernetes/watch.rs`):
+- `PodWatcher::new()` - Create new pod watcher instance
+- `PodWatcher::start()` - Start watching pods and emit events to frontend
+- `PodWatcher::stop()` - Stop pod watch
+- `PodWatcher::is_active()` - Check if watch is currently active
 
 #### **Metrics Server Integration** (`metrics/mod.rs`)
-- `kuboard_fetch_node_metrics_real` - Fetch real-time metrics
-- `kuboard_fetch_node_metrics_history` - Fetch historical metrics
-- `kuboard_fetch_pod_metrics_real` - Fetch real-time pod metrics
-- `kuboard_fetch_pod_metrics_history` - Fetch historical pod metrics
-- `kuboard_check_metrics_server_availability` - Check availability
-- `parse_cpu_quantity` - Parse CPU quantities
-- `parse_memory_quantity` - Parse memory quantities
+
+**Metrics API Functions:**
+- `metrics_api_available` - Check if metrics API (`/apis/metrics.k8s.io/v1beta1`) is available
+- `get_node_metrics` - Get all node metrics from metrics API
+- `get_node_metrics_by_name` - Get metrics for specific node
+- `get_pod_metrics` - Get all pod metrics from metrics API
+- `get_pod_metrics_by_name` - Get metrics for specific pod in namespace
+
+**Public Metrics Functions:**
+- `kuboard_fetch_node_metrics_real` - Fetch real-time node metrics and parse CPU/memory
+  - Returns `MetricsDataPoint` with usage in cores/bytes and percentages
+  - Handles metrics server availability checking
+  - Parses CPU (m, n, u suffixes) and memory (Ki, Mi, Gi, Ti suffixes)
+- `kuboard_fetch_node_metrics_history` - Generate historical metrics timeline
+  - Fetches current metrics and generates time-series with variations
+  - Returns vector of `MetricsDataPoint` for specified duration
+- `kuboard_fetch_pod_metrics_real` - Fetch real-time pod metrics (sums all containers)
+  - Aggregates CPU and memory usage across all pod containers
+  - Returns `MetricsDataPoint` with total pod usage
+- `kuboard_fetch_pod_metrics_history` - Generate historical pod metrics timeline
+  - Similar to node history but for pod-level metrics
+- `kuboard_check_metrics_server_availability` - Check if metrics server is available
+
+**Parsing Functions:**
+- `parse_cpu_quantity` - Parse CPU quantity strings (150m, 1.5, 500000000n, 500000u)
+  - Handles millicores (m), nanocores (n), microcores (u), and cores
+- `parse_memory_quantity` - Parse memory quantity strings (1Gi, 1024Mi, 123Ki, etc.)
+  - Handles binary (Ki, Mi, Gi, Ti) and decimal (K, M, G) suffixes
+  - Returns bytes as u64
 
 #### **Utility Functions** (`utils.rs`)
-- `kuboard_parse_cpu_string` - Parse CPU strings
-- `kuboard_parse_memory_string` - Parse memory strings
-- `kuboard_format_memory` - Format memory display
-- `kuboard_format_cpu` - Format CPU display
+
+**Parsing:**
+- `kuboard_parse_cpu_string` - Parse CPU string (e.g., "1000m", "1") into CPU cores (f64)
+- `kuboard_parse_memory_string` - Parse memory string (e.g., "1Gi", "1024Mi") into bytes (u64)
+
+**Formatting:**
+- `kuboard_format_memory` - Format bytes into human-readable memory string (Ki, Mi, Gi, Ti)
+- `kuboard_format_cpu` - Format CPU cores into human-readable string (m for millicores, cores otherwise)
+
+#### **Application State** (`app_state.rs`)
+
+**AppState Structure:**
+- `kubeconfig: Arc<RwLock<Option<Kubeconfig>>>` - Cached kubeconfig
+- `current_context: Arc<RwLock<Option<String>>>` - Current context name
+- `current_client: Arc<RwLock<Option<Client>>>` - Active Kubernetes client
+- `pod_watcher: Arc<RwLock<PodWatcher>>` - Pod watch instance
+
+**Methods:**
+- `AppState::new()` - Create new application state instance
 
 ## 📊 **Function Organization**
 
 ### **Naming Conventions**
-- **Backend Functions:** `kuboard_<action>_<resource>` (e.g., `kuboard_get_nodes`)
-- **Frontend Functions:** `<action><Resource>` (e.g., `loadContexts`)
-- **Utility Functions:** `kuboard_<action>_<type>` (e.g., `kuboard_format_memory`)
+- **Backend Functions:** `kuboard_<action>_<resource>` (e.g., `kuboard_get_nodes`, `kuboard_fetch_node_metrics_real`)
+- **Frontend Functions:** `<action><Resource>` (e.g., `loadContexts`, `fetchNodeMetrics`)
+- **Utility Functions:** `kuboard_<action>_<type>` (e.g., `kuboard_format_memory`, `kuboard_parse_cpu_string`)
+- **Internal Functions:** No prefix for module-internal helpers (e.g., `parse_cpu_quantity`, `get_node_metrics_by_name`)
+
+### **Function Categories Summary**
+
+**Total Functions:** ~35+ backend functions organized across 5 modules
+
+1. **Context Management (3 functions):** List, set, get contexts
+2. **Cluster Operations (2 functions):** Overview and metrics calculation
+3. **Resource Management (8 functions):** Nodes, namespaces, pods, deployments, services, ConfigMaps, Secrets, CRDs
+4. **Metrics Operations (5 functions):** Node/pod metrics (real-time and historical), availability checking
+5. **Pod Operations (6 functions):** Events, logs, delete, restart, YAML get/update
+6. **Watch Operations (2 functions):** Start/stop pod watch
+7. **Kubernetes Integration (4 functions):** Kubeconfig loading, client creation, cluster metrics, pod events/logs
+8. **Metrics Parsing (4 functions):** CPU/memory quantity parsing (public and internal)
+9. **Utility Functions (4 functions):** CPU/memory parsing and formatting
 
 ### **Function Categories**
 

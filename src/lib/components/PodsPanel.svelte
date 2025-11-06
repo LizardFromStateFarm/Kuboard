@@ -117,12 +117,6 @@
     handleActionMenuClose();
   }
 
-  function handleActionDescribe(event: CustomEvent) {
-    // For now, just log - will implement describe view later
-    console.log('Describe action for:', event.detail.resource);
-    handleActionMenuClose();
-  }
-
   function handleActionEdit(event: CustomEvent) {
     yamlEditorContent = event.detail.yaml || '';
     yamlEditorVisible = true;
@@ -451,83 +445,10 @@
     } catch (err) {
       eventsError = err as string;
       console.error('Failed to load pod events:', err);
-      // Generate mock events for demonstration
-      podEvents = generateMockEvents(pod);
+      podEvents = [];
     } finally {
       eventsLoading = false;
     }
-  }
-
-  // Generate mock events for demonstration
-  function generateMockEvents(pod: any) {
-    const now = new Date();
-    return [
-      {
-        type: 'Normal',
-        reason: 'Created',
-        message: `Created container ${pod.spec?.containers?.[0]?.name || 'main'}`,
-        firstTimestamp: new Date(now.getTime() - 300000).toISOString(), // 5 minutes ago
-        lastTimestamp: new Date(now.getTime() - 300000).toISOString(),
-        count: 1,
-        involvedObject: {
-          kind: 'Pod',
-          name: pod.metadata?.name || 'unknown',
-          namespace: pod.metadata?.namespace || 'default'
-        }
-      },
-      {
-        type: 'Normal',
-        reason: 'Scheduled',
-        message: `Successfully assigned ${pod.metadata?.namespace || 'default'}/${pod.metadata?.name || 'unknown'} to ${pod.spec?.nodeName || 'node-1'}`,
-        firstTimestamp: new Date(now.getTime() - 240000).toISOString(), // 4 minutes ago
-        lastTimestamp: new Date(now.getTime() - 240000).toISOString(),
-        count: 1,
-        involvedObject: {
-          kind: 'Pod',
-          name: pod.metadata?.name || 'unknown',
-          namespace: pod.metadata?.namespace || 'default'
-        }
-      },
-      {
-        type: 'Normal',
-        reason: 'Pulling',
-        message: `Pulling image "${pod.spec?.containers?.[0]?.image || 'nginx:latest'}"`,
-        firstTimestamp: new Date(now.getTime() - 180000).toISOString(), // 3 minutes ago
-        lastTimestamp: new Date(now.getTime() - 180000).toISOString(),
-        count: 1,
-        involvedObject: {
-          kind: 'Pod',
-          name: pod.metadata?.name || 'unknown',
-          namespace: pod.metadata?.namespace || 'default'
-        }
-      },
-      {
-        type: 'Normal',
-        reason: 'Pulled',
-        message: `Successfully pulled image "${pod.spec?.containers?.[0]?.image || 'nginx:latest'}"`,
-        firstTimestamp: new Date(now.getTime() - 120000).toISOString(), // 2 minutes ago
-        lastTimestamp: new Date(now.getTime() - 120000).toISOString(),
-        count: 1,
-        involvedObject: {
-          kind: 'Pod',
-          name: pod.metadata?.name || 'unknown',
-          namespace: pod.metadata?.namespace || 'default'
-        }
-      },
-      {
-        type: 'Normal',
-        reason: 'Started',
-        message: `Started container ${pod.spec?.containers?.[0]?.name || 'main'}`,
-        firstTimestamp: new Date(now.getTime() - 60000).toISOString(), // 1 minute ago
-        lastTimestamp: new Date(now.getTime() - 60000).toISOString(),
-        count: 1,
-        involvedObject: {
-          kind: 'Pod',
-          name: pod.metadata?.name || 'unknown',
-          namespace: pod.metadata?.namespace || 'default'
-        }
-      }
-    ];
   }
 
   // Back to pods list
@@ -667,32 +588,39 @@
     for (const containerStatus of containerStatuses) {
       const containerName = containerStatus.name || 'Unknown';
       
-      // Check waiting state (CrashLoopBackOff, ImagePullBackOff, etc.)
+      // Check current state - only report errors for current state, not historical states
+      // If container is currently running, don't report errors from lastTerminatedState
       if (containerStatus.state?.waiting) {
+        // Container is waiting - this is a current error state
         const reason = containerStatus.state.waiting.reason;
         const message = containerStatus.state.waiting.message || '';
         if (reason && reason !== 'ContainerCreating') {
           errors.push(`${containerName}: ${reason}${message ? ` - ${message}` : ''}`);
         }
-      }
-      
-      // Check terminated state (OOMKilled, Error, etc.)
-      if (containerStatus.state?.terminated) {
+      } else if (containerStatus.state?.terminated) {
+        // Container is currently terminated - this is a current error state
+        // Only report if it's not a successful exit (exitCode === 0 means success)
         const reason = containerStatus.state.terminated.reason;
         const exitCode = containerStatus.state.terminated.exitCode;
         const message = containerStatus.state.terminated.message || '';
         
-        if (reason) {
-          errors.push(`${containerName}: ${reason}${message ? ` - ${message}` : ''}`);
-        } else if (exitCode !== undefined && exitCode !== 0) {
-          errors.push(`${containerName}: Exited with code ${exitCode}${message ? ` - ${message}` : ''}`);
+        // Only report error if exit code is non-zero or reason indicates error
+        if (exitCode !== undefined && exitCode !== 0) {
+          if (reason) {
+            errors.push(`${containerName}: ${reason}${message ? ` - ${message}` : ''}`);
+          } else {
+            errors.push(`${containerName}: Exited with code ${exitCode}${message ? ` - ${message}` : ''}`);
+          }
         }
+      } else if (containerStatus.state?.running) {
+        // Container is running - check if it's ready
+        if (!containerStatus.ready) {
+          errors.push(`${containerName}: Container not ready`);
+        }
+        // If container is running and ready, no error - don't check lastTerminatedState
+        // as that's historical and the container has recovered
       }
-      
-      // Check if container is not ready
-      if (!containerStatus.ready && containerStatus.state?.running) {
-        errors.push(`${containerName}: Container not ready`);
-      }
+      // If no state is set, container might be initializing - don't report as error yet
     }
     
     // Check init container statuses
@@ -700,19 +628,20 @@
     for (const initStatus of initContainerStatuses) {
       const containerName = initStatus.name || 'Unknown';
       
+      // Only report errors for init containers that are currently in error state
       if (initStatus.state?.waiting) {
         const reason = initStatus.state.waiting.reason;
         const message = initStatus.state.waiting.message || '';
         if (reason && reason !== 'PodInitializing') {
           errors.push(`Init ${containerName}: ${reason}${message ? ` - ${message}` : ''}`);
         }
-      }
-      
-      if (initStatus.state?.terminated && initStatus.state.terminated.exitCode !== 0) {
+      } else if (initStatus.state?.terminated && initStatus.state.terminated.exitCode !== 0) {
+        // Only report if init container failed (non-zero exit code)
         const reason = initStatus.state.terminated.reason;
         const message = initStatus.state.terminated.message || '';
         errors.push(`Init ${containerName}: ${reason || `Exited ${initStatus.state.terminated.exitCode}`}${message ? ` - ${message}` : ''}`);
       }
+      // If init container is running or completed successfully, no error
     }
     
     return {
@@ -1452,7 +1381,6 @@
     on:restarted={handleActionRestarted}
     on:view-yaml={handleViewYaml}
     on:copied={handleActionCopied}
-    on:describe={handleActionDescribe}
     on:edit={handleActionEdit}
   />
 {/if}

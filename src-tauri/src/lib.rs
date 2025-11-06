@@ -48,7 +48,13 @@ pub fn run() {
             commands::kuboard_get_namespaces,
             commands::kuboard_get_pods,
             commands::kuboard_get_deployments,
+            commands::kuboard_get_replicasets,
+            commands::kuboard_get_replicaset,
+            commands::kuboard_scale_replicaset,
+            commands::kuboard_get_replicaset_pods,
             commands::kuboard_get_services,
+            commands::kuboard_get_service,
+            commands::kuboard_get_service_endpoints,
             commands::kuboard_get_configmaps,
             commands::kuboard_get_secrets,
             
@@ -71,6 +77,9 @@ pub fn run() {
         // Pod Watch
         commands::kuboard_start_pod_watch,
         commands::kuboard_stop_pod_watch,
+        
+        // Resource Describe
+        commands::kuboard_describe_pod,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

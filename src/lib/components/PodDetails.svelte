@@ -16,6 +16,7 @@
   let podEvents: any[] = [];
   let eventsLoading = false;
   let eventsError: string | null = null;
+  let metricsInitialized = false;
 
   // Quick Actions Menu state
   let actionsMenuVisible = false;
@@ -194,12 +195,6 @@
     handleActionMenuClose();
   }
 
-  function handleActionDescribe(event: CustomEvent) {
-    // Will implement describe view later
-    console.log('Describe action for:', event.detail.resource);
-    handleActionMenuClose();
-  }
-
   function handleActionEdit(event: CustomEvent) {
     yamlEditorContent = event.detail.yaml || '';
     yamlEditorVisible = true;
@@ -284,13 +279,18 @@
   }
 
   function changeResourceType(type: 'cpu' | 'memory') { selectedResourceType = type; }
-  function changeTimeRange(minutes: number) { 
-    selectedTimeRange = Number(minutes); 
-    loadPodMetrics(); 
+  
+  // Reactive statement to reload metrics when time range changes (only after initial load)
+  $: if (selectedTimeRange && pod?.metadata?.name && metricsInitialized) {
+    loadPodMetrics();
   }
   function selectContainer(container: any) { selectedContainer = container; }
 
-  onMount(() => { loadPodMetrics(); loadPodEvents(); });
+  onMount(async () => { 
+    await loadPodMetrics(); 
+    await loadPodEvents(); 
+    metricsInitialized = true;
+  });
 </script>
 
 <div class="full-details-view">
@@ -359,13 +359,13 @@
             <div class="controls-row">
               <div class="time-range-selector">
                 <label for="timeRange">Time Range:</label>
-                <select id="timeRange" onchange={(e) => changeTimeRange(Number((e.target as HTMLSelectElement)?.value || 30))} class="time-range-select">
-                  <option value="30">30 minutes</option>
-                  <option value="60">1 hour</option>
-                  <option value="120">2 hours</option>
-                  <option value="240">4 hours</option>
-                  <option value="480">8 hours</option>
-                  <option value="720">12 hours</option>
+                <select id="timeRange" bind:value={selectedTimeRange} class="time-range-select">
+                  <option value={30}>30 minutes</option>
+                  <option value={60}>1 hour</option>
+                  <option value={120}>2 hours</option>
+                  <option value={240}>4 hours</option>
+                  <option value={480}>8 hours</option>
+                  <option value={720}>12 hours</option>
                 </select>
               </div>
               <div class="resource-tabs">
@@ -751,7 +751,6 @@
   on:restarted={handleActionRestarted}
   on:view-yaml={handleViewYaml}
   on:copied={handleActionCopied}
-  on:describe={handleActionDescribe}
   on:edit={handleActionEdit}
 />
 

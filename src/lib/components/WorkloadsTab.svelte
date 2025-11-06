@@ -3,6 +3,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import PodsPanel from './PodsPanel.svelte';
+  import ReplicaSetsPanel from './ReplicaSetsPanel.svelte';
 
   // Props
   export let currentContext: any = null;
@@ -11,6 +12,7 @@
   let pods: any[] = [];
   let deployments: any[] = [];
   let services: any[] = [];
+  let replicasets: any[] = [];
   
   let loading: boolean = false;
   let error: string | null = null;
@@ -22,6 +24,7 @@
   const workloadTypes = [
     { id: 'pods', label: 'Pods', icon: '🟢', description: 'Running containers' },
     { id: 'deployments', label: 'Deployments', icon: '📦', description: 'Deployment controllers' },
+    { id: 'replicasets', label: 'ReplicaSets', icon: '🔄', description: 'ReplicaSet controllers' },
     { id: 'services', label: 'Services', icon: '🌐', description: 'Network services' }
   ];
 
@@ -43,6 +46,10 @@
         case 'deployments':
           data = await invoke('kuboard_get_deployments').catch(() => []);
           deployments = Array.isArray(data) ? data : [];
+          break;
+        case 'replicasets':
+          data = await invoke('kuboard_get_replicasets').catch(() => []);
+          replicasets = Array.isArray(data) ? data : [];
           break;
         case 'services':
           data = await invoke('kuboard_get_services').catch(() => []);
@@ -77,6 +84,7 @@
     switch (selectedWorkloadType) {
       case 'pods': return pods;
       case 'deployments': return deployments;
+      case 'replicasets': return replicasets;
       case 'services': return services;
       default: return [];
     }
@@ -87,6 +95,7 @@
     switch (type) {
       case 'pods': return pods.length;
       case 'deployments': return deployments.length;
+      case 'replicasets': return replicasets.length;
       case 'services': return services.length;
       default: return 0;
     }
@@ -245,6 +254,8 @@
             <span class="item-count">
               {#if selectedWorkloadType === 'deployments'}
                 ({deployments.length})
+              {:else if selectedWorkloadType === 'replicasets'}
+                ({replicasets.length})
               {:else if selectedWorkloadType === 'services'}
                 ({services.length})
               {/if}
@@ -288,6 +299,13 @@
             </div>
           {/each}
         </div>
+
+      {:else if selectedWorkloadType === 'replicasets'}
+        <!-- ReplicaSets Panel -->
+        <ReplicaSetsPanel 
+          currentContext={currentContext} 
+          replicasets={replicasets}
+        />
 
       {:else if selectedWorkloadType === 'services'}
         <!-- Services List -->

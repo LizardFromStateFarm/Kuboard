@@ -3,7 +3,7 @@
   import { createEventDispatcher } from 'svelte';
 
   export let resource: any; // Pod, Deployment, Service, etc.
-  export let resourceType: 'pod' | 'deployment' | 'service' | 'node' | 'configmap' | 'secret' = 'pod';
+  export let resourceType: 'pod' | 'deployment' | 'service' | 'replicaset' | 'node' | 'configmap' | 'secret' = 'pod';
   export let position: { x: number; y: number } = { x: 0, y: 0 };
   export let visible: boolean = false;
 
@@ -142,10 +142,6 @@
           }
           break;
         
-        case 'describe':
-          dispatch('describe', { resource, resourceType });
-          break;
-        
         case 'edit':
           // Fetch YAML for editing
           if (resourceType === 'pod') {
@@ -166,7 +162,7 @@
       }
       
       // Close menu after successful action (except for view-yaml which opens a modal)
-      if (action !== 'view-yaml' && action !== 'describe' && action !== 'edit') {
+      if (action !== 'view-yaml' && action !== 'edit') {
         setTimeout(() => {
           visible = false;
           dispatch('close');
@@ -205,7 +201,6 @@
   function getAvailableActions(): Array<{ id: string; label: string; icon: string; disabled?: boolean }> {
     const baseActions = [
       { id: 'view-yaml', label: 'View YAML', icon: '📄' },
-      { id: 'describe', label: 'Describe', icon: '📋' },
       { id: 'edit', label: 'Edit', icon: '✏️' },
     ];
 
@@ -216,6 +211,22 @@
         ...baseActions,
         { id: 'restart', label: 'Restart', icon: '🔄' },
         { id: 'delete', label: 'Delete', icon: '🗑️' },
+      ];
+    }
+
+    if (resourceType === 'service') {
+      return [
+        { id: 'copy-name', label: 'Copy Name', icon: '📋' },
+        { id: 'copy-namespace', label: 'Copy Namespace', icon: '📋' },
+        ...baseActions,
+      ];
+    }
+
+    if (resourceType === 'replicaset') {
+      return [
+        { id: 'copy-name', label: 'Copy Name', icon: '📋' },
+        { id: 'copy-namespace', label: 'Copy Namespace', icon: '📋' },
+        ...baseActions,
       ];
     }
 

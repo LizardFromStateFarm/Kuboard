@@ -8,8 +8,8 @@ use tauri::State;
 use kube::Api;
 use kube::api::DeleteParams;
 use k8s_openapi::api::{
-    apps::v1::Deployment,
-    core::v1::{Node, Namespace, Pod, Service, ConfigMap, Secret},
+    apps::v1::{Deployment, ReplicaSet},
+    core::v1::{Node, Namespace, Pod, Service, ConfigMap, Secret, Endpoints},
 };
 use tracing::{error, info, warn};
 
@@ -28,6 +28,7 @@ use crate::metrics::{
     kuboard_check_metrics_server_availability,
 };
 use crate::kubernetes::{kuboard_fetch_pod_events, kuboard_fetch_pod_logs};
+use serde_json::json;
 
 // Context Management Commands
 #[tauri::command]
@@ -315,6 +316,175 @@ pub async fn kuboard_get_services(state: State<'_, AppState>) -> Result<Vec<Serv
 }
 
 #[tauri::command]
+pub async fn kuboard_get_service(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<Service, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let services_api: Api<Service> = Api::namespaced(client.clone(), &namespace);
+    match services_api.get(&name).await {
+        Ok(service) => Ok(service),
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            Err(format!("Service {}/{} not found", namespace, name))
+        }
+        Err(e) => Err(format!("Failed to get service: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_service_endpoints(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<Endpoints, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let endpoints_api: Api<Endpoints> = Api::namespaced(client.clone(), &namespace);
+    match endpoints_api.get(&name).await {
+        Ok(endpoints) => Ok(endpoints),
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            Err(format!("Endpoints {}/{} not found", namespace, name))
+        }
+        Err(e) => Err(format!("Failed to get service endpoints: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_replicasets(state: State<'_, AppState>) -> Result<Vec<ReplicaSet>, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let replicasets_api: Api<ReplicaSet> = Api::all(client.clone());
+    match replicasets_api.list(&Default::default()).await {
+        Ok(replicasets) => Ok(replicasets.items),
+        Err(e) => Err(format!("Failed to get replicasets: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_replicaset(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<ReplicaSet, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let replicasets_api: Api<ReplicaSet> = Api::namespaced(client.clone(), &namespace);
+    match replicasets_api.get(&name).await {
+        Ok(replicaset) => Ok(replicaset),
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            Err(format!("ReplicaSet {}/{} not found", namespace, name))
+        }
+        Err(e) => Err(format!("Failed to get replicaset: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_scale_replicaset(
+    name: String,
+    namespace: String,
+    replicas: i32,
+    state: State<'_, AppState>
+) -> Result<ReplicaSet, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let replicasets_api: Api<ReplicaSet> = Api::namespaced(client.clone(), &namespace);
+    
+    // Get current replicaset
+    let mut replicaset = match replicasets_api.get(&name).await {
+        Ok(rs) => rs,
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            return Err(format!("ReplicaSet {}/{} not found", namespace, name));
+        }
+        Err(e) => return Err(format!("Failed to get replicaset: {}", e)),
+    };
+
+    // Update replica count
+    if let Some(spec) = replicaset.spec.as_mut() {
+        spec.replicas = Some(replicas);
+    } else {
+        return Err("ReplicaSet spec is missing".to_string());
+    }
+
+    // Apply the update
+    match replicasets_api.replace(&name, &Default::default(), &replicaset).await {
+        Ok(updated) => Ok(updated),
+        Err(e) => Err(format!("Failed to scale replicaset: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_replicaset_pods(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<Vec<Pod>, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    // Get the replicaset to find its selector
+    let replicasets_api: Api<ReplicaSet> = Api::namespaced(client.clone(), &namespace);
+    let replicaset = match replicasets_api.get(&name).await {
+        Ok(rs) => rs,
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            return Err(format!("ReplicaSet {}/{} not found", namespace, name));
+        }
+        Err(e) => return Err(format!("Failed to get replicaset: {}", e)),
+    };
+
+    // Get selector from replicaset
+    let selector = match replicaset.spec.as_ref() {
+        Some(spec) => &spec.selector,
+        None => return Err("ReplicaSet has no spec".to_string()),
+    };
+
+    // List pods with matching labels
+    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &namespace);
+    let pods = match pods_api.list(&Default::default()).await {
+        Ok(pod_list) => pod_list.items,
+        Err(e) => return Err(format!("Failed to list pods: {}", e)),
+    };
+
+    // Filter pods by selector
+    let matching_pods: Vec<Pod> = pods
+        .into_iter()
+        .filter(|pod| {
+            if let Some(pod_labels) = pod.metadata.labels.as_ref() {
+                if let Some(match_labels) = selector.match_labels.as_ref() {
+                    match_labels.iter().all(|(key, value)| {
+                        pod_labels.get(key).map_or(false, |v| v == value)
+                    })
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        })
+        .collect();
+
+    Ok(matching_pods)
+}
+
+#[tauri::command]
 pub async fn kuboard_get_configmaps(state: State<'_, AppState>) -> Result<Vec<ConfigMap>, String> {
     let client_guard = state.current_client.read().await;
     let client = client_guard
@@ -358,14 +528,16 @@ pub async fn kuboard_get_node_metrics(node_name: String, state: State<'_, AppSta
             info!("Metrics server is available, fetching real metrics");
         }
         Ok(false) => {
-            warn!("Metrics server is not available, using mock data");
+            warn!("Metrics server is not available");
+            return Err("Metrics server is not available".to_string());
         }
         Err(e) => {
-            warn!("Error checking metrics server availability: {}, using mock data", e);
+            warn!("Error checking metrics server availability: {}", e);
+            return Err(format!("Error checking metrics server availability: {}", e));
         }
     }
 
-    // Fetch real metrics (with fallback to mock data)
+    // Fetch real metrics
     match kuboard_fetch_node_metrics_real(client, &node_name).await {
         Ok(metrics) => {
             let response = serde_json::json!({
@@ -449,18 +621,13 @@ pub async fn kuboard_check_metrics_availability(state: State<'_, AppState>) -> R
     match kuboard_check_metrics_server_availability(client).await {
         Ok(available) => {
             let response = serde_json::json!({
-                "available": available,
-                "using_mock_data": !available
+                "available": available
             });
             Ok(response)
         }
         Err(e) => {
-            warn!("Error checking metrics server availability: {}", e);
-            let response = serde_json::json!({
-                "available": false,
-                "using_mock_data": true
-            });
-            Ok(response)
+            error!("Error checking metrics server availability: {}", e);
+            Err(format!("Error checking metrics server availability: {}", e))
         }
     }
 }
@@ -488,17 +655,15 @@ pub async fn kuboard_get_pod_metrics(podName: String, namespace: String, state: 
         }
     }
 
-    // Fetch real metrics (with fallback to mock data)
+    // Fetch real metrics
     match kuboard_fetch_pod_metrics_real(client, &podName, &namespace).await {
         Ok(metrics) => {
             info!("✅ Successfully fetched real pod metrics for: {}/{}", namespace, podName);
             Ok(serde_json::to_value(metrics).unwrap())
         }
         Err(e) => {
-            warn!("Failed to fetch real pod metrics, using mock data: {}", e);
-            // Generate mock data as fallback
-            let mock_metrics = crate::metrics::generate_mock_metrics_data_point();
-            Ok(serde_json::to_value(mock_metrics).unwrap())
+            error!("Failed to fetch real pod metrics for {}/{}: {}", namespace, podName, e);
+            Err(format!("Failed to fetch pod metrics: {}", e))
         }
     }
 }
@@ -523,14 +688,16 @@ pub async fn kuboard_get_pod_metrics_history(
             info!("Metrics server is available, fetching real metrics history");
         }
         Ok(false) => {
-            warn!("Metrics server is not available, using mock data");
+            warn!("Metrics server is not available");
+            return Err("Metrics server is not available".to_string());
         }
         Err(e) => {
-            warn!("Error checking metrics server availability: {}, using mock data", e);
+            warn!("Error checking metrics server availability: {}", e);
+            return Err(format!("Error checking metrics server availability: {}", e));
         }
     }
 
-    // Fetch real metrics history (with fallback to mock data)
+    // Fetch real metrics history
     match kuboard_fetch_pod_metrics_history(client, &podName, &namespace, durationMinutes).await {
         Ok(history) => {
             info!("✅ Successfully fetched real pod metrics history for: {}/{}", namespace, podName);
@@ -540,13 +707,8 @@ pub async fn kuboard_get_pod_metrics_history(
             Ok(json_history)
         }
         Err(e) => {
-            warn!("Failed to fetch real pod metrics history, using mock data: {}", e);
-            // Generate mock data as fallback
-            let mock_history = crate::metrics::generate_mock_metrics_history(durationMinutes);
-            let json_history: Vec<serde_json::Value> = mock_history.into_iter()
-                .map(|dp| serde_json::to_value(dp).unwrap())
-                .collect();
-            Ok(json_history)
+            error!("Failed to fetch real pod metrics history for {}/{}: {}", namespace, podName, e);
+            Err(format!("Failed to fetch pod metrics history: {}", e))
         }
     }
 }
@@ -989,4 +1151,152 @@ pub async fn kuboard_stop_pod_watch(
     
     info!("✅ Pod watch stopped");
     Ok("Pod watch stopped".to_string())
+}
+
+// Resource Describe Commands
+#[tauri::command]
+pub async fn kuboard_describe_pod(
+    pod_name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<serde_json::Value, String> {
+    info!("Describing pod: {}/{}", namespace, pod_name);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &namespace);
+    
+    match pods_api.get(&pod_name).await {
+        Ok(pod) => {
+            // Get pod events
+            let events = kuboard_fetch_pod_events(client, &pod_name, &namespace).await.unwrap_or_default();
+            
+            // Build describe output structure
+            let describe = json!({
+                "name": pod.metadata.name.as_ref().unwrap_or(&"Unknown".to_string()),
+                "namespace": pod.metadata.namespace.as_ref().unwrap_or(&"default".to_string()),
+                "labels": pod.metadata.labels.as_ref().unwrap_or(&std::collections::BTreeMap::new()),
+                "annotations": pod.metadata.annotations.as_ref().unwrap_or(&std::collections::BTreeMap::new()),
+                "status": {
+                    "phase": pod.status.as_ref().and_then(|s| s.phase.as_ref()).unwrap_or(&"Unknown".to_string()),
+                    "podIP": pod.status.as_ref().and_then(|s| s.pod_ip.as_ref()).unwrap_or(&"None".to_string()),
+                    "hostIP": pod.status.as_ref().and_then(|s| s.host_ip.as_ref()).unwrap_or(&"None".to_string()),
+                    "nodeName": pod.spec.as_ref().and_then(|s| s.node_name.as_ref()).unwrap_or(&"None".to_string()),
+                    "qosClass": pod.status.as_ref().and_then(|s| s.qos_class.as_ref()).unwrap_or(&"Unknown".to_string()),
+                    "startTime": pod.status.as_ref().and_then(|s| s.start_time.as_ref()).map(|t| t.0.to_rfc3339()).unwrap_or_else(|| "None".to_string()),
+                },
+                "conditions": pod.status.as_ref()
+                    .and_then(|s| s.conditions.as_ref())
+                    .map(|conditions| conditions.iter().map(|c| json!({
+                        "type": c.type_,
+                        "status": c.status,
+                        "reason": c.reason.as_ref().unwrap_or(&"None".to_string()),
+                        "message": c.message.as_ref().unwrap_or(&"None".to_string()),
+                        "lastTransitionTime": c.last_transition_time.as_ref().map(|t| t.0.to_rfc3339()).unwrap_or_else(|| "None".to_string()),
+                    })).collect::<Vec<_>>())
+                    .unwrap_or_default(),
+                "containers": pod.spec.as_ref()
+                    .map(|s| s.containers.iter().map(|c| {
+                        let status = pod.status.as_ref()
+                            .and_then(|s| s.container_statuses.as_ref())
+                            .and_then(|statuses| statuses.iter().find(|cs| cs.name == c.name));
+                        json!({
+                            "name": c.name,
+                            "image": c.image,
+                            "imagePullPolicy": c.image_pull_policy.as_ref().unwrap_or(&"IfNotPresent".to_string()),
+                            "resources": c.resources.as_ref().map(|r| json!({
+                                "requests": r.requests.as_ref().map(|reqs| reqs.iter().map(|(k, v)| (k, v.0.clone())).collect::<std::collections::BTreeMap<_, _>>()).unwrap_or_default(),
+                                "limits": r.limits.as_ref().map(|lims| lims.iter().map(|(k, v)| (k, v.0.clone())).collect::<std::collections::BTreeMap<_, _>>()).unwrap_or_default(),
+                            })),
+                            "ports": c.ports.as_ref().map(|ports| ports.iter().map(|p| json!({
+                                "name": p.name.as_ref().unwrap_or(&"None".to_string()),
+                                "containerPort": p.container_port,
+                                "protocol": p.protocol.as_ref().unwrap_or(&"TCP".to_string()),
+                            })).collect::<Vec<_>>()).unwrap_or_default(),
+                            "env": c.env.as_ref().map(|envs| envs.iter().map(|e| {
+                                let mut env_json = serde_json::Map::new();
+                                env_json.insert("name".to_string(), json!(e.name));
+                                env_json.insert("value".to_string(), json!(e.value.as_ref().unwrap_or(&"None".to_string())));
+                                if let Some(vf) = e.value_from.as_ref() {
+                                    let mut value_from_json = serde_json::Map::new();
+                                    if let Some(fr) = vf.field_ref.as_ref() {
+                                        let mut field_ref_json: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+                                        field_ref_json.insert("fieldPath".to_string(), serde_json::Value::String(fr.field_path.clone()));
+                                        value_from_json.insert("fieldRef".to_string(), serde_json::Value::Object(field_ref_json));
+                                    }
+                                    env_json.insert("valueFrom".to_string(), json!(value_from_json));
+                                }
+                                json!(env_json)
+                            }).collect::<Vec<_>>()).unwrap_or_default(),
+                            "status": status.map(|s| json!({
+                                "ready": s.ready,
+                                "restartCount": s.restart_count,
+                                "state": {
+                                    "running": s.state.as_ref().and_then(|st| st.running.as_ref()).map(|_| json!({"startedAt": "Running"})),
+                                    "waiting": s.state.as_ref().and_then(|st| st.waiting.as_ref()).map(|w| json!({
+                                        "reason": w.reason.as_ref().unwrap_or(&"None".to_string()),
+                                        "message": w.message.as_ref().unwrap_or(&"None".to_string()),
+                                    })),
+                                    "terminated": s.state.as_ref().and_then(|st| st.terminated.as_ref()).map(|t| json!({
+                                        "reason": t.reason.as_ref().unwrap_or(&"None".to_string()),
+                                        "exitCode": t.exit_code,
+                                        "startedAt": t.started_at.as_ref().map(|dt| dt.0.to_rfc3339()).unwrap_or_else(|| "None".to_string()),
+                                        "finishedAt": t.finished_at.as_ref().map(|dt| dt.0.to_rfc3339()).unwrap_or_else(|| "None".to_string()),
+                                    })),
+                                },
+                            })).unwrap_or(json!({})),
+                        })
+                    }).collect::<Vec<_>>())
+                    .unwrap_or_default(),
+                "volumes": pod.spec.as_ref()
+                    .and_then(|s| s.volumes.as_ref())
+                    .map(|volumes| volumes.iter().map(|v| json!({
+                        "name": v.name,
+                        "type": if v.config_map.is_some() { "ConfigMap" } 
+                               else if v.secret.is_some() { "Secret" }
+                               else if v.persistent_volume_claim.is_some() { "PVC" }
+                               else if v.empty_dir.is_some() { "EmptyDir" }
+                               else { "Other" },
+                    })).collect::<Vec<_>>())
+                    .unwrap_or_default(),
+                "tolerations": pod.spec.as_ref()
+                    .and_then(|s| s.tolerations.as_ref())
+                    .map(|tolerations| tolerations.iter().map(|t| json!({
+                        "key": t.key.as_ref().unwrap_or(&"".to_string()),
+                        "operator": t.operator.as_ref().unwrap_or(&"Equal".to_string()),
+                        "value": t.value.as_ref().unwrap_or(&"None".to_string()),
+                        "effect": t.effect.as_ref().unwrap_or(&"None".to_string()),
+                        "tolerationSeconds": t.toleration_seconds,
+                    })).collect::<Vec<_>>())
+                    .unwrap_or_default(),
+                "events": events.iter().map(|e| json!({
+                    "type": e.type_,
+                    "reason": e.reason,
+                    "message": e.message,
+                    "count": e.count,
+                    "firstTimestamp": e.first_timestamp.as_deref().unwrap_or("None"),
+                    "lastTimestamp": e.last_timestamp.as_deref().unwrap_or("None"),
+                })).collect::<Vec<_>>(),
+                "metadata": {
+                    "uid": pod.metadata.uid.as_ref().unwrap_or(&"None".to_string()),
+                    "resourceVersion": pod.metadata.resource_version.as_ref().unwrap_or(&"None".to_string()),
+                    "creationTimestamp": pod.metadata.creation_timestamp.as_ref().map(|t| t.0.to_rfc3339()).unwrap_or_else(|| "None".to_string()),
+                    "generation": pod.metadata.generation.unwrap_or(0),
+                },
+            });
+            
+            info!("✅ Successfully described pod: {}/{}", namespace, pod_name);
+            Ok(describe)
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            Err(format!("Pod {}/{} not found", namespace, pod_name))
+        }
+        Err(e) => {
+            error!("Failed to describe pod {}/{}: {}", namespace, pod_name, e);
+            Err(format!("Failed to describe pod: {}", e))
+        }
+    }
 }
