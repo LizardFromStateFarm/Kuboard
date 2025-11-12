@@ -1,8 +1,8 @@
-# 🚢 Kuboard
+# Kuboard
 
 A modern Kubernetes dashboard built with SvelteKit and Tauri.
 
-## ✨ Features
+## Features
 
 - **🖥️ Desktop Application** - Native desktop app for Windows, macOS, and Linux
 - **📊 Real-time Metrics** - Live resource usage graphs and cluster-wide donut charts
@@ -15,7 +15,7 @@ A modern Kubernetes dashboard built with SvelteKit and Tauri.
 - **⚡ Fast Performance** - Built with Rust backend and SvelteKit frontend
 - **🎨 Customizable Themes** - Dark, light, and high-contrast themes with dev mode controls
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Download & Install
 
@@ -30,7 +30,7 @@ A modern Kubernetes dashboard built with SvelteKit and Tauri.
 2. **Select Context** - Choose your Kubernetes context
 3. **View Dashboard** - Explore your cluster resources and metrics
 
-## 📋 Resource Management
+## Resource Management
 
 Kuboard features a comprehensive tabbed interface for managing Kubernetes resources:
 
@@ -91,14 +91,14 @@ npm run tauri build
 
 See [docs/BUILD_GUIDE.md](docs/BUILD_GUIDE.md) for detailed build instructions.
 
-## 📚 Documentation
+##  Documentation
 
 - **[Architecture Overview](docs/ARCHITECTURE_OVERVIEW.md)** - Complete system architecture
 - **[UI Organization](docs/UI_ORGANIZATION_GUIDE.md)** - Component structure and usage
 - **[Function Documentation](docs/FUNCTION_DOCUMENTATION.md)** - API and function reference
 - **[Build Guide](docs/BUILD_GUIDE.md)** - Development and build instructions
 
-## 🏗️ Architecture
+##  Architecture
 
 ### Frontend (SvelteKit)
 - **Components:** Modular UI components with TypeScript
@@ -112,7 +112,7 @@ See [docs/BUILD_GUIDE.md](docs/BUILD_GUIDE.md) for detailed build instructions.
 - **Context Management:** kubeconfig handling and context switching
 - **Resource APIs:** Comprehensive Kubernetes resource management
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please see our [Contributing Guidelines](docs/CONTRIBUTING.md) for details.
 
@@ -130,7 +130,7 @@ We welcome contributions! Please see our [Contributing Guidelines](docs/CONTRIBU
 - **Backend:** Rust with `kuboard_` function prefixes
 - **Documentation:** Markdown with clear structure
 
-## 📄 License
+##  License
 
 This project is licensed under PolyForm Noncommercial License 1.0.0. See [LICENSE](LICENSE) for details.
 
@@ -138,14 +138,14 @@ This project is licensed under PolyForm Noncommercial License 1.0.0. See [LICENS
 
 This project uses several open source libraries. See [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md) for complete license information.
 
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 - [Tauri](https://tauri.app/) - Desktop application framework
 - [SvelteKit](https://kit.svelte.dev/) - Frontend framework
 - [kube-rs](https://kube.rs/) - Kubernetes client library
 - [Chart.js](https://www.chartjs.org/) - Charting library
 
-## 📞 Support
+##  Support
 
 - **Issues:** [GitHub Issues](https://github.com/your-username/kuboard/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/your-username/kuboard/discussions)
