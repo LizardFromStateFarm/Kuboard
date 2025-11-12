@@ -23,7 +23,18 @@
 | `kuboard_get_namespaces` | Fetches all namespaces in the cluster | ✅ Working | `commands` |
 | `kuboard_get_pods` | Fetches all pods in the cluster | ✅ Working | `commands` |
 | `kuboard_get_deployments` | Fetches all deployments in the cluster | ✅ Working | `commands` |
+| `kuboard_get_deployment` | Fetches single deployment by name and namespace | ✅ Working | `commands` |
+| `kuboard_get_replicasets` | Fetches all ReplicaSets in the cluster | ✅ Working | `commands` |
+| `kuboard_get_replicaset` | Fetches single ReplicaSet by name and namespace | ✅ Working | `commands` |
+| `kuboard_get_statefulsets` | Fetches all StatefulSets in the cluster | ✅ Working | `commands` |
+| `kuboard_get_statefulset` | Fetches single StatefulSet by name and namespace | ✅ Working | `commands` |
+| `kuboard_get_daemonsets` | Fetches all DaemonSets in the cluster | ✅ Working | `commands` |
+| `kuboard_get_daemonset` | Fetches single DaemonSet by name and namespace | ✅ Working | `commands` |
+| `kuboard_get_cronjobs` | Fetches all CronJobs in the cluster | ✅ Working | `commands` |
+| `kuboard_get_cronjob` | Fetches single CronJob by name and namespace | ✅ Working | `commands` |
 | `kuboard_get_services` | Fetches all services in the cluster | ✅ Working | `commands` |
+| `kuboard_get_service` | Fetches single service by name and namespace | ✅ Working | `commands` |
+| `kuboard_get_service_endpoints` | Fetches service endpoints | ✅ Working | `commands` |
 | `kuboard_get_configmaps` | Fetches all ConfigMaps in the cluster | ✅ Working | `commands` |
 | `kuboard_get_secrets` | Fetches all Secrets in the cluster | ✅ Working | `commands` |
 | `kuboard_get_custom_resources` | Fetches custom resources in the cluster | ✅ Working | `commands` |
@@ -38,6 +49,86 @@
 | `kuboard_get_pod_events` | Fetches pod events for troubleshooting | ✅ Working | `commands` |
 | `kuboard_get_cluster_metrics` | Fetches cluster-wide metrics | ✅ Working | `commands` |
 | `kuboard_check_metrics_availability` | Checks if metrics server is available | ✅ Working | `commands` |
+
+#### **Pod Operations Commands**
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `kuboard_get_pod_logs` | Fetches pod logs with container support and follow mode | ✅ Working | `commands` |
+| `kuboard_delete_pod` | Deletes a pod by name and namespace | ✅ Working | `commands` |
+| `kuboard_restart_pod` | Restarts a pod (delete for recreation by controller) | ✅ Working | `commands` |
+| `kuboard_get_pod_yaml` | Gets pod YAML/JSON representation | ✅ Working | `commands` |
+| `kuboard_update_pod_from_yaml` | Updates pod from YAML/JSON content | ✅ Working | `commands` |
+| `kuboard_describe_pod` | Gets pod describe output | ✅ Working | `commands` |
+
+#### **Deployment Operations Commands**
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `kuboard_scale_deployment` | Scales deployment to specified replica count | ✅ Working | `commands` |
+| `kuboard_rollback_deployment` | Rollbacks deployment to previous revision | ✅ Working | `commands` |
+| `kuboard_restart_deployment` | Restarts deployment (rolling restart) | ✅ Working | `commands` |
+| `kuboard_get_deployment_replicasets` | Gets ReplicaSets managed by deployment | ✅ Working | `commands` |
+| `kuboard_get_deployment_pods` | Gets pods managed by deployment | ✅ Working | `commands` |
+| `kuboard_delete_deployment` | Deletes a deployment | ✅ Working | `commands` |
+| `kuboard_get_deployment_yaml` | Gets deployment YAML/JSON representation | ✅ Working | `commands` |
+
+#### **StatefulSet Operations Commands**
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `kuboard_scale_statefulset` | Scales StatefulSet to specified replica count | ✅ Working | `commands` |
+| `kuboard_restart_statefulset` | Restarts StatefulSet (rolling restart) | ✅ Working | `commands` |
+| `kuboard_get_statefulset_pods` | Gets pods managed by StatefulSet | ✅ Working | `commands` |
+| `kuboard_delete_statefulset` | Deletes a StatefulSet | ✅ Working | `commands` |
+| `kuboard_get_statefulset_yaml` | Gets StatefulSet YAML/JSON representation | ✅ Working | `commands` |
+
+#### **DaemonSet Operations Commands**
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `kuboard_restart_daemonset` | Restarts DaemonSet (rolling restart) | ✅ Working | `commands` |
+| `kuboard_get_daemonset_pods` | Gets pods managed by DaemonSet | ✅ Working | `commands` |
+| `kuboard_delete_daemonset` | Deletes a DaemonSet | ✅ Working | `commands` |
+| `kuboard_get_daemonset_yaml` | Gets DaemonSet YAML/JSON representation | ✅ Working | `commands` |
+
+#### **ReplicaSet Operations Commands**
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `kuboard_scale_replicaset` | Scales ReplicaSet to specified replica count | ✅ Working | `commands` |
+| `kuboard_get_replicaset_pods` | Gets pods managed by ReplicaSet | ✅ Working | `commands` |
+| `kuboard_delete_replicaset` | Deletes a ReplicaSet | ✅ Working | `commands` |
+| `kuboard_get_replicaset_yaml` | Gets ReplicaSet YAML/JSON representation | ✅ Working | `commands` |
+
+#### **CronJob Operations Commands**
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `kuboard_trigger_cronjob` | Triggers CronJob immediately (create Job) | ✅ Working | `commands` |
+| `kuboard_suspend_cronjob` | Suspends CronJob | ✅ Working | `commands` |
+| `kuboard_resume_cronjob` | Resumes CronJob | ✅ Working | `commands` |
+| `kuboard_get_cronjob_jobs` | Gets Jobs created by CronJob | ✅ Working | `commands` |
+| `kuboard_delete_cronjob` | Deletes a CronJob | ✅ Working | `commands` |
+| `kuboard_get_cronjob_yaml` | Gets CronJob YAML/JSON representation | ✅ Working | `commands` |
+
+#### **Service Operations Commands**
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `kuboard_delete_service` | Deletes a service | ✅ Working | `commands` |
+| `kuboard_get_service_yaml` | Gets service YAML/JSON representation | ✅ Working | `commands` |
+
+#### **Watch Operations Commands**
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `kuboard_start_pod_watch` | Starts watching pods for real-time updates | ✅ Working | `commands` |
+| `kuboard_stop_pod_watch` | Stops pod watch | ✅ Working | `commands` |
+| `kuboard_start_deployment_watch` | Starts watching deployments for real-time updates | ✅ Working | `commands` |
+| `kuboard_stop_deployment_watch` | Stops deployment watch | ✅ Working | `commands` |
+| `kuboard_start_statefulset_watch` | Starts watching StatefulSets for real-time updates | ✅ Working | `commands` |
+| `kuboard_stop_statefulset_watch` | Stops StatefulSet watch | ✅ Working | `commands` |
+| `kuboard_start_daemonset_watch` | Starts watching DaemonSets for real-time updates | ✅ Working | `commands` |
+| `kuboard_stop_daemonset_watch` | Stops DaemonSet watch | ✅ Working | `commands` |
+| `kuboard_start_replicaset_watch` | Starts watching ReplicaSets for real-time updates | ✅ Working | `commands` |
+| `kuboard_stop_replicaset_watch` | Stops ReplicaSet watch | ✅ Working | `commands` |
+| `kuboard_start_service_watch` | Starts watching services for real-time updates | ✅ Working | `commands` |
+| `kuboard_stop_service_watch` | Stops service watch | ✅ Working | `commands` |
+| `kuboard_start_cronjob_watch` | Starts watching CronJobs for real-time updates | ✅ Working | `commands` |
+| `kuboard_stop_cronjob_watch` | Stops CronJob watch | ✅ Working | `commands` |
 
 ### 🔧 **Backend Helper Functions (Rust)**
 
@@ -186,6 +277,18 @@ src/
 │   │   ├── ResourceOverview.svelte
 │   │   ├── MetricsGraph.svelte
 │   │   ├── PodsPanel.svelte
+│   │   ├── PodDetails.svelte
+│   │   ├── DeploymentsPanel.svelte
+│   │   ├── DeploymentDetails.svelte
+│   │   ├── StatefulSetsPanel.svelte
+│   │   ├── StatefulSetDetails.svelte
+│   │   ├── DaemonSetsPanel.svelte
+│   │   ├── DaemonSetDetails.svelte
+│   │   ├── ReplicaSetsPanel.svelte
+│   │   ├── ReplicaSetDetails.svelte
+│   │   ├── CronJobsPanel.svelte
+│   │   ├── CronJobDetails.svelte
+│   │   ├── ServiceDetails.svelte
 │   │   ├── WorkloadsTab.svelte
 │   │   ├── NodesTab.svelte
 │   │   ├── ConfigTab.svelte
@@ -195,6 +298,8 @@ src/
 │   │   ├── ResourceTabs.svelte
 │   │   ├── DonutChart.svelte
 │   │   ├── ClusterMetrics.svelte
+│   │   ├── LogsWindow.svelte
+│   │   ├── QuickActionsMenu.svelte
 │   │   └── ThemeSwitcher.svelte
 │   ├── styles/
 │   │   └── variables.css # CSS custom properties

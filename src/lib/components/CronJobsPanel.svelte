@@ -1,18 +1,16 @@
-<!-- Kuboard Deployments Panel Component -->
+<!-- Kuboard CronJobs Panel Component -->
 <script lang="ts">
-  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import DeploymentDetails from './DeploymentDetails.svelte';
+  import CronJobDetails from './CronJobDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
-  
-  const dispatch = createEventDispatcher();
 
   // Props
   export let currentContext: any = null;
-  export let deployments: any[] = [];
+  export let cronjobs: any[] = [];
 
   // State
-  let selectedDeployment: any = null;
+  let selectedCronJob: any = null;
   let showFullDetails: boolean = false;
   
   // Sorting state
@@ -25,7 +23,7 @@
   // Quick Actions Menu state
   let contextMenuVisible = false;
   let contextMenuPosition = { x: 0, y: 0 };
-  let contextMenuDeployment: any = null;
+  let contextMenuCronJob: any = null;
   
   // YAML Viewer/Editor state
   let yamlViewerVisible = false;
@@ -34,228 +32,42 @@
   let yamlEditorContent = '';
   let yamlEditorLoading = false;
   let yamlEditorError: string | null = null;
-  
-  // Auto-refresh state
-  let refreshInterval: any = null;
-  let lastRestartTime: number | null = null;
 
-  // Watch-based live update state
-  let liveDeployments: any[] | null = null;
-  let watchError: string | null = null;
-  let watchActive = false;
-  let deploymentsMap = new Map<string, any>(); // Track deployments by key for efficient updates
-
-  function handleContextMenu(event: MouseEvent, dep: any) {
+  function handleContextMenu(event: MouseEvent, cj: any) {
     event.preventDefault();
     event.stopPropagation();
-    contextMenuDeployment = dep;
+    contextMenuCronJob = cj;
     contextMenuPosition = { x: event.clientX, y: event.clientY };
     contextMenuVisible = true;
   }
 
   function handleActionMenuClose() {
     contextMenuVisible = false;
-    contextMenuDeployment = null;
+    contextMenuCronJob = null;
   }
 
   function handleActionDeleted(event: CustomEvent) {
-    // Reload deployments would be needed
+    // Reload cronjobs would be needed
     handleActionMenuClose();
   }
 
-  function handleActionRestarted(event: CustomEvent) {
-    console.log('handleActionRestarted called in DeploymentsPanel', event);
-    console.log('Event detail:', event.detail);
-    // Reload deployments
-    console.log('Dispatching reload event');
-    dispatch('reload');
+  function handleActionSuspended(event: CustomEvent) {
+    // Reload cronjobs would be needed
     handleActionMenuClose();
-    
-    // Start auto-refresh for 30 seconds after restart
-    lastRestartTime = Date.now();
-    startAutoRefresh();
-  }
-  
-  function startAutoRefresh() {
-    // Clear any existing interval
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
-    }
-    
-    // Refresh every 2 seconds for 30 seconds after restart
-    refreshInterval = setInterval(() => {
-      const now = Date.now();
-      if (lastRestartTime && (now - lastRestartTime) < 30000) {
-        console.log('Auto-refreshing deployments after restart');
-        dispatch('reload');
-      } else {
-        // Stop refreshing after 30 seconds
-        stopAutoRefresh();
-      }
-    }, 2000);
-  }
-  
-  function stopAutoRefresh() {
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
-      refreshInterval = null;
-    }
-    lastRestartTime = null;
-  }
-  
-  // Get deployment key for tracking
-  function getDeploymentKey(deployment: any): string {
-    const namespace = deployment.metadata?.namespace || 'default';
-    const name = deployment.metadata?.name || 'unknown';
-    return `${namespace}/${name}`;
   }
 
-  // Handle watch events
-  function handleWatchEvent(event: any) {
-    console.log('📡 Deployment watch event received:', event);
-    const { event_type, deployment } = event;
-    
-    if (!deployment || !deployment.metadata) {
-      console.error('⚠️ Invalid watch event: missing deployment or metadata', event);
-      return;
-    }
-    
-    const key = getDeploymentKey(deployment);
-    const eventTypeStr = String(event_type);
-    
-    console.log(`📡 Watch event: ${eventTypeStr} for deployment ${key}`);
-    
-    switch (eventTypeStr) {
-      case 'Added':
-        if (!deploymentsMap.has(key)) {
-          deploymentsMap.set(key, deployment);
-          liveDeployments = [...Array.from(deploymentsMap.values())];
-          console.log(`✅ Added deployment: ${key}, total: ${liveDeployments.length}`);
-        }
-        break;
-        
-      case 'Modified':
-        deploymentsMap.set(key, deployment);
-        liveDeployments = [...Array.from(deploymentsMap.values())];
-        console.log(`🔄 Modified deployment: ${key}, total: ${liveDeployments.length}`);
-        break;
-        
-      case 'Deleted':
-        if (deploymentsMap.has(key)) {
-          deploymentsMap.delete(key);
-          liveDeployments = [...Array.from(deploymentsMap.values())];
-          console.log(`🗑️ Deleted deployment: ${key}, total: ${liveDeployments.length}`);
-        }
-        break;
-    }
-    
-    watchError = null;
+  function handleActionResumed(event: CustomEvent) {
+    // Reload cronjobs would be needed
+    handleActionMenuClose();
   }
 
-  function handleWatchError(error: any) {
-    console.error('Deployment watch error:', error);
-    watchError = error?.error || String(error) || 'Watch connection error';
-  }
-
-  // Start watch stream
-  async function startWatch() {
-    if (!currentContext) return;
-    
-    try {
-      await invoke('kuboard_stop_deployment_watch'); // Stop any existing watch
-      await invoke('kuboard_start_deployment_watch');
-      watchActive = true;
-      watchError = null;
-      console.log('✅ Deployment watch started');
-    } catch (e: any) {
-      console.error('Failed to start deployment watch:', e);
-      watchError = String(e);
-      watchActive = false;
-    }
-  }
-
-  // Stop watch stream
-  async function stopWatch() {
-    try {
-      await invoke('kuboard_stop_deployment_watch');
-      watchActive = false;
-      console.log('🛑 Deployment watch stopped');
-    } catch (e: any) {
-      console.error('Failed to stop deployment watch:', e);
-    }
-  }
-
-  // Initialize deployments from initial list
-  function initializeDeployments() {
-    if (deployments && deployments.length > 0) {
-      deploymentsMap.clear();
-      for (const deployment of deployments) {
-        deploymentsMap.set(getDeploymentKey(deployment), deployment);
-      }
-      liveDeployments = [...Array.from(deploymentsMap.values())];
-      console.log(`📋 Initialized ${liveDeployments.length} deployments`);
-    }
-  }
-
-  // Lifecycle
-  let watchEventListenerUnsubscribe: (() => Promise<void>) | null = null;
-  let watchErrorListenerUnsubscribe: (() => Promise<void>) | null = null;
-  let lastContext: string | null = null;
-
-  onMount(async () => {
-    // Initialize deployments from props
-    initializeDeployments();
-    
-    // Listen to watch events
-    const { listen } = await import('@tauri-apps/api/event');
-    
-    watchEventListenerUnsubscribe = await listen('deployment-watch-event', (event: any) => {
-      handleWatchEvent(event.payload);
-    });
-    
-    watchErrorListenerUnsubscribe = await listen('deployment-watch-error', (event: any) => {
-      handleWatchError(event.payload);
-    });
-    
-    // Start watch when context is available
-    if (currentContext && !watchActive) {
-      startWatch();
-    }
-    
-    return async () => {
-      if (watchEventListenerUnsubscribe) await watchEventListenerUnsubscribe();
-      if (watchErrorListenerUnsubscribe) await watchErrorListenerUnsubscribe();
-      await stopWatch();
-    };
-  });
-
-  onDestroy(async () => {
-    stopAutoRefresh();
-    if (watchEventListenerUnsubscribe) await watchEventListenerUnsubscribe();
-    if (watchErrorListenerUnsubscribe) await watchErrorListenerUnsubscribe();
-    await stopWatch();
-  });
-
-  // Restart watch only when context actually changes
-  $: if (currentContext && currentContext !== lastContext) {
-    lastContext = currentContext;
-    if (watchActive) {
-      stopWatch().then(() => {
-        deploymentsMap.clear();
-        liveDeployments = [];
-        initializeDeployments();
-        startWatch();
-      });
-    } else {
-      deploymentsMap.clear();
-      liveDeployments = [];
-      initializeDeployments();
-      startWatch();
-    }
+  function handleActionTriggered(event: CustomEvent) {
+    // Reload cronjobs would be needed
+    handleActionMenuClose();
   }
 
   function handleViewYaml(event: any) {
-    console.log('handleViewYaml called in DeploymentsPanel', event);
+    console.log('handleViewYaml called in CronJobsPanel', event);
     yamlContent = event.detail?.yaml || '';
     yamlViewerVisible = true;
   }
@@ -267,7 +79,7 @@
   }
 
   function handleActionEdit(event: any) {
-    console.log('handleActionEdit called in DeploymentsPanel', event);
+    console.log('handleActionEdit called in CronJobsPanel', event);
     yamlEditorContent = event.detail?.yaml || '';
     yamlEditorVisible = true;
     yamlEditorError = null;
@@ -281,24 +93,19 @@
   }
 
   async function saveYaml() {
-    if (!contextMenuDeployment?.metadata?.name || !contextMenuDeployment?.metadata?.namespace) return;
+    if (!contextMenuCronJob?.metadata?.name || !contextMenuCronJob?.metadata?.namespace) return;
     
     yamlEditorLoading = true;
     yamlEditorError = null;
     
     try {
-      // Parse and validate YAML
       const parsed = JSON.parse(yamlEditorContent);
-      
-      // Update the deployment using the Kubernetes API
-      await invoke('kuboard_update_deployment', {
-        name: contextMenuDeployment.metadata.name,
-        namespace: contextMenuDeployment.metadata.namespace,
-        deployment: parsed
+      await invoke('kuboard_update_cronjob', {
+        name: contextMenuCronJob.metadata.name,
+        namespace: contextMenuCronJob.metadata.namespace,
+        cronjob: parsed
       });
-      
       closeYamlEditor();
-      // Reload deployments would be needed
     } catch (err: any) {
       yamlEditorError = err?.toString() || 'Failed to save YAML';
       console.error('Failed to save YAML:', err);
@@ -327,36 +134,39 @@
     return `${diffMins}m`;
   }
 
-  // Get deployment status
-  function getDeploymentStatus(dep: any): string {
-    const available = dep.status?.conditions?.find((c: any) => c.type === 'Available');
-    const progressing = dep.status?.conditions?.find((c: any) => c.type === 'Progressing');
+  // Get CronJob status
+  function getCronJobStatus(cj: any): string {
+    const suspended = cj.spec?.suspend || false;
+    if (suspended) return 'Suspended';
     
-    if (available?.status === 'True' && progressing?.status === 'True') {
-      return 'Available';
-    }
-    if (progressing?.status === 'True') {
-      return 'Progressing';
-    }
-    if (available?.status === 'False') {
-      return 'Not Available';
-    }
+    const active = cj.status?.active?.length || 0;
+    const lastScheduleTime = cj.status?.lastScheduleTime;
+    const lastSuccessfulTime = cj.status?.lastSuccessfulTime;
+    
+    if (active > 0) return 'Running';
+    if (lastSuccessfulTime) return 'Ready';
+    if (lastScheduleTime) return 'Scheduled';
     return 'Unknown';
   }
 
   function getStatusClass(status: string): string {
     switch (status?.toLowerCase()) {
-      case 'available': return 'ready';
-      case 'progressing': return 'pending';
-      case 'not available': return 'failed';
+      case 'ready': return 'ready';
+      case 'running': return 'running';
+      case 'scheduled': return 'pending';
+      case 'suspended': return 'failed';
       default: return 'unknown';
     }
   }
 
-  // Get update strategy
-  function getUpdateStrategy(dep: any): string {
-    const strategy = dep.spec?.strategy?.type || 'RollingUpdate';
-    return strategy;
+  // Get schedule
+  function getSchedule(cj: any): string {
+    return cj.spec?.schedule || 'Not set';
+  }
+
+  // Get concurrency policy
+  function getConcurrencyPolicy(cj: any): string {
+    return cj.spec?.concurrencyPolicy || 'Allow';
   }
 
   // Sorting functions
@@ -392,10 +202,10 @@
     return nsA.localeCompare(nsB);
   }
 
-  function compareReplicas(a: any, b: any): number {
-    const readyA = a.status?.readyReplicas || 0;
-    const readyB = b.status?.readyReplicas || 0;
-    return readyA - readyB;
+  function compareActiveJobs(a: any, b: any): number {
+    const activeA = a.status?.active?.length || 0;
+    const activeB = b.status?.active?.length || 0;
+    return activeA - activeB;
   }
 
   function compareAge(a: any, b: any): number {
@@ -404,24 +214,13 @@
     return timeA - timeB;
   }
 
-  // Get deployments to render (use live if available, otherwise use props)
-  function getRenderDeployments(): any[] {
-    return liveDeployments !== null ? liveDeployments : deployments;
-  }
-
-  // Reactive: Initialize deployments when props change
-  $: if (deployments && deployments.length > 0 && liveDeployments === null) {
-    initializeDeployments();
-  }
-
-  // Reactive sorted and filtered deployments
-  $: sortedDeployments = (() => {
-    const deps = getRenderDeployments();
+  // Reactive sorted and filtered cronjobs
+  $: sortedCronJobs = (() => {
     if (!sortColumn || !sortDirection) {
-      return deps;
+      return cronjobs;
     }
     
-    const sorted = [...deps];
+    const sorted = [...cronjobs];
     sorted.sort((a, b) => {
       let comparison = 0;
       
@@ -432,8 +231,8 @@
         case 'namespace':
           comparison = compareNamespace(a, b);
           break;
-        case 'replicas':
-          comparison = compareReplicas(a, b);
+        case 'active':
+          comparison = compareActiveJobs(a, b);
           break;
         case 'age':
           comparison = compareAge(a, b);
@@ -448,71 +247,66 @@
     return sorted;
   })();
 
-  $: filteredDeployments = (() => {
+  $: filteredCronJobs = (() => {
     if (!searchQuery || !searchQuery.trim()) {
-      return sortedDeployments;
+      return sortedCronJobs;
     }
 
     const query = searchQuery.toLowerCase().trim();
-    return sortedDeployments.filter(dep => {
-      const name = (dep.metadata?.name || '').toLowerCase();
-      const namespace = (dep.metadata?.namespace || '').toLowerCase();
+    return sortedCronJobs.filter(cj => {
+      const name = (cj.metadata?.name || '').toLowerCase();
+      const namespace = (cj.metadata?.namespace || '').toLowerCase();
       
       return name.includes(query) || namespace.includes(query);
     });
   })();
 
   // Show full details view
-  function showFullDeploymentDetails(dep: any) {
-    selectedDeployment = dep;
+  function showFullCronJobDetails(cj: any) {
+    selectedCronJob = cj;
     showFullDetails = true;
   }
 
-  // Back to deployments list
-  function backToDeploymentsList() {
+  // Back to cronjobs list
+  function backToCronJobsList() {
     showFullDetails = false;
-    selectedDeployment = null;
+    selectedCronJob = null;
   }
 
   // Loading state is managed by parent WorkloadsTab
   // This panel just displays the data it receives
 </script>
 
-{#if showFullDetails && selectedDeployment}
-  <DeploymentDetails deployment={selectedDeployment} onBack={backToDeploymentsList} currentContext={currentContext} />
+{#if showFullDetails && selectedCronJob}
+  <CronJobDetails cronJob={selectedCronJob} onBack={backToCronJobsList} />
 {:else}
-  <div class="deployments-panel">
+  <div class="cronjobs-panel">
     <div class="panel-header">
-      <h4>📦 Deployments ({filteredDeployments.length})</h4>
-      <div class="panel-controls">
-        <span class="live-indicator {watchError ? 'error' : watchActive ? 'active' : ''}">
-          {watchError ? 'Watch Error' : watchActive ? '🟢 Live' : '⏸️ Paused'}
-        </span>
-      </div>
+      <h4>📦 CronJobs ({filteredCronJobs.length})</h4>
       <div class="header-controls">
         <input
           type="text"
           class="search-input"
-          placeholder="Search Deployments..."
+          placeholder="Search CronJobs..."
           bind:value={searchQuery}
         />
       </div>
     </div>
 
-    {#if getRenderDeployments().length === 0}
+    {#if cronjobs.length === 0}
       <div class="empty-state">
         <div class="empty-icon">📭</div>
-        <h5>No Deployments Found</h5>
-        <p>No Deployments are currently in this cluster</p>
+        <h5>No CronJobs Found</h5>
+        <p>No CronJobs are currently in this cluster</p>
       </div>
-    {:else if filteredDeployments.length === 0}
+    {:else if filteredCronJobs.length === 0}
       <div class="empty-state">
         <div class="empty-icon">🔍</div>
-        <h5>No Deployments Match</h5>
-        <p>No Deployments match your search query: "{searchQuery}"</p>
+        <h5>No CronJobs Match</h5>
+        <p>No CronJobs match your search query: "{searchQuery}"</p>
       </div>
     {:else}
-      <div class="deployments-table">
+      <div class="cronjobs-table">
         <div class="table-header">
           <div class="header-cell sortable" onclick={() => handleSort('name')} role="button" tabindex="0">
             Name
@@ -526,14 +320,14 @@
               <span class="sort-indicator">{sortDirection === 'asc' ? '↑' : '↓'}</span>
             {/if}
           </div>
-          <div class="header-cell sortable" onclick={() => handleSort('replicas')} role="button" tabindex="0">
-            Replicas
-            {#if sortColumn === 'replicas'}
+          <div class="header-cell sortable" onclick={() => handleSort('active')} role="button" tabindex="0">
+            Active Jobs
+            {#if sortColumn === 'active'}
               <span class="sort-indicator">{sortDirection === 'asc' ? '↑' : '↓'}</span>
             {/if}
           </div>
           <div class="header-cell">Status</div>
-          <div class="header-cell">Strategy</div>
+          <div class="header-cell">Schedule</div>
           <div class="header-cell sortable" onclick={() => handleSort('age')} role="button" tabindex="0">
             Age
             {#if sortColumn === 'age'}
@@ -544,45 +338,37 @@
         </div>
 
         <div class="table-body">
-          {#each filteredDeployments as dep}
-            {@const status = getDeploymentStatus(dep)}
-            {@const desired = dep.spec?.replicas || 0}
-            {@const ready = dep.status?.readyReplicas || 0}
-            {@const current = dep.status?.replicas || 0}
-            {@const available = dep.status?.availableReplicas || 0}
+          {#each filteredCronJobs as cj}
+            {@const status = getCronJobStatus(cj)}
+            {@const active = cj.status?.active?.length || 0}
+            {@const schedule = getSchedule(cj)}
             <div
               class="table-row"
               role="button"
               tabindex="0"
-              onclick={() => showFullDeploymentDetails(dep)}
-              onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && showFullDeploymentDetails(dep)}
-              oncontextmenu={(e) => handleContextMenu(e, dep)}
+              onclick={() => showFullCronJobDetails(cj)}
+              onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && showFullCronJobDetails(cj)}
+              oncontextmenu={(e) => handleContextMenu(e, cj)}
             >
               <div class="cell name-cell">
-                <span class="resource-name">{dep.metadata?.name || 'Unknown'}</span>
+                <span class="resource-name">{cj.metadata?.name || 'Unknown'}</span>
               </div>
               <div class="cell namespace-cell">
-                <span>{dep.metadata?.namespace || 'default'}</span>
+                <span>{cj.metadata?.namespace || 'default'}</span>
               </div>
-              <div class="cell replicas-cell">
-                <span class="replica-info">{ready}/{desired}</span>
-                {#if available !== ready}
-                  <span class="replica-warning">({available} available)</span>
-                {/if}
-                {#if current !== desired}
-                  <span class="replica-warning">({current} current)</span>
-                {/if}
+              <div class="cell active-jobs-cell">
+                <span class="active-info">{active}</span>
               </div>
               <div class="cell status-cell">
                 <span class="status-badge status-{getStatusClass(status)}">{status}</span>
               </div>
-              <div class="cell strategy-cell">
-                <span>{getUpdateStrategy(dep)}</span>
+              <div class="cell schedule-cell">
+                <span class="schedule-info" title={schedule}>{schedule}</span>
               </div>
               <div class="cell age-cell">
-                <span>{formatAge(dep.metadata?.creationTimestamp)}</span>
+                <span>{formatAge(cj.metadata?.creationTimestamp)}</span>
               </div>
-              <div class="cell actions-cell" onclick={(e) => { e.stopPropagation(); handleContextMenu(e, dep); }}>
+              <div class="cell actions-cell" onclick={(e) => { e.stopPropagation(); handleContextMenu(e, cj); }}>
                 <button class="action-button" title="Actions">⚙️</button>
               </div>
             </div>
@@ -593,16 +379,18 @@
   </div>
 
   <!-- Quick Actions Menu -->
-  {#if contextMenuDeployment}
+  {#if contextMenuCronJob}
     <QuickActionsMenu
       x={contextMenuPosition.x}
       y={contextMenuPosition.y}
-      resource={contextMenuDeployment}
-      resourceType="deployment"
+      resource={contextMenuCronJob}
+      resourceType="cronjob"
       bind:visible={contextMenuVisible}
       on:close={handleActionMenuClose}
       on:deleted={handleActionDeleted}
-      on:restarted={handleActionRestarted}
+      on:suspended={handleActionSuspended}
+      on:resumed={handleActionResumed}
+      on:triggered={handleActionTriggered}
       on:view-yaml={handleViewYaml}
       on:edit={handleActionEdit}
       on:copied={handleActionCopied}
@@ -614,7 +402,7 @@
     <div class="yaml-viewer-modal" onclick={closeYamlViewer}>
       <div class="yaml-viewer-content" onclick={(e) => e.stopPropagation()}>
         <div class="yaml-viewer-header">
-          <h3>Deployment YAML: {contextMenuDeployment?.metadata?.name}</h3>
+          <h3>CronJob YAML: {contextMenuCronJob?.metadata?.name}</h3>
           <button class="yaml-viewer-close" onclick={closeYamlViewer}>✕</button>
         </div>
         <div class="yaml-viewer-body">
@@ -629,7 +417,7 @@
     <div class="yaml-viewer-modal" onclick={closeYamlEditor}>
       <div class="yaml-viewer-content yaml-editor-content" onclick={(e) => e.stopPropagation()}>
         <div class="yaml-viewer-header">
-          <h3>Edit Deployment YAML</h3>
+          <h3>Edit CronJob YAML</h3>
           <button class="yaml-viewer-close" onclick={closeYamlEditor} disabled={yamlEditorLoading}>✕</button>
         </div>
         <div class="yaml-editor-body">
@@ -670,7 +458,7 @@
 <style>
   @import '../styles/variables.css';
 
-  .deployments-panel {
+  .cronjobs-panel {
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -685,33 +473,6 @@
     padding: var(--spacing-md);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.05);
-  }
-
-  .panel-controls {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-  }
-
-  .live-indicator {
-    font-size: 0.85rem;
-    padding: 2px 8px;
-    border-radius: var(--radius-sm);
-    border: 1px solid rgba(34, 197, 94, 0.3);
-    background: rgba(34, 197, 94, 0.12);
-    color: #22c55e;
-  }
-
-  .live-indicator.active {
-    border-color: rgba(34, 197, 94, 0.3);
-    background: rgba(34, 197, 94, 0.12);
-    color: #22c55e;
-  }
-
-  .live-indicator.error {
-    border-color: rgba(239, 68, 68, 0.3);
-    background: rgba(239, 68, 68, 0.12);
-    color: #ef4444;
   }
 
   .panel-header h4 {
@@ -780,7 +541,7 @@
     font-size: 0.9rem;
   }
 
-  .deployments-table {
+  .cronjobs-table {
     flex: 1;
     overflow: auto;
     display: flex;
@@ -940,7 +701,7 @@
     color: var(--text-primary);
   }
 
-  /* YAML Viewer Modal */
+  /* YAML Viewer/Editor Styles */
   .yaml-viewer-modal {
     position: fixed;
     top: 0;
@@ -1024,7 +785,6 @@
     color: var(--text-primary);
   }
 
-  /* YAML Editor Styles */
   .yaml-editor-content {
     display: flex;
     flex-direction: column;

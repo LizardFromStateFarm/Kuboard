@@ -9,6 +9,7 @@ use kube::Api;
 use kube::api::DeleteParams;
 use k8s_openapi::api::{
     apps::v1::{Deployment, ReplicaSet, StatefulSet, DaemonSet},
+    batch::v1::{CronJob, Job},
     core::v1::{Node, Namespace, Pod, Service, ConfigMap, Secret, Endpoints},
 };
 use tracing::{error, info, warn};
@@ -547,7 +548,7 @@ pub async fn kuboard_scale_deployment(
 pub async fn kuboard_rollback_deployment(
     name: String,
     namespace: String,
-    revision: Option<i64>,
+    _revision: Option<i64>,
     state: State<'_, AppState>
 ) -> Result<Deployment, String> {
     let client_guard = state.current_client.read().await;
@@ -557,8 +558,8 @@ pub async fn kuboard_rollback_deployment(
 
     let deployments_api: Api<Deployment> = Api::namespaced(client.clone(), &namespace);
     
-    // Get current deployment
-    let deployment = match deployments_api.get(&name).await {
+    // Get current deployment (verify it exists)
+    let _deployment = match deployments_api.get(&name).await {
         Ok(dep) => dep,
         Err(kube::Error::Api(e)) if e.code == 404 => {
             return Err(format!("Deployment {}/{} not found", namespace, name));
@@ -595,7 +596,10 @@ pub async fn kuboard_restart_deployment(
     };
 
     // Add restart annotation to trigger pod recreation
-    let annotations = deployment.metadata.annotations.get_or_insert_with(Default::default);
+    // The annotation must be in spec.template.metadata.annotations, not metadata.annotations
+    let spec = deployment.spec.as_mut().ok_or_else(|| "Deployment spec is missing".to_string())?;
+    let metadata = spec.template.metadata.get_or_insert_with(Default::default);
+    let annotations = metadata.annotations.get_or_insert_with(Default::default);
     use std::time::{SystemTime, UNIX_EPOCH};
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -634,8 +638,8 @@ pub async fn kuboard_get_deployment_replicasets(
         Err(e) => return Err(format!("Failed to get deployment: {}", e)),
     };
 
-    // Get selector from deployment
-    let selector = match deployment.spec.as_ref() {
+    // Get selector from deployment (currently unused, filtering by owner reference instead)
+    let _selector = match deployment.spec.as_ref() {
         Some(spec) => &spec.selector,
         None => return Err("Deployment has no spec".to_string()),
     };
@@ -815,7 +819,10 @@ pub async fn kuboard_restart_statefulset(
     };
 
     // Add restart annotation to trigger pod recreation
-    let annotations = statefulset.metadata.annotations.get_or_insert_with(Default::default);
+    // The annotation must be in spec.template.metadata.annotations, not metadata.annotations
+    let spec = statefulset.spec.as_mut().ok_or_else(|| "StatefulSet spec is missing".to_string())?;
+    let metadata = spec.template.metadata.get_or_insert_with(Default::default);
+    let annotations = metadata.annotations.get_or_insert_with(Default::default);
     use std::time::{SystemTime, UNIX_EPOCH};
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -955,7 +962,10 @@ pub async fn kuboard_restart_daemonset(
     };
 
     // Add restart annotation to trigger pod recreation
-    let annotations = daemonset.metadata.annotations.get_or_insert_with(Default::default);
+    // The annotation must be in spec.template.metadata.annotations, not metadata.annotations
+    let spec = daemonset.spec.as_mut().ok_or_else(|| "DaemonSet spec is missing".to_string())?;
+    let metadata = spec.template.metadata.get_or_insert_with(Default::default);
+    let annotations = metadata.annotations.get_or_insert_with(Default::default);
     use std::time::{SystemTime, UNIX_EPOCH};
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1041,6 +1051,229 @@ pub async fn kuboard_get_daemonset_pods(
     });
 
     Ok(sorted_pods)
+}
+
+// CronJob Commands
+#[tauri::command]
+pub async fn kuboard_get_cronjobs(state: State<'_, AppState>) -> Result<Vec<CronJob>, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let cronjobs_api: Api<CronJob> = Api::all(client.clone());
+    match cronjobs_api.list(&Default::default()).await {
+        Ok(cronjobs) => Ok(cronjobs.items),
+        Err(e) => Err(format!("Failed to get cronjobs: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_cronjob(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<CronJob, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let cronjobs_api: Api<CronJob> = Api::namespaced(client.clone(), &namespace);
+    match cronjobs_api.get(&name).await {
+        Ok(cronjob) => Ok(cronjob),
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            Err(format!("CronJob {}/{} not found", namespace, name))
+        }
+        Err(e) => Err(format!("Failed to get cronjob: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_trigger_cronjob(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<Job, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let cronjobs_api: Api<CronJob> = Api::namespaced(client.clone(), &namespace);
+    
+    // Get the cronjob to extract its job template
+    let cronjob = match cronjobs_api.get(&name).await {
+        Ok(cj) => cj,
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            return Err(format!("CronJob {}/{} not found", namespace, name));
+        }
+        Err(e) => return Err(format!("Failed to get cronjob: {}", e)),
+    };
+
+    // Extract job template from cronjob spec
+    let job_template = match cronjob.spec.as_ref() {
+        Some(spec) => &spec.job_template,
+        None => return Err("CronJob has no spec".to_string()),
+    };
+
+    // Create a new Job from the template
+    let mut job_metadata = k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta {
+        name: Some(format!("{}-manual-{}", name, chrono::Utc::now().timestamp())),
+        namespace: Some(namespace.clone()),
+        ..Default::default()
+    };
+
+    // Copy labels from job template metadata if present
+    if let Some(template_metadata) = job_template.metadata.as_ref() {
+        if let Some(labels) = template_metadata.labels.as_ref() {
+            job_metadata.labels = Some(labels.clone());
+        }
+    }
+
+    let job = Job {
+        metadata: job_metadata,
+        spec: job_template.spec.clone(),
+        ..Default::default()
+    };
+
+    // Create the job
+    let jobs_api: Api<Job> = Api::namespaced(client.clone(), &namespace);
+    match jobs_api.create(&Default::default(), &job).await {
+        Ok(created_job) => Ok(created_job),
+        Err(e) => Err(format!("Failed to trigger cronjob: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_suspend_cronjob(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<CronJob, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let cronjobs_api: Api<CronJob> = Api::namespaced(client.clone(), &namespace);
+    
+    // Get current cronjob
+    let mut cronjob = match cronjobs_api.get(&name).await {
+        Ok(cj) => cj,
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            return Err(format!("CronJob {}/{} not found", namespace, name));
+        }
+        Err(e) => return Err(format!("Failed to get cronjob: {}", e)),
+    };
+
+    // Set suspend to true
+    if let Some(spec) = cronjob.spec.as_mut() {
+        spec.suspend = Some(true);
+    } else {
+        return Err("CronJob has no spec".to_string());
+    }
+
+    // Apply the update
+    match cronjobs_api.replace(&name, &Default::default(), &cronjob).await {
+        Ok(updated) => Ok(updated),
+        Err(e) => Err(format!("Failed to suspend cronjob: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_resume_cronjob(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<CronJob, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let cronjobs_api: Api<CronJob> = Api::namespaced(client.clone(), &namespace);
+    
+    // Get current cronjob
+    let mut cronjob = match cronjobs_api.get(&name).await {
+        Ok(cj) => cj,
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            return Err(format!("CronJob {}/{} not found", namespace, name));
+        }
+        Err(e) => return Err(format!("Failed to get cronjob: {}", e)),
+    };
+
+    // Set suspend to false
+    if let Some(spec) = cronjob.spec.as_mut() {
+        spec.suspend = Some(false);
+    } else {
+        return Err("CronJob has no spec".to_string());
+    }
+
+    // Apply the update
+    match cronjobs_api.replace(&name, &Default::default(), &cronjob).await {
+        Ok(updated) => Ok(updated),
+        Err(e) => Err(format!("Failed to resume cronjob: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_cronjob_jobs(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<Vec<Job>, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    // Verify the cronjob exists
+    let cronjobs_api: Api<CronJob> = Api::namespaced(client.clone(), &namespace);
+    match cronjobs_api.get(&name).await {
+        Ok(_) => {},
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            return Err(format!("CronJob {}/{} not found", namespace, name));
+        }
+        Err(e) => return Err(format!("Failed to get cronjob: {}", e)),
+    }
+
+    // List all jobs in the namespace
+    let jobs_api: Api<Job> = Api::namespaced(client.clone(), &namespace);
+    let jobs = match jobs_api.list(&Default::default()).await {
+        Ok(job_list) => job_list.items,
+        Err(e) => return Err(format!("Failed to list jobs: {}", e)),
+    };
+
+    // Filter jobs by owner reference (jobs created by this cronjob)
+    let matching_jobs: Vec<Job> = jobs
+        .into_iter()
+        .filter(|job| {
+            if let Some(owner_refs) = job.metadata.owner_references.as_ref() {
+                owner_refs.iter().any(|owner| {
+                    owner.kind == "CronJob" && 
+                    owner.name == name &&
+                    owner.controller == Some(true)
+                })
+            } else {
+                false
+            }
+        })
+        .collect();
+
+    // Sort by creation timestamp (newest first)
+    let mut sorted_jobs = matching_jobs;
+    sorted_jobs.sort_by(|a, b| {
+        let time_a = a.metadata.creation_timestamp.as_ref()
+            .map(|ts| ts.0.timestamp())
+            .unwrap_or(0);
+        let time_b = b.metadata.creation_timestamp.as_ref()
+            .map(|ts| ts.0.timestamp())
+            .unwrap_or(0);
+        time_b.cmp(&time_a) // Reverse order (newest first)
+    });
+
+    Ok(sorted_jobs)
 }
 
 #[tauri::command]
@@ -1576,6 +1809,193 @@ pub async fn kuboard_restart_pod(
     }
 }
 
+// Delete Commands for All Resource Types
+#[tauri::command]
+pub async fn kuboard_delete_deployment(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Deleting deployment: {}/{}", namespace, name);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let deployments_api: Api<Deployment> = Api::namespaced(client.clone(), &namespace);
+    
+    match deployments_api.delete(&name, &DeleteParams::default()).await {
+        Ok(_) => {
+            info!("✅ Successfully deleted deployment: {}/{}", namespace, name);
+            Ok(format!("Deployment {}/{} deleted successfully", namespace, name))
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            warn!("Deployment {}/{} not found during delete - treating as already deleted", namespace, name);
+            Ok(format!("Deployment {}/{} not found (already deleted)", namespace, name))
+        }
+        Err(e) => {
+            error!("Failed to delete deployment {}/{}: {}", namespace, name, e);
+            Err(format!("Failed to delete deployment: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_delete_statefulset(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Deleting statefulset: {}/{}", namespace, name);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let statefulsets_api: Api<StatefulSet> = Api::namespaced(client.clone(), &namespace);
+    
+    match statefulsets_api.delete(&name, &DeleteParams::default()).await {
+        Ok(_) => {
+            info!("✅ Successfully deleted statefulset: {}/{}", namespace, name);
+            Ok(format!("StatefulSet {}/{} deleted successfully", namespace, name))
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            warn!("StatefulSet {}/{} not found during delete - treating as already deleted", namespace, name);
+            Ok(format!("StatefulSet {}/{} not found (already deleted)", namespace, name))
+        }
+        Err(e) => {
+            error!("Failed to delete statefulset {}/{}: {}", namespace, name, e);
+            Err(format!("Failed to delete statefulset: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_delete_daemonset(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Deleting daemonset: {}/{}", namespace, name);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let daemonsets_api: Api<DaemonSet> = Api::namespaced(client.clone(), &namespace);
+    
+    match daemonsets_api.delete(&name, &DeleteParams::default()).await {
+        Ok(_) => {
+            info!("✅ Successfully deleted daemonset: {}/{}", namespace, name);
+            Ok(format!("DaemonSet {}/{} deleted successfully", namespace, name))
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            warn!("DaemonSet {}/{} not found during delete - treating as already deleted", namespace, name);
+            Ok(format!("DaemonSet {}/{} not found (already deleted)", namespace, name))
+        }
+        Err(e) => {
+            error!("Failed to delete daemonset {}/{}: {}", namespace, name, e);
+            Err(format!("Failed to delete daemonset: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_delete_replicaset(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Deleting replicaset: {}/{}", namespace, name);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let replicasets_api: Api<ReplicaSet> = Api::namespaced(client.clone(), &namespace);
+    
+    match replicasets_api.delete(&name, &DeleteParams::default()).await {
+        Ok(_) => {
+            info!("✅ Successfully deleted replicaset: {}/{}", namespace, name);
+            Ok(format!("ReplicaSet {}/{} deleted successfully", namespace, name))
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            warn!("ReplicaSet {}/{} not found during delete - treating as already deleted", namespace, name);
+            Ok(format!("ReplicaSet {}/{} not found (already deleted)", namespace, name))
+        }
+        Err(e) => {
+            error!("Failed to delete replicaset {}/{}: {}", namespace, name, e);
+            Err(format!("Failed to delete replicaset: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_delete_service(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Deleting service: {}/{}", namespace, name);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let services_api: Api<Service> = Api::namespaced(client.clone(), &namespace);
+    
+    match services_api.delete(&name, &DeleteParams::default()).await {
+        Ok(_) => {
+            info!("✅ Successfully deleted service: {}/{}", namespace, name);
+            Ok(format!("Service {}/{} deleted successfully", namespace, name))
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            warn!("Service {}/{} not found during delete - treating as already deleted", namespace, name);
+            Ok(format!("Service {}/{} not found (already deleted)", namespace, name))
+        }
+        Err(e) => {
+            error!("Failed to delete service {}/{}: {}", namespace, name, e);
+            Err(format!("Failed to delete service: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_delete_cronjob(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Deleting cronjob: {}/{}", namespace, name);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let cronjobs_api: Api<CronJob> = Api::namespaced(client.clone(), &namespace);
+    
+    match cronjobs_api.delete(&name, &DeleteParams::default()).await {
+        Ok(_) => {
+            info!("✅ Successfully deleted cronjob: {}/{}", namespace, name);
+            Ok(format!("CronJob {}/{} deleted successfully", namespace, name))
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            warn!("CronJob {}/{} not found during delete - treating as already deleted", namespace, name);
+            Ok(format!("CronJob {}/{} not found (already deleted)", namespace, name))
+        }
+        Err(e) => {
+            error!("Failed to delete cronjob {}/{}: {}", namespace, name, e);
+            Err(format!("Failed to delete cronjob: {}", e))
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn kuboard_get_pod_yaml(
     pod_name: String,
@@ -1613,6 +2033,169 @@ pub async fn kuboard_get_pod_yaml(
             error!("Failed to get pod {}/{}: {}", namespace, pod_name, e);
             Err(format!("Failed to get pod: {}", e))
         }
+    }
+}
+
+// YAML Get Commands for All Resource Types
+#[tauri::command]
+pub async fn kuboard_get_deployment_yaml(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let deployments_api: Api<Deployment> = Api::namespaced(client.clone(), &namespace);
+    
+    match deployments_api.get(&name).await {
+        Ok(deployment) => {
+            match serde_json::to_string_pretty(&deployment) {
+                Ok(json) => Ok(json),
+                Err(e) => Err(format!("Failed to serialize deployment: {}", e))
+            }
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            Err(format!("Deployment {}/{} not found", namespace, name))
+        }
+        Err(e) => Err(format!("Failed to get deployment: {}", e))
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_statefulset_yaml(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let statefulsets_api: Api<StatefulSet> = Api::namespaced(client.clone(), &namespace);
+    
+    match statefulsets_api.get(&name).await {
+        Ok(statefulset) => {
+            match serde_json::to_string_pretty(&statefulset) {
+                Ok(json) => Ok(json),
+                Err(e) => Err(format!("Failed to serialize statefulset: {}", e))
+            }
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            Err(format!("StatefulSet {}/{} not found", namespace, name))
+        }
+        Err(e) => Err(format!("Failed to get statefulset: {}", e))
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_daemonset_yaml(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let daemonsets_api: Api<DaemonSet> = Api::namespaced(client.clone(), &namespace);
+    
+    match daemonsets_api.get(&name).await {
+        Ok(daemonset) => {
+            match serde_json::to_string_pretty(&daemonset) {
+                Ok(json) => Ok(json),
+                Err(e) => Err(format!("Failed to serialize daemonset: {}", e))
+            }
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            Err(format!("DaemonSet {}/{} not found", namespace, name))
+        }
+        Err(e) => Err(format!("Failed to get daemonset: {}", e))
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_replicaset_yaml(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let replicasets_api: Api<ReplicaSet> = Api::namespaced(client.clone(), &namespace);
+    
+    match replicasets_api.get(&name).await {
+        Ok(replicaset) => {
+            match serde_json::to_string_pretty(&replicaset) {
+                Ok(json) => Ok(json),
+                Err(e) => Err(format!("Failed to serialize replicaset: {}", e))
+            }
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            Err(format!("ReplicaSet {}/{} not found", namespace, name))
+        }
+        Err(e) => Err(format!("Failed to get replicaset: {}", e))
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_service_yaml(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let services_api: Api<Service> = Api::namespaced(client.clone(), &namespace);
+    
+    match services_api.get(&name).await {
+        Ok(service) => {
+            match serde_json::to_string_pretty(&service) {
+                Ok(json) => Ok(json),
+                Err(e) => Err(format!("Failed to serialize service: {}", e))
+            }
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            Err(format!("Service {}/{} not found", namespace, name))
+        }
+        Err(e) => Err(format!("Failed to get service: {}", e))
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_cronjob_yaml(
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let cronjobs_api: Api<CronJob> = Api::namespaced(client.clone(), &namespace);
+    
+    match cronjobs_api.get(&name).await {
+        Ok(cronjob) => {
+            match serde_json::to_string_pretty(&cronjob) {
+                Ok(json) => Ok(json),
+                Err(e) => Err(format!("Failed to serialize cronjob: {}", e))
+            }
+        }
+        Err(kube::Error::Api(e)) if e.code == 404 => {
+            Err(format!("CronJob {}/{} not found", namespace, name))
+        }
+        Err(e) => Err(format!("Failed to get cronjob: {}", e))
     }
 }
 
@@ -1710,6 +2293,258 @@ pub async fn kuboard_stop_pod_watch(
     
     info!("✅ Pod watch stopped");
     Ok("Pod watch stopped".to_string())
+}
+
+// Deployment Watch Commands
+#[tauri::command]
+pub async fn kuboard_start_deployment_watch(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Starting deployment watch");
+
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?
+        .clone();
+    drop(client_guard);
+
+    let mut watcher_guard = state.deployment_watcher.write().await;
+    
+    match watcher_guard.start(client, app).await {
+        Ok(_) => {
+            info!("✅ Deployment watch started successfully");
+            Ok("Deployment watch started".to_string())
+        }
+        Err(e) => {
+            error!("Failed to start deployment watch: {}", e);
+            Err(format!("Failed to start deployment watch: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_stop_deployment_watch(
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Stopping deployment watch");
+
+    let mut watcher_guard = state.deployment_watcher.write().await;
+    watcher_guard.stop();
+    
+    info!("✅ Deployment watch stopped");
+    Ok("Deployment watch stopped".to_string())
+}
+
+// StatefulSet Watch Commands
+#[tauri::command]
+pub async fn kuboard_start_statefulset_watch(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Starting statefulset watch");
+
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?
+        .clone();
+    drop(client_guard);
+
+    let mut watcher_guard = state.statefulset_watcher.write().await;
+    
+    match watcher_guard.start(client, app).await {
+        Ok(_) => {
+            info!("✅ StatefulSet watch started successfully");
+            Ok("StatefulSet watch started".to_string())
+        }
+        Err(e) => {
+            error!("Failed to start statefulset watch: {}", e);
+            Err(format!("Failed to start statefulset watch: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_stop_statefulset_watch(
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Stopping statefulset watch");
+
+    let mut watcher_guard = state.statefulset_watcher.write().await;
+    watcher_guard.stop();
+    
+    info!("✅ StatefulSet watch stopped");
+    Ok("StatefulSet watch stopped".to_string())
+}
+
+// DaemonSet Watch Commands
+#[tauri::command]
+pub async fn kuboard_start_daemonset_watch(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Starting daemonset watch");
+
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?
+        .clone();
+    drop(client_guard);
+
+    let mut watcher_guard = state.daemonset_watcher.write().await;
+    
+    match watcher_guard.start(client, app).await {
+        Ok(_) => {
+            info!("✅ DaemonSet watch started successfully");
+            Ok("DaemonSet watch started".to_string())
+        }
+        Err(e) => {
+            error!("Failed to start daemonset watch: {}", e);
+            Err(format!("Failed to start daemonset watch: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_stop_daemonset_watch(
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Stopping daemonset watch");
+
+    let mut watcher_guard = state.daemonset_watcher.write().await;
+    watcher_guard.stop();
+    
+    info!("✅ DaemonSet watch stopped");
+    Ok("DaemonSet watch stopped".to_string())
+}
+
+// ReplicaSet Watch Commands
+#[tauri::command]
+pub async fn kuboard_start_replicaset_watch(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Starting replicaset watch");
+
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?
+        .clone();
+    drop(client_guard);
+
+    let mut watcher_guard = state.replicaset_watcher.write().await;
+    
+    match watcher_guard.start(client, app).await {
+        Ok(_) => {
+            info!("✅ ReplicaSet watch started successfully");
+            Ok("ReplicaSet watch started".to_string())
+        }
+        Err(e) => {
+            error!("Failed to start replicaset watch: {}", e);
+            Err(format!("Failed to start replicaset watch: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_stop_replicaset_watch(
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Stopping replicaset watch");
+
+    let mut watcher_guard = state.replicaset_watcher.write().await;
+    watcher_guard.stop();
+    
+    info!("✅ ReplicaSet watch stopped");
+    Ok("ReplicaSet watch stopped".to_string())
+}
+
+// Service Watch Commands
+#[tauri::command]
+pub async fn kuboard_start_service_watch(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Starting service watch");
+
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?
+        .clone();
+    drop(client_guard);
+
+    let mut watcher_guard = state.service_watcher.write().await;
+    
+    match watcher_guard.start(client, app).await {
+        Ok(_) => {
+            info!("✅ Service watch started successfully");
+            Ok("Service watch started".to_string())
+        }
+        Err(e) => {
+            error!("Failed to start service watch: {}", e);
+            Err(format!("Failed to start service watch: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_stop_service_watch(
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Stopping service watch");
+
+    let mut watcher_guard = state.service_watcher.write().await;
+    watcher_guard.stop();
+    
+    info!("✅ Service watch stopped");
+    Ok("Service watch stopped".to_string())
+}
+
+// CronJob Watch Commands
+#[tauri::command]
+pub async fn kuboard_start_cronjob_watch(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Starting cronjob watch");
+
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?
+        .clone();
+    drop(client_guard);
+
+    let mut watcher_guard = state.cronjob_watcher.write().await;
+    
+    match watcher_guard.start(client, app).await {
+        Ok(_) => {
+            info!("✅ CronJob watch started successfully");
+            Ok("CronJob watch started".to_string())
+        }
+        Err(e) => {
+            error!("Failed to start cronjob watch: {}", e);
+            Err(format!("Failed to start cronjob watch: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_stop_cronjob_watch(
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Stopping cronjob watch");
+
+    let mut watcher_guard = state.cronjob_watcher.write().await;
+    watcher_guard.stop();
+    
+    info!("✅ CronJob watch stopped");
+    Ok("CronJob watch stopped".to_string())
 }
 
 // Resource Describe Commands

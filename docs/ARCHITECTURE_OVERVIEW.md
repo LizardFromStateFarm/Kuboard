@@ -11,11 +11,12 @@ This document provides a comprehensive overview of the Kuboard application archi
   - `types.rs` - Shared type definitions
   - `app_state.rs` - Application state management with async locks
 
-- **Frontend (SvelteKit):** Component-based architecture with 18 specialized components:
-  - Resource management: `PodsPanel`, `NodesTab`, `WorkloadsTab`, `ConfigTab`, `NetworkTab`, `CustomResourcesTab`
+- **Frontend (SvelteKit):** Component-based architecture with 25+ specialized components:
+  - Resource management: `PodsPanel`, `DeploymentsPanel`, `StatefulSetsPanel`, `DaemonSetsPanel`, `ReplicaSetsPanel`, `CronJobsPanel`, `NodesTab`, `WorkloadsTab`, `ConfigTab`, `NetworkTab`, `CustomResourcesTab`
+  - Detail views: `PodDetails`, `DeploymentDetails`, `StatefulSetDetails`, `DaemonSetDetails`, `ReplicaSetDetails`, `CronJobDetails`, `ServiceDetails`
   - Visualization: `MetricsGraph`, `DonutChart`, `ClusterMetrics`, `LogsWindow`
   - Layout: `Header`, `ClusterOverview`, `TabbedContent`, `ResourceTabs`, `ResourceOverview`
-  - Utilities: `ThemeSwitcher`, `PodDetails`, `QuickActionsMenu`
+  - Utilities: `ThemeSwitcher`, `QuickActionsMenu`
 
 - **Communication:** Tauri commands bridge frontend TypeScript and backend Rust
 - **State Management:** AppState with async RwLock for concurrent access
@@ -67,9 +68,20 @@ src/lib/components/
 ├── MetricsGraph.svelte        # Real-time resource usage graphs
 ├── TabbedContent.svelte       # Main tabbed interface container
 ├── ResourceTabs.svelte        # Tab navigation component
-├── WorkloadsTab.svelte         # Workloads management (pods, deployments, services)
+├── WorkloadsTab.svelte        # Workloads management (pods, deployments, services, etc.)
 ├── PodsPanel.svelte           # Advanced pod management with events and container metrics
 ├── PodDetails.svelte          # Detailed pod information display
+├── DeploymentsPanel.svelte    # Deployment management panel
+├── DeploymentDetails.svelte   # Detailed deployment information display
+├── StatefulSetsPanel.svelte   # StatefulSet management panel
+├── StatefulSetDetails.svelte  # Detailed StatefulSet information display
+├── DaemonSetsPanel.svelte     # DaemonSet management panel
+├── DaemonSetDetails.svelte    # Detailed DaemonSet information display
+├── ReplicaSetsPanel.svelte    # ReplicaSet management panel
+├── ReplicaSetDetails.svelte   # Detailed ReplicaSet information display
+├── CronJobsPanel.svelte      # CronJob management panel
+├── CronJobDetails.svelte      # Detailed CronJob information display
+├── ServiceDetails.svelte      # Detailed service information display
 ├── NodesTab.svelte            # Advanced node management and details
 ├── ConfigTab.svelte           # Configuration management (ConfigMaps, Secrets)
 ├── NetworkTab.svelte          # Network resources and services
@@ -138,10 +150,11 @@ src/lib/components/
 - Tab selection and events
 
 #### **WorkloadsTab Component**
-- Pods, Deployments, and Services management
+- Pods, Deployments, StatefulSets, DaemonSets, ReplicaSets, CronJobs, and Services management
 - Lazy loading of resource types
 - Detailed resource information display
 - Status filtering and sorting
+- Integration with all workload panel components
 
 #### **PodsPanel Component**
 - Advanced pod management with interactive selection
@@ -154,6 +167,117 @@ src/lib/components/
 - Accessibility features with keyboard navigation and proper ARIA roles
 - Integrated logs viewing with "View Logs" button for pod and container logs
 - Proper pod name extraction for unique tab identification
+
+#### **DeploymentsPanel Component**
+- Deployment management with search, filter, and sort functionality
+- Deployment list with replica status indicators
+- Click to view detailed deployment information
+- Quick actions menu integration (context menu)
+- Integration with DeploymentDetails component
+
+#### **DeploymentDetails Component**
+- Comprehensive deployment information display
+- Replica status (desired/current/ready/available)
+- ReplicaSet history with rollouts
+- Pod template viewer
+- Rolling update strategy display
+- Scale controls (input field + buttons)
+- Rollback functionality
+- List of managed pods
+- Restart deployment action
+- Quick actions menu integration
+- Collapsible sections for organization
+
+#### **StatefulSetsPanel Component**
+- StatefulSet management with search, filter, and sort functionality
+- StatefulSet list with replica status indicators
+- Click to view detailed StatefulSet information
+- Quick actions menu integration (context menu)
+- Integration with StatefulSetDetails component
+
+#### **StatefulSetDetails Component**
+- Comprehensive StatefulSet information display
+- Replica status (desired/current/ready/available)
+- Pod management policy (ordered/parallel)
+- Volume claim templates
+- Update strategy (rolling update, on delete)
+- Pod template viewer
+- Scale controls (input field + buttons)
+- List of managed pods (ordered by ordinal)
+- Pod naming pattern display
+- StatefulSet-specific actions (restart, scale, update)
+- Quick actions menu integration
+- Collapsible sections for organization
+
+#### **DaemonSetsPanel Component**
+- DaemonSet management with search, filter, and sort functionality
+- DaemonSet list with status indicators
+- Click to view detailed DaemonSet information
+- Quick actions menu integration (context menu)
+- Integration with DaemonSetDetails component
+- Empty state handling
+
+#### **DaemonSetDetails Component**
+- Comprehensive DaemonSet information display
+- Node status (desired/current/ready/available)
+- Update strategy (rolling update, on delete)
+- Pod template viewer
+- List of managed pods (one per node, sorted by node name)
+- Node selector and tolerations display
+- DaemonSet-specific actions (restart)
+- Quick actions menu integration
+- Collapsible sections for organization
+
+#### **ReplicaSetsPanel Component**
+- ReplicaSet management with search, filter, and sort functionality
+- ReplicaSet list with replica status indicators
+- Click to view detailed ReplicaSet information
+- Quick actions menu integration (context menu)
+- Integration with ReplicaSetDetails component
+
+#### **ReplicaSetDetails Component**
+- Comprehensive ReplicaSet information display
+- Replica status (desired/current/ready/available)
+- Pod template viewer
+- Pod selector and labels
+- List of managed pods
+- Owner reference (if owned by Deployment)
+- Scale controls (input field + buttons)
+- Pod creation/deletion history visualization
+- Quick actions menu integration
+- Collapsible sections for organization
+
+#### **CronJobsPanel Component**
+- CronJob management with search, filter, and sort functionality
+- CronJob list with schedule and status
+- Click to view detailed CronJob information
+- Quick actions menu integration (context menu)
+- Integration with CronJobDetails component
+
+#### **CronJobDetails Component**
+- Comprehensive CronJob information display
+- Schedule display (cron expression)
+- Concurrency policy
+- Suspend state
+- Active jobs list
+- Job history (last successful, last failed)
+- Next scheduled run time
+- Starting deadline seconds
+- CronJob-specific actions (suspend/resume, trigger, delete)
+- Quick actions menu integration
+- Collapsible sections for organization
+
+#### **ServiceDetails Component**
+- Comprehensive service information display
+- Service endpoints and associated pods
+- Port mappings (ports, protocols, target ports)
+- Selectors and labels
+- External IPs and load balancer status
+- Service type information
+- Session affinity settings
+- Port forward quick action (planned)
+- Quick actions menu integration
+- Collapsible sections for organization
 
 #### **NodesTab Component**
 - Advanced node management interface with simplified card-based layout
@@ -395,7 +519,18 @@ src-tauri/src/
 - `kuboard_get_namespaces` - Fetch all namespaces in the cluster
 - `kuboard_get_pods` - Fetch all pods in the cluster
 - `kuboard_get_deployments` - Fetch all deployments in the cluster
+- `kuboard_get_deployment` - Fetch single deployment by name and namespace
+- `kuboard_get_replicasets` - Fetch all ReplicaSets in the cluster
+- `kuboard_get_replicaset` - Fetch single ReplicaSet by name and namespace
+- `kuboard_get_statefulsets` - Fetch all StatefulSets in the cluster
+- `kuboard_get_statefulset` - Fetch single StatefulSet by name and namespace
+- `kuboard_get_daemonsets` - Fetch all DaemonSets in the cluster
+- `kuboard_get_daemonset` - Fetch single DaemonSet by name and namespace
+- `kuboard_get_cronjobs` - Fetch all CronJobs in the cluster
+- `kuboard_get_cronjob` - Fetch single CronJob by name and namespace
 - `kuboard_get_services` - Fetch all services in the cluster
+- `kuboard_get_service` - Fetch single service by name and namespace
+- `kuboard_get_service_endpoints` - Fetch service endpoints
 - `kuboard_get_configmaps` - Fetch all ConfigMaps in the cluster
 - `kuboard_get_secrets` - Fetch all Secrets in the cluster
 - `kuboard_get_custom_resources` - Fetch custom resources (CRDs) in the cluster
@@ -414,10 +549,63 @@ src-tauri/src/
 - `kuboard_restart_pod` - Restart a pod (delete for recreation by controller)
 - `kuboard_get_pod_yaml` - Get pod YAML/JSON representation
 - `kuboard_update_pod_from_yaml` - Update pod from YAML/JSON content
+- `kuboard_describe_pod` - Get pod describe output
+
+**Deployment Operations:**
+- `kuboard_scale_deployment` - Scale deployment to specified replica count
+- `kuboard_rollback_deployment` - Rollback deployment to previous revision
+- `kuboard_restart_deployment` - Restart deployment (rolling restart)
+- `kuboard_get_deployment_replicasets` - Get ReplicaSets managed by deployment
+- `kuboard_get_deployment_pods` - Get pods managed by deployment
+- `kuboard_delete_deployment` - Delete a deployment
+- `kuboard_get_deployment_yaml` - Get deployment YAML/JSON representation
+
+**StatefulSet Operations:**
+- `kuboard_scale_statefulset` - Scale StatefulSet to specified replica count
+- `kuboard_restart_statefulset` - Restart StatefulSet (rolling restart)
+- `kuboard_get_statefulset_pods` - Get pods managed by StatefulSet
+- `kuboard_delete_statefulset` - Delete a StatefulSet
+- `kuboard_get_statefulset_yaml` - Get StatefulSet YAML/JSON representation
+
+**DaemonSet Operations:**
+- `kuboard_restart_daemonset` - Restart DaemonSet (rolling restart)
+- `kuboard_get_daemonset_pods` - Get pods managed by DaemonSet
+- `kuboard_delete_daemonset` - Delete a DaemonSet
+- `kuboard_get_daemonset_yaml` - Get DaemonSet YAML/JSON representation
+
+**ReplicaSet Operations:**
+- `kuboard_scale_replicaset` - Scale ReplicaSet to specified replica count
+- `kuboard_get_replicaset_pods` - Get pods managed by ReplicaSet
+- `kuboard_delete_replicaset` - Delete a ReplicaSet
+- `kuboard_get_replicaset_yaml` - Get ReplicaSet YAML/JSON representation
+
+**CronJob Operations:**
+- `kuboard_trigger_cronjob` - Trigger CronJob immediately (create Job)
+- `kuboard_suspend_cronjob` - Suspend CronJob
+- `kuboard_resume_cronjob` - Resume CronJob
+- `kuboard_get_cronjob_jobs` - Get Jobs created by CronJob
+- `kuboard_delete_cronjob` - Delete a CronJob
+- `kuboard_get_cronjob_yaml` - Get CronJob YAML/JSON representation
+
+**Service Operations:**
+- `kuboard_delete_service` - Delete a service
+- `kuboard_get_service_yaml` - Get service YAML/JSON representation
 
 **Watch Operations:**
 - `kuboard_start_pod_watch` - Start watching pods for real-time updates
 - `kuboard_stop_pod_watch` - Stop pod watch
+- `kuboard_start_deployment_watch` - Start watching deployments for real-time updates
+- `kuboard_stop_deployment_watch` - Stop deployment watch
+- `kuboard_start_statefulset_watch` - Start watching StatefulSets for real-time updates
+- `kuboard_stop_statefulset_watch` - Stop StatefulSet watch
+- `kuboard_start_daemonset_watch` - Start watching DaemonSets for real-time updates
+- `kuboard_stop_daemonset_watch` - Stop DaemonSet watch
+- `kuboard_start_replicaset_watch` - Start watching ReplicaSets for real-time updates
+- `kuboard_stop_replicaset_watch` - Stop ReplicaSet watch
+- `kuboard_start_service_watch` - Start watching services for real-time updates
+- `kuboard_stop_service_watch` - Stop service watch
+- `kuboard_start_cronjob_watch` - Start watching CronJobs for real-time updates
+- `kuboard_stop_cronjob_watch` - Stop CronJob watch
 
 #### **Kubernetes Integration** (`kubernetes/mod.rs`)
 
@@ -508,17 +696,23 @@ src-tauri/src/
 
 ### **Function Categories Summary**
 
-**Total Functions:** ~35+ backend functions organized across 5 modules
+**Total Functions:** ~80+ backend functions organized across 5 modules
 
 1. **Context Management (3 functions):** List, set, get contexts
 2. **Cluster Operations (2 functions):** Overview and metrics calculation
-3. **Resource Management (8 functions):** Nodes, namespaces, pods, deployments, services, ConfigMaps, Secrets, CRDs
+3. **Resource Management (18 functions):** Nodes, namespaces, pods, deployments, StatefulSets, DaemonSets, ReplicaSets, CronJobs, services, ConfigMaps, Secrets, CRDs
 4. **Metrics Operations (5 functions):** Node/pod metrics (real-time and historical), availability checking
-5. **Pod Operations (6 functions):** Events, logs, delete, restart, YAML get/update
-6. **Watch Operations (2 functions):** Start/stop pod watch
-7. **Kubernetes Integration (4 functions):** Kubeconfig loading, client creation, cluster metrics, pod events/logs
-8. **Metrics Parsing (4 functions):** CPU/memory quantity parsing (public and internal)
-9. **Utility Functions (4 functions):** CPU/memory parsing and formatting
+5. **Pod Operations (7 functions):** Events, logs, delete, restart, YAML get/update, describe
+6. **Deployment Operations (7 functions):** Scale, rollback, restart, get ReplicaSets/pods, delete, get YAML
+7. **StatefulSet Operations (5 functions):** Scale, restart, get pods, delete, get YAML
+8. **DaemonSet Operations (4 functions):** Restart, get pods, delete, get YAML
+9. **ReplicaSet Operations (4 functions):** Scale, get pods, delete, get YAML
+10. **CronJob Operations (6 functions):** Trigger, suspend, resume, get jobs, delete, get YAML
+11. **Service Operations (3 functions):** Delete, get YAML, get endpoints
+12. **Watch Operations (12 functions):** Start/stop watch for pods, deployments, StatefulSets, DaemonSets, ReplicaSets, services, CronJobs
+13. **Kubernetes Integration (4 functions):** Kubeconfig loading, client creation, cluster metrics, pod events/logs
+14. **Metrics Parsing (4 functions):** CPU/memory quantity parsing (public and internal)
+15. **Utility Functions (4 functions):** CPU/memory parsing and formatting
 
 ### **Function Categories**
 

@@ -67,6 +67,12 @@ pub fn run() {
             commands::kuboard_get_daemonset,
             commands::kuboard_restart_daemonset,
             commands::kuboard_get_daemonset_pods,
+            commands::kuboard_get_cronjobs,
+            commands::kuboard_get_cronjob,
+            commands::kuboard_trigger_cronjob,
+            commands::kuboard_suspend_cronjob,
+            commands::kuboard_resume_cronjob,
+            commands::kuboard_get_cronjob_jobs,
             commands::kuboard_get_services,
             commands::kuboard_get_service,
             commands::kuboard_get_service_endpoints,
@@ -89,9 +95,49 @@ pub fn run() {
         commands::kuboard_get_pod_yaml,
         commands::kuboard_update_pod_from_yaml,
         
+        // Resource Delete Commands
+        commands::kuboard_delete_deployment,
+        commands::kuboard_delete_statefulset,
+        commands::kuboard_delete_daemonset,
+        commands::kuboard_delete_replicaset,
+        commands::kuboard_delete_service,
+        commands::kuboard_delete_cronjob,
+        
+        // Resource YAML Commands
+        commands::kuboard_get_deployment_yaml,
+        commands::kuboard_get_statefulset_yaml,
+        commands::kuboard_get_daemonset_yaml,
+        commands::kuboard_get_replicaset_yaml,
+        commands::kuboard_get_service_yaml,
+        commands::kuboard_get_cronjob_yaml,
+        
         // Pod Watch
         commands::kuboard_start_pod_watch,
         commands::kuboard_stop_pod_watch,
+        
+        // Deployment Watch
+        commands::kuboard_start_deployment_watch,
+        commands::kuboard_stop_deployment_watch,
+        
+        // StatefulSet Watch
+        commands::kuboard_start_statefulset_watch,
+        commands::kuboard_stop_statefulset_watch,
+        
+        // DaemonSet Watch
+        commands::kuboard_start_daemonset_watch,
+        commands::kuboard_stop_daemonset_watch,
+        
+        // ReplicaSet Watch
+        commands::kuboard_start_replicaset_watch,
+        commands::kuboard_stop_replicaset_watch,
+        
+        // Service Watch
+        commands::kuboard_start_service_watch,
+        commands::kuboard_stop_service_watch,
+        
+        // CronJob Watch
+        commands::kuboard_start_cronjob_watch,
+        commands::kuboard_stop_cronjob_watch,
         
         // Resource Describe
         commands::kuboard_describe_pod,

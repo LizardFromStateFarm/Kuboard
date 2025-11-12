@@ -184,28 +184,35 @@
     actionsMenuVisible = false;
   }
 
-  function handleAction(event: CustomEvent) {
-    const action = event.detail.action;
-    const resource = event.detail.resource;
+  function handleActionDeleted(event: CustomEvent) {
+    handleActionMenuClose();
+    onBack();
+  }
 
-    switch (action) {
-      case 'view-yaml':
-        openYamlViewer();
-        break;
-      case 'edit':
-        openYamlEditor();
-        break;
-      case 'copy-name':
-        copyToClipboard(daemonSet?.metadata?.name || '');
-        break;
-      case 'copy-namespace':
-        copyToClipboard(daemonSet?.metadata?.namespace || '');
-        break;
-      default:
-        console.log('Action not implemented:', action);
-    }
+  function handleActionRestarted(event: CustomEvent) {
+    handleActionMenuClose();
+    loadDaemonSetDetails();
+  }
+
+  function handleViewYaml(event: CustomEvent) {
+    console.log('handleViewYaml called', event.detail);
+    yamlContent = event.detail.yaml;
+    yamlViewerVisible = true;
     handleActionMenuClose();
   }
+
+  function handleActionEdit(event: CustomEvent) {
+    console.log('handleActionEdit called', event.detail);
+    yamlEditorContent = event.detail.yaml;
+    yamlEditorVisible = true;
+    yamlEditorError = null;
+    handleActionMenuClose();
+  }
+
+  function handleActionCopied(event: CustomEvent) {
+    console.log('Copied:', event.detail.type, event.detail.value);
+  }
+
 
   async function openYamlViewer() {
     if (!daemonSet?.metadata?.name || !daemonSet?.metadata?.namespace) return;
@@ -616,16 +623,19 @@
   {/if}
 </div>
 
-{#if actionsMenuVisible}
-  <QuickActionsMenu
-    x={actionsMenuPosition.x}
-    y={actionsMenuPosition.y}
-    resource={daemonSet}
-    resourceType="daemonset"
-    on:action={handleAction}
-    on:close={handleActionMenuClose}
-  />
-{/if}
+<QuickActionsMenu
+  x={actionsMenuPosition.x}
+  y={actionsMenuPosition.y}
+  resource={daemonSetDetails || daemonSet}
+  resourceType="daemonset"
+  bind:visible={actionsMenuVisible}
+  on:close={handleActionMenuClose}
+  on:deleted={handleActionDeleted}
+  on:restarted={handleActionRestarted}
+  on:view-yaml={handleViewYaml}
+  on:edit={handleActionEdit}
+  on:copied={handleActionCopied}
+/>
 
 <!-- YAML Viewer/Editor modals - reuse ServiceDetails styles -->
 {#if yamlViewerVisible}

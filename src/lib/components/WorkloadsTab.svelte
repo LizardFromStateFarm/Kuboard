@@ -7,6 +7,7 @@
   import DeploymentsPanel from './DeploymentsPanel.svelte';
   import StatefulSetsPanel from './StatefulSetsPanel.svelte';
   import DaemonSetsPanel from './DaemonSetsPanel.svelte';
+  import CronJobsPanel from './CronJobsPanel.svelte';
 
   // Props
   export let currentContext: any = null;
@@ -18,6 +19,7 @@
   let replicasets: any[] = [];
   let statefulsets: any[] = [];
   let daemonsets: any[] = [];
+  let cronjobs: any[] = [];
   
   let loading: boolean = false;
   let error: string | null = null;
@@ -31,16 +33,28 @@
     { id: 'deployments', label: 'Deployments', icon: '📦', description: 'Deployment controllers' },
     { id: 'statefulsets', label: 'StatefulSets', icon: '📋', description: 'StatefulSet controllers' },
     { id: 'daemonsets', label: 'DaemonSets', icon: '⚙️', description: 'DaemonSet controllers' },
+    { id: 'cronjobs', label: 'CronJobs', icon: '⏰', description: 'Scheduled jobs' },
     { id: 'replicasets', label: 'ReplicaSets', icon: '🔄', description: 'ReplicaSet controllers' },
     { id: 'services', label: 'Services', icon: '🌐', description: 'Network services' }
   ];
 
   // Load specific workload type
   async function loadWorkloadType(type: string, forceReload: boolean = false) {
-    if (!currentContext) return;
-    if (loading && !forceReload) return;
-    if (loadedTypes.has(type) && !forceReload) return;
+    console.log(`loadWorkloadType called: type=${type}, forceReload=${forceReload}`);
+    if (!currentContext) {
+      console.log('No current context, returning');
+      return;
+    }
+    if (loading && !forceReload) {
+      console.log('Already loading and not force reload, returning');
+      return;
+    }
+    if (loadedTypes.has(type) && !forceReload) {
+      console.log(`Type ${type} already loaded and not force reload, returning`);
+      return;
+    }
     
+    console.log(`Loading ${type}...`);
     loading = true;
     error = null;
     
@@ -54,7 +68,20 @@
           break;
         case 'deployments':
           data = await invoke('kuboard_get_deployments');
-          deployments = Array.isArray(data) ? data : [];
+          const newDeployments = Array.isArray(data) ? [...data] : [];
+          console.log(`Updating deployments: ${deployments.length} -> ${newDeployments.length}`);
+          if (newDeployments.length > 0) {
+            console.log('Sample deployment status:', {
+              name: newDeployments[0].metadata?.name,
+              ready: newDeployments[0].status?.readyReplicas,
+              desired: newDeployments[0].spec?.replicas,
+              available: newDeployments[0].status?.availableReplicas
+            });
+          }
+          // Force new array reference to trigger reactivity
+          deployments = newDeployments;
+          deployments = [...deployments]; // Double assignment to ensure reactivity
+          console.log('Deployments array updated, triggering reactivity');
           break;
         case 'replicasets':
           data = await invoke('kuboard_get_replicasets');
@@ -68,6 +95,10 @@
           data = await invoke('kuboard_get_daemonsets');
           daemonsets = Array.isArray(data) ? data : [];
           break;
+        case 'cronjobs':
+          data = await invoke('kuboard_get_cronjobs');
+          cronjobs = Array.isArray(data) ? data : [];
+          break;
         case 'services':
           data = await invoke('kuboard_get_services');
           services = Array.isArray(data) ? data : [];
@@ -79,6 +110,7 @@
       
       loadedTypes.add(type);
       lastUpdate = new Date().toLocaleTimeString();
+      console.log(`Successfully loaded ${type}, count:`, getWorkloadCount(type));
     } catch (err) {
       error = err as string;
       console.error(`Failed to load ${type}:`, err);
@@ -86,6 +118,7 @@
       loadedTypes.delete(type);
     } finally {
       loading = false;
+      console.log(`Finished loading ${type}`);
     }
   }
 
@@ -109,6 +142,7 @@
       case 'deployments': return deployments;
       case 'statefulsets': return statefulsets;
       case 'daemonsets': return daemonsets;
+      case 'cronjobs': return cronjobs;
       case 'replicasets': return replicasets;
       case 'services': return services;
       default: return [];
@@ -122,6 +156,7 @@
       case 'deployments': return deployments.length;
       case 'statefulsets': return statefulsets.length;
       case 'daemonsets': return daemonsets.length;
+      case 'cronjobs': return cronjobs.length;
       case 'replicasets': return replicasets.length;
       case 'services': return services.length;
       default: return 0;
@@ -285,6 +320,8 @@
                 ({statefulsets.length})
               {:else if selectedWorkloadType === 'daemonsets'}
                 ({daemonsets.length})
+              {:else if selectedWorkloadType === 'cronjobs'}
+                ({cronjobs.length})
               {:else if selectedWorkloadType === 'replicasets'}
                 ({replicasets.length})
               {:else if selectedWorkloadType === 'services'}
@@ -308,6 +345,10 @@
         <DeploymentsPanel 
           currentContext={currentContext} 
           deployments={deployments}
+          on:reload={() => {
+            console.log('WorkloadsTab: reload event received for deployments');
+            loadWorkloadType('deployments', true);
+          }}
         />
 
       {:else if selectedWorkloadType === 'replicasets'}
@@ -322,6 +363,7 @@
         <StatefulSetsPanel 
           currentContext={currentContext} 
           statefulsets={statefulsets}
+          on:reload={() => loadWorkloadType('statefulsets', true)}
         />
 
       {:else if selectedWorkloadType === 'daemonsets'}
@@ -329,6 +371,14 @@
         <DaemonSetsPanel 
           currentContext={currentContext} 
           daemonsets={daemonsets}
+          on:reload={() => loadWorkloadType('daemonsets', true)}
+        />
+
+      {:else if selectedWorkloadType === 'cronjobs'}
+        <!-- CronJobs Panel -->
+        <CronJobsPanel 
+          currentContext={currentContext} 
+          cronjobs={cronjobs}
         />
 
       {:else if selectedWorkloadType === 'services'}

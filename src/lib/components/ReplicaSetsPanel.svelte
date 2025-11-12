@@ -24,6 +24,14 @@
   let contextMenuVisible = false;
   let contextMenuPosition = { x: 0, y: 0 };
   let contextMenuReplicaSet: any = null;
+  
+  // YAML Viewer/Editor state
+  let yamlViewerVisible = false;
+  let yamlContent = '';
+  let yamlEditorVisible = false;
+  let yamlEditorContent = '';
+  let yamlEditorLoading = false;
+  let yamlEditorError: string | null = null;
 
   function handleContextMenu(event: MouseEvent, rs: any) {
     event.preventDefault();
@@ -40,6 +48,59 @@
 
   function handleActionDeleted(event: CustomEvent) {
     // Reload replicasets would be needed
+    handleActionMenuClose();
+  }
+
+  function handleViewYaml(event: any) {
+    console.log('handleViewYaml called in ReplicaSetsPanel', event);
+    yamlContent = event.detail?.yaml || '';
+    yamlViewerVisible = true;
+  }
+
+  function closeYamlViewer() {
+    yamlViewerVisible = false;
+    yamlContent = '';
+    handleActionMenuClose();
+  }
+
+  function handleActionEdit(event: any) {
+    console.log('handleActionEdit called in ReplicaSetsPanel', event);
+    yamlEditorContent = event.detail?.yaml || '';
+    yamlEditorVisible = true;
+    yamlEditorError = null;
+  }
+
+  function closeYamlEditor() {
+    yamlEditorVisible = false;
+    yamlEditorContent = '';
+    yamlEditorError = null;
+    handleActionMenuClose();
+  }
+
+  async function saveYaml() {
+    if (!contextMenuReplicaSet?.metadata?.name || !contextMenuReplicaSet?.metadata?.namespace) return;
+    
+    yamlEditorLoading = true;
+    yamlEditorError = null;
+    
+    try {
+      const parsed = JSON.parse(yamlEditorContent);
+      await invoke('kuboard_update_replicaset', {
+        name: contextMenuReplicaSet.metadata.name,
+        namespace: contextMenuReplicaSet.metadata.namespace,
+        replicaset: parsed
+      });
+      closeYamlEditor();
+    } catch (err: any) {
+      yamlEditorError = err?.toString() || 'Failed to save YAML';
+      console.error('Failed to save YAML:', err);
+    } finally {
+      yamlEditorLoading = false;
+    }
+  }
+
+  function handleActionCopied(event: CustomEvent) {
+    console.log('Copied:', event.detail.type, event.detail.value);
     handleActionMenuClose();
   }
 
@@ -302,15 +363,76 @@
   </div>
 
   <!-- Quick Actions Menu -->
-  {#if contextMenuVisible && contextMenuReplicaSet}
+  {#if contextMenuReplicaSet}
     <QuickActionsMenu
       x={contextMenuPosition.x}
       y={contextMenuPosition.y}
       resource={contextMenuReplicaSet}
       resourceType="replicaset"
+      bind:visible={contextMenuVisible}
       on:close={handleActionMenuClose}
       on:deleted={handleActionDeleted}
+      on:view-yaml={handleViewYaml}
+      on:edit={handleActionEdit}
+      on:copied={handleActionCopied}
     />
+  {/if}
+
+  <!-- YAML Viewer Modal -->
+  {#if yamlViewerVisible}
+    <div class="yaml-viewer-modal" onclick={closeYamlViewer}>
+      <div class="yaml-viewer-content" onclick={(e) => e.stopPropagation()}>
+        <div class="yaml-viewer-header">
+          <h3>ReplicaSet YAML: {contextMenuReplicaSet?.metadata?.name}</h3>
+          <button class="yaml-viewer-close" onclick={closeYamlViewer}>✕</button>
+        </div>
+        <div class="yaml-viewer-body">
+          <pre><code>{yamlContent}</code></pre>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- YAML Editor Modal -->
+  {#if yamlEditorVisible}
+    <div class="yaml-viewer-modal" onclick={closeYamlEditor}>
+      <div class="yaml-viewer-content yaml-editor-content" onclick={(e) => e.stopPropagation()}>
+        <div class="yaml-viewer-header">
+          <h3>Edit ReplicaSet YAML</h3>
+          <button class="yaml-viewer-close" onclick={closeYamlEditor} disabled={yamlEditorLoading}>✕</button>
+        </div>
+        <div class="yaml-editor-body">
+          {#if yamlEditorError}
+            <div class="yaml-editor-error">
+              <span class="error-icon">⚠️</span>
+              <span class="error-text">{yamlEditorError}</span>
+            </div>
+          {/if}
+          <textarea
+            class="yaml-editor-textarea"
+            bind:value={yamlEditorContent}
+            disabled={yamlEditorLoading}
+            placeholder="Edit YAML content here..."
+          ></textarea>
+        </div>
+        <div class="yaml-editor-footer">
+          <button 
+            class="yaml-editor-button yaml-editor-cancel" 
+            onclick={closeYamlEditor}
+            disabled={yamlEditorLoading}
+          >
+            Cancel
+          </button>
+          <button 
+            class="yaml-editor-button yaml-editor-save" 
+            onclick={saveYaml}
+            disabled={yamlEditorLoading || !yamlEditorContent.trim()}
+          >
+            {yamlEditorLoading ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
   {/if}
 {/if}
 
@@ -558,6 +680,195 @@
   .action-button:hover {
     background: rgba(255, 255, 255, 0.1);
     color: var(--text-primary);
+  }
+
+  /* YAML Viewer/Editor Styles */
+  .yaml-viewer-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10001;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .yaml-viewer-content {
+    background: var(--bg-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    width: 90%;
+    max-width: 900px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .yaml-viewer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .yaml-viewer-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  .yaml-viewer-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 1.2rem;
+    line-height: 1;
+    transition: all 0.2s;
+  }
+
+  .yaml-viewer-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+  }
+
+  .yaml-viewer-body {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+  }
+
+  .yaml-viewer-body pre {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .yaml-viewer-body code {
+    color: var(--text-primary);
+  }
+
+  .yaml-editor-content {
+    display: flex;
+    flex-direction: column;
+    height: 90vh;
+  }
+
+  .yaml-editor-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 20px;
+  }
+
+  .yaml-editor-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 6px;
+    color: #ef4444;
+    font-size: 0.9rem;
+  }
+
+  .yaml-editor-error .error-icon {
+    font-size: 1.2rem;
+  }
+
+  .yaml-editor-error .error-text {
+    flex: 1;
+  }
+
+  .yaml-editor-textarea {
+    flex: 1;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    resize: none;
+    outline: none;
+    overflow-y: auto;
+    white-space: pre;
+    tab-size: 2;
+  }
+
+  .yaml-editor-textarea:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  }
+
+  .yaml-editor-textarea:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .yaml-editor-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .yaml-editor-button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .yaml-editor-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .yaml-editor-cancel {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+  }
+
+  .yaml-editor-cancel:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .yaml-editor-save {
+    background: var(--primary-color);
+    color: white;
+  }
+
+  .yaml-editor-save:hover:not(:disabled) {
+    background: var(--primary-color-hover);
   }
 </style>
 

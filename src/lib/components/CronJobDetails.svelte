@@ -3,21 +3,21 @@
   import { invoke } from '@tauri-apps/api/core';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
 
-  export let replicaSet: any;
+  export let cronJob: any;
   export let onBack: () => void;
 
-  let replicaSetDetails: any = null;
-  let managedPods: any[] = [];
+  let cronJobDetails: any = null;
+  let managedJobs: any[] = [];
   let loading = false;
   let error: string | null = null;
-  let podsLoading = false;
-  let podsError: string | null = null;
-  let scaleLoading = false;
-  let scaleError: string | null = null;
-
-  // Scale state
-  let scaleValue: number = 0;
-  let showScaleInput = false;
+  let jobsLoading = false;
+  let jobsError: string | null = null;
+  let suspendLoading = false;
+  let suspendError: string | null = null;
+  let resumeLoading = false;
+  let resumeError: string | null = null;
+  let triggerLoading = false;
+  let triggerError: string | null = null;
 
   // Quick Actions Menu state
   let actionsMenuVisible = false;
@@ -31,7 +31,9 @@
 
   // Section collapse state
   let sectionsCollapsed = {
-    pods: false,
+    jobs: false,
+    schedule: true,
+    conditions: true,
     selectors: true,
     labels: true,
     yaml: true
@@ -67,31 +69,49 @@
     return 'N/A';
   }
 
-  function getReplicaStatus(rs: any): string {
-    const desired = rs.spec?.replicas || 0;
-    const ready = rs.status?.readyReplicas || 0;
-    const current = rs.status?.replicas || 0;
+  function getCronJobStatus(cj: any): string {
+    const suspended = cj.spec?.suspend || false;
+    if (suspended) return 'Suspended';
     
-    if (ready === desired && current === desired) return 'Ready';
-    if (current < desired) return 'Scaling';
-    if (ready < desired) return 'Not Ready';
+    const active = cj.status?.active?.length || 0;
+    const lastScheduleTime = cj.status?.lastScheduleTime;
+    const lastSuccessfulTime = cj.status?.lastSuccessfulTime;
+    
+    if (active > 0) return 'Running';
+    if (lastSuccessfulTime) return 'Ready';
+    if (lastScheduleTime) return 'Scheduled';
     return 'Unknown';
   }
 
   function getStatusClass(status: string): string {
     switch (status?.toLowerCase()) {
       case 'ready': return 'ready';
-      case 'scaling': return 'pending';
-      case 'not ready': return 'failed';
+      case 'running': return 'running';
+      case 'scheduled': return 'pending';
+      case 'suspended': return 'failed';
       default: return 'unknown';
     }
   }
 
-  function getOwnerReference(rs: any): { type: string; name: string } | null {
-    const ownerRefs = rs.metadata?.ownerReferences || [];
-    if (ownerRefs.length === 0) return null;
-    const owner = ownerRefs[0];
-    return { type: owner.kind || 'Unknown', name: owner.name || 'Unknown' };
+  function getSchedule(cj: any): string {
+    return cj.spec?.schedule || 'Not set';
+  }
+
+  function getConcurrencyPolicy(cj: any): string {
+    return cj.spec?.concurrencyPolicy || 'Allow';
+  }
+
+  function getSuspendState(cj: any): boolean {
+    return cj.spec?.suspend || false;
+  }
+
+  function formatNextScheduleTime(cj: any): string {
+    // Calculate next schedule time from cron expression
+    // For now, just show if scheduled
+    if (cj.status?.lastScheduleTime) {
+      return 'Scheduled';
+    }
+    return 'Not scheduled';
   }
 
   function getPodStatusClass(status: string): string {
@@ -105,74 +125,113 @@
     }
   }
 
-  async function loadReplicaSetDetails() {
-    if (!replicaSet?.metadata?.name || !replicaSet?.metadata?.namespace) return;
+  async function loadCronJobDetails() {
+    if (!cronJob?.metadata?.name || !cronJob?.metadata?.namespace) return;
     
     loading = true;
     error = null;
     
     try {
-      const rsData = await invoke('kuboard_get_replicaset', {
-        name: replicaSet.metadata.name,
-        namespace: replicaSet.metadata.namespace
+      const cjData = await invoke('kuboard_get_cronjob', {
+        name: cronJob.metadata.name,
+        namespace: cronJob.metadata.namespace
       }).catch(() => null);
       
-      replicaSetDetails = rsData || replicaSet;
-      scaleValue = replicaSetDetails.spec?.replicas || 0;
+      cronJobDetails = cjData || cronJob;
       
-      // Load managed pods
-      await loadManagedPods();
+      // Load managed jobs
+      await loadManagedJobs();
     } catch (err) {
       error = String(err);
-      replicaSetDetails = replicaSet; // Fallback to passed replicaSet
-      scaleValue = replicaSet.spec?.replicas || 0;
+      cronJobDetails = cronJob; // Fallback to passed cronJob
     } finally {
       loading = false;
     }
   }
 
-  async function loadManagedPods() {
-    if (!replicaSet?.metadata?.name || !replicaSet?.metadata?.namespace) return;
+  async function loadManagedJobs() {
+    if (!cronJob?.metadata?.name || !cronJob?.metadata?.namespace) return;
     
-    podsLoading = true;
-    podsError = null;
+    jobsLoading = true;
+    jobsError = null;
     
     try {
-      const pods = await invoke('kuboard_get_replicaset_pods', {
-        name: replicaSet.metadata.name,
-        namespace: replicaSet.metadata.namespace
+      const jobs = await invoke('kuboard_get_cronjob_jobs', {
+        name: cronJob.metadata.name,
+        namespace: cronJob.metadata.namespace
       });
-      managedPods = Array.isArray(pods) ? pods : [];
+      managedJobs = Array.isArray(jobs) ? jobs : [];
     } catch (err) {
-      podsError = String(err);
-      managedPods = [];
+      jobsError = String(err);
+      managedJobs = [];
     } finally {
-      podsLoading = false;
+      jobsLoading = false;
     }
   }
 
-  async function scaleReplicaSet() {
-    if (!replicaSet?.metadata?.name || !replicaSet?.metadata?.namespace) return;
-    if (scaleValue < 0) return;
+  async function suspendCronJob() {
+    if (!cronJob?.metadata?.name || !cronJob?.metadata?.namespace) return;
     
-    scaleLoading = true;
-    scaleError = null;
+    suspendLoading = true;
+    suspendError = null;
     
     try {
-      await invoke('kuboard_scale_replicaset', {
-        name: replicaSet.metadata.name,
-        namespace: replicaSet.metadata.namespace,
-        replicas: scaleValue
+      await invoke('kuboard_suspend_cronjob', {
+        name: cronJob.metadata.name,
+        namespace: cronJob.metadata.namespace
       });
       
       // Reload details
-      await loadReplicaSetDetails();
-      showScaleInput = false;
+      await loadCronJobDetails();
     } catch (err) {
-      scaleError = String(err);
-      console.error('Failed to scale replicaset:', err);
+      suspendError = String(err);
+      console.error('Failed to suspend cronjob:', err);
     } finally {
-      scaleLoading = false;
+      suspendLoading = false;
+    }
+  }
+
+  async function resumeCronJob() {
+    if (!cronJob?.metadata?.name || !cronJob?.metadata?.namespace) return;
+    
+    resumeLoading = true;
+    resumeError = null;
+    
+    try {
+      await invoke('kuboard_resume_cronjob', {
+        name: cronJob.metadata.name,
+        namespace: cronJob.metadata.namespace
+      });
+      
+      // Reload details
+      await loadCronJobDetails();
+    } catch (err) {
+      resumeError = String(err);
+      console.error('Failed to resume cronjob:', err);
+    } finally {
+      resumeLoading = false;
+    }
+  }
+
+  async function triggerCronJob() {
+    if (!cronJob?.metadata?.name || !cronJob?.metadata?.namespace) return;
+    
+    triggerLoading = true;
+    triggerError = null;
+    
+    try {
+      await invoke('kuboard_trigger_cronjob', {
+        name: cronJob.metadata.name,
+        namespace: cronJob.metadata.namespace
+      });
+      
+      // Reload details to show the new job
+      await loadCronJobDetails();
+    } catch (err) {
+      triggerError = String(err);
+      console.error('Failed to trigger cronjob:', err);
+    } finally {
+      triggerLoading = false;
     }
   }
 
@@ -188,6 +247,21 @@
   function handleActionDeleted(event: CustomEvent) {
     handleActionMenuClose();
     onBack();
+  }
+
+  function handleActionSuspended(event: CustomEvent) {
+    handleActionMenuClose();
+    loadCronJobDetails();
+  }
+
+  function handleActionResumed(event: CustomEvent) {
+    handleActionMenuClose();
+    loadCronJobDetails();
+  }
+
+  function handleActionTriggered(event: CustomEvent) {
+    handleActionMenuClose();
+    loadCronJobDetails();
   }
 
   function handleViewYaml(event: CustomEvent) {
@@ -210,10 +284,10 @@
   }
 
   async function openYamlViewer() {
-    if (!replicaSet?.metadata?.name || !replicaSet?.metadata?.namespace) return;
+    if (!cronJob?.metadata?.name || !cronJob?.metadata?.namespace) return;
     
     try {
-      yamlContent = JSON.stringify(replicaSetDetails || replicaSet, null, 2);
+      yamlContent = JSON.stringify(cronJobDetails || cronJob, null, 2);
       yamlViewerVisible = true;
     } catch (err) {
       console.error('Failed to load YAML:', err);
@@ -227,7 +301,7 @@
   }
 
   function openYamlEditor() {
-    yamlEditorContent = JSON.stringify(replicaSetDetails || replicaSet, null, 2);
+    yamlEditorContent = JSON.stringify(cronJobDetails || cronJob, null, 2);
     yamlEditorVisible = true;
     yamlEditorError = null;
   }
@@ -240,64 +314,65 @@
   }
 
   async function saveYaml() {
-    if (!replicaSet?.metadata?.name || !replicaSet?.metadata?.namespace) return;
+    if (!cronJob?.metadata?.name || !cronJob?.metadata?.namespace) return;
     
     yamlEditorLoading = true;
     yamlEditorError = null;
     
     try {
-      // TODO: Implement replicaset update command
-      alert('ReplicaSet update not yet implemented. Please use kubectl.');
+      // TODO: Implement cronjob update command
+      alert('CronJob update not yet implemented. Please use kubectl.');
       closeYamlEditor();
     } catch (error: any) {
       yamlEditorError = String(error);
-      console.error('Failed to update replicaset:', error);
+      console.error('Failed to update cronjob:', error);
     } finally {
       yamlEditorLoading = false;
     }
   }
 
   onMount(() => {
-    loadReplicaSetDetails();
+    loadCronJobDetails();
   });
 </script>
 
 <div class="full-details-view">
   <div class="details-header">
     <div class="header-left">
-      <button class="back-button" onclick={onBack}>← Back to ReplicaSets</button>
+      <button class="back-button" onclick={onBack}>← Back to CronJobs</button>
       <button class="actions-button" onclick={openActionsMenu}>⚙️ Actions</button>
     </div>
     <div class="header-right">
-      <h3>{replicaSet?.metadata?.name}</h3>
-      <span class="replicaset-namespace">({replicaSet?.metadata?.namespace})</span>
+      <h3>{cronJob?.metadata?.name}</h3>
+      <span class="cronjob-namespace">({cronJob?.metadata?.namespace})</span>
     </div>
   </div>
 
   {#if loading}
     <div class="loading-message">
       <div class="loading-spinner">⏳</div>
-      <p>Loading ReplicaSet details...</p>
+      <p>Loading CronJob details...</p>
     </div>
   {:else if error}
     <div class="error-message">
       <div class="error-icon">⚠️</div>
       <div class="error-content">
-        <h5>Failed to load ReplicaSet details</h5>
+        <h5>Failed to load CronJob details</h5>
         <p>{error}</p>
-        <button class="retry-button" onclick={loadReplicaSetDetails}>Retry</button>
+        <button class="retry-button" onclick={loadCronJobDetails}>Retry</button>
       </div>
     </div>
   {:else}
-    {@const rs = replicaSetDetails || replicaSet}
-    {@const status = getReplicaStatus(rs)}
-    {@const desired = rs.spec?.replicas || 0}
-    {@const ready = rs.status?.readyReplicas || 0}
-    {@const current = rs.status?.replicas || 0}
-    {@const available = rs.status?.availableReplicas || 0}
-    {@const owner = getOwnerReference(rs)}
+    {@const cj = cronJobDetails || cronJob}
+    {@const status = getCronJobStatus(cj)}
+    {@const schedule = getSchedule(cj)}
+    {@const suspended = getSuspendState(cj)}
+    {@const activeJobs = cj.status?.active?.length || 0}
+    {@const lastScheduleTime = cj.status?.lastScheduleTime}
+    {@const lastSuccessfulTime = cj.status?.lastSuccessfulTime}
+    {@const concurrencyPolicy = getConcurrencyPolicy(cj)}
     
-    <div class="replicaset-details-content">
+    <div class="cronjob-details-content">
       <div class="details-section">
         <h6>Basic Information</h6>
         <div class="info-grid">
@@ -308,122 +383,192 @@
             </div>
           </div>
           <div class="info-item">
-            <span class="info-label">Desired Replicas:</span>
+            <span class="info-label">Schedule:</span>
             <div class="info-value-container">
-              <span class="info-value">{desired}</span>
+              <span class="info-value">{schedule}</span>
             </div>
           </div>
           <div class="info-item">
-            <span class="info-label">Ready Replicas:</span>
+            <span class="info-label">Suspended:</span>
             <div class="info-value-container">
-              <span class="info-value">{ready}</span>
+              <span class="info-value">{suspended ? 'Yes' : 'No'}</span>
             </div>
           </div>
           <div class="info-item">
-            <span class="info-label">Current Replicas:</span>
+            <span class="info-label">Active Jobs:</span>
             <div class="info-value-container">
-              <span class="info-value">{current}</span>
+              <span class="info-value">{activeJobs}</span>
             </div>
           </div>
           <div class="info-item">
-            <span class="info-label">Available Replicas:</span>
+            <span class="info-label">Concurrency Policy:</span>
             <div class="info-value-container">
-              <span class="info-value">{available}</span>
+              <span class="info-value">{concurrencyPolicy}</span>
             </div>
           </div>
-          {#if owner}
-            <div class="info-item">
-              <span class="info-label">Owner:</span>
-              <div class="info-value-container">
-                <span class="info-value">{owner.type}/{owner.name}</span>
-              </div>
+          <div class="info-item">
+            <span class="info-label">Last Scheduled:</span>
+            <div class="info-value-container">
+              <span class="info-value" title={lastScheduleTime}>{lastScheduleTime ? formatAge(lastScheduleTime) : 'Never'}</span>
             </div>
-          {/if}
+          </div>
+          <div class="info-item">
+            <span class="info-label">Last Successful:</span>
+            <div class="info-value-container">
+              <span class="info-value" title={lastSuccessfulTime}>{lastSuccessfulTime ? formatAge(lastSuccessfulTime) : 'Never'}</span>
+            </div>
+          </div>
           <div class="info-item">
             <span class="info-label">Age:</span>
             <div class="info-value-container">
-              <span class="info-value" title={rs.metadata?.creationTimestamp}>{formatAge(rs.metadata?.creationTimestamp)}</span>
-              <button class="copy-button" onclick={() => copyToClipboard(rs.metadata?.creationTimestamp || '')}>📋</button>
+              <span class="info-value" title={cj.metadata?.creationTimestamp}>{formatAge(cj.metadata?.creationTimestamp)}</span>
+              <button class="copy-button" onclick={() => copyToClipboard(cj.metadata?.creationTimestamp || '')}>📋</button>
             </div>
           </div>
         </div>
       </div>
 
       <div class="details-section">
-        <h6>Scale Controls</h6>
-        {#if showScaleInput}
-          <div class="scale-controls">
-            <div class="scale-input-group">
-              <label for="scale-input">Desired Replicas:</label>
-              <input
-                id="scale-input"
-                type="number"
-                min="0"
-                bind:value={scaleValue}
-                class="scale-input"
-                disabled={scaleLoading}
-              />
-              <button class="scale-button" onclick={scaleReplicaSet} disabled={scaleLoading}>
-                {scaleLoading ? 'Scaling...' : 'Scale'}
-              </button>
-              <button class="scale-cancel-button" onclick={() => { showScaleInput = false; scaleValue = desired; }} disabled={scaleLoading}>
-                Cancel
-              </button>
-            </div>
-            {#if scaleError}
-              <div class="scale-error">{scaleError}</div>
-            {/if}
-          </div>
-        {:else}
-          <div class="scale-display">
-            <span class="scale-current">Current: {desired} replicas</span>
-            <button class="scale-edit-button" onclick={() => { showScaleInput = true; scaleValue = desired; }}>
-              Edit Scale
+        <h6>CronJob Actions</h6>
+        <div class="action-buttons">
+          {#if suspended}
+            <button class="resume-button" onclick={resumeCronJob} disabled={resumeLoading}>
+              {resumeLoading ? 'Resuming...' : '▶ Resume'}
             </button>
+            {#if resumeError}
+              <div class="action-error">Resume: {resumeError}</div>
+            {/if}
+          {:else}
+            <button class="suspend-button" onclick={suspendCronJob} disabled={suspendLoading}>
+              {suspendLoading ? 'Suspending...' : '⏸ Suspend'}
+            </button>
+            {#if suspendError}
+              <div class="action-error">Suspend: {suspendError}</div>
+            {/if}
+          {/if}
+          <button class="trigger-button" onclick={triggerCronJob} disabled={triggerLoading || suspended}>
+            {triggerLoading ? 'Triggering...' : '▶ Trigger Now'}
+          </button>
+          {#if triggerError}
+            <div class="action-error">Trigger: {triggerError}</div>
+          {/if}
+        </div>
+      </div>
+
+      <div class="details-section">
+        <h6 class="section-header" onclick={() => toggleSection('schedule')} role="button" tabindex="0" onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleSection('schedule')}>
+          <span>Schedule Configuration</span>
+          <span class="collapse-icon">{sectionsCollapsed.schedule ? '▶' : '▼'}</span>
+        </h6>
+        {#if !sectionsCollapsed.schedule}
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Schedule (Cron):</span>
+              <div class="info-value-container">
+                <span class="info-value">{schedule}</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Concurrency Policy:</span>
+              <div class="info-value-container">
+                <span class="info-value">{concurrencyPolicy}</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Starting Deadline Seconds:</span>
+              <div class="info-value-container">
+                <span class="info-value">{cj.spec?.startingDeadlineSeconds?.toString() || 'Not set'}</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Successful Jobs History Limit:</span>
+              <div class="info-value-container">
+                <span class="info-value">{cj.spec?.successfulJobsHistoryLimit?.toString() || '3'}</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Failed Jobs History Limit:</span>
+              <div class="info-value-container">
+                <span class="info-value">{cj.spec?.failedJobsHistoryLimit?.toString() || '1'}</span>
+              </div>
+            </div>
           </div>
         {/if}
       </div>
 
       <div class="details-section">
-        <h6 class="section-header" onclick={() => toggleSection('pods')} role="button" tabindex="0" onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleSection('pods')}>
-          <span>Managed Pods ({managedPods.length})</span>
-          <span class="collapse-icon">{sectionsCollapsed.pods ? '▶' : '▼'}</span>
+        <h6 class="section-header" onclick={() => toggleSection('conditions')} role="button" tabindex="0" onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleSection('conditions')}>
+          <span>Conditions</span>
+          <span class="collapse-icon">{sectionsCollapsed.conditions ? '▶' : '▼'}</span>
         </h6>
-        {#if !sectionsCollapsed.pods}
-          {#if podsLoading}
-            <div class="pods-loading"><div class="loading-spinner">⏳</div><p>Loading pods...</p></div>
-          {:else if podsError}
-            <div class="pods-error"><div class="error-icon">⚠️</div><p>Failed to load pods: {podsError}</p><button class="retry-button" onclick={loadManagedPods}>Retry</button></div>
-          {:else if managedPods.length > 0}
-            <div class="pods-table">
-              <div class="pods-header">
-                <div>Name</div>
+        {#if !sectionsCollapsed.conditions}
+          {#if cj.status?.conditions && cj.status.conditions.length > 0}
+            <div class="conditions-table">
+              <div class="conditions-header">
+                <div>Type</div>
                 <div>Status</div>
-                <div>Node</div>
-                <div>Pod IP</div>
-                <div>Restarts</div>
-                <div>Age</div>
+                <div>Reason</div>
+                <div>Message</div>
+                <div>Last Update</div>
               </div>
-              {#each managedPods as pod}
-                <div class="pod-row">
-                  <div class="pod-name">{pod.metadata?.name || 'Unknown'}</div>
-                  <div class="pod-status">
-                    <span class="status-badge status-{getPodStatusClass(pod.status?.phase)}">{pod.status?.phase || 'Unknown'}</span>
+              {#each cj.status?.conditions || [] as condition}
+                <div class="condition-row">
+                  <div class="condition-type">{condition.type}</div>
+                  <div class="condition-status">
+                    <span class="status-badge status-{condition.status === 'True' ? 'ready' : 'failed'}">{condition.status}</span>
                   </div>
-                  <div class="pod-node">{pod.spec?.nodeName || '-'}</div>
-                  <div class="pod-ip">{pod.status?.podIP || '-'}</div>
-                  <div class="pod-restarts">
-                    {pod.status?.containerStatuses?.[0]?.restartCount || 0}
-                  </div>
-                  <div class="pod-age">{formatAge(pod.metadata?.creationTimestamp)}</div>
+                  <div class="condition-reason">{condition.reason || '-'}</div>
+                  <div class="condition-message">{condition.message || '-'}</div>
+                  <div class="condition-time">{formatAge(condition.lastUpdateTime || condition.lastTransitionTime)}</div>
                 </div>
               {/each}
             </div>
           {:else}
-            <div class="pods-placeholder"><p>No pods managed by this ReplicaSet</p></div>
+            <div class="conditions-placeholder"><p>No conditions available</p></div>
           {/if}
         {/if}
       </div>
+
+      <div class="details-section">
+        <h6 class="section-header" onclick={() => toggleSection('jobs')} role="button" tabindex="0" onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleSection('jobs')}>
+          <span>Managed Jobs ({managedJobs.length})</span>
+          <span class="collapse-icon">{sectionsCollapsed.jobs ? '▶' : '▼'}</span>
+        </h6>
+        {#if !sectionsCollapsed.jobs}
+          {#if jobsLoading}
+            <div class="jobs-loading"><div class="loading-spinner">⏳</div><p>Loading jobs...</p></div>
+          {:else if jobsError}
+            <div class="jobs-error"><div class="error-icon">⚠️</div><p>Failed to load jobs: {jobsError}</p><button class="retry-button" onclick={loadManagedJobs}>Retry</button></div>
+          {:else if managedJobs.length > 0}
+            <div class="jobs-table">
+              <div class="jobs-header">
+                <div>Name</div>
+                <div>Status</div>
+                <div>Completions</div>
+                <div>Age</div>
+              </div>
+              {#each managedJobs as job}
+                {@const jobStatus = job.status?.succeeded ? 'Succeeded' : (job.status?.failed ? 'Failed' : (job.status?.active ? 'Active' : 'Unknown'))}
+                <div class="job-row">
+                  <div class="job-name">
+                    {job.metadata?.name || 'Unknown'}
+                  </div>
+                  <div class="job-status">
+                    <span class="status-badge status-{getPodStatusClass(jobStatus)}">{jobStatus}</span>
+                  </div>
+                  <div class="job-completions">
+                    {job.status?.succeeded || 0}/{job.spec?.completions || 1}
+                  </div>
+                  <div class="job-age">{formatAge(job.metadata?.creationTimestamp)}</div>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <div class="jobs-placeholder"><p>No jobs created by this CronJob</p></div>
+          {/if}
+        {/if}
+      </div>
+
 
       <div class="details-section">
         <h6 class="section-header" onclick={() => toggleSection('selectors')} role="button" tabindex="0" onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleSection('selectors')}>
@@ -435,9 +580,9 @@
             <div class="info-item">
               <span class="info-label">Match Labels:</span>
               <div class="info-value-container">
-                {#if rs.spec?.selector?.matchLabels && Object.keys(rs.spec.selector.matchLabels).length > 0}
+                {#if cj.spec?.jobTemplate?.spec?.selector?.matchLabels && Object.keys(cj.spec.jobTemplate.spec.selector.matchLabels).length > 0}
                   <div class="kv-list">
-                    {#each Object.entries(rs.spec.selector.matchLabels) as [k, v]}
+                    {#each Object.entries(cj.spec.jobTemplate.spec.selector.matchLabels) as [k, v]}
                       <div class="kv"><span class="k">{k}</span><span class="v">{v}</span></div>
                     {/each}
                   </div>
@@ -449,9 +594,9 @@
             <div class="info-item">
               <span class="info-label">Match Expressions:</span>
               <div class="info-value-container">
-                {#if rs.spec?.selector?.matchExpressions && rs.spec.selector.matchExpressions.length > 0}
+                {#if cj.spec?.jobTemplate?.spec?.selector?.matchExpressions && cj.spec.jobTemplate.spec.selector.matchExpressions.length > 0}
                   <div class="match-expressions-list">
-                    {#each rs.spec.selector.matchExpressions as expr}
+                    {#each cj.spec.jobTemplate.spec.selector.matchExpressions as expr}
                       <div class="match-expression">
                         <span class="expr-key">{expr.key}</span>
                         <span class="expr-operator">{expr.operator}</span>
@@ -481,8 +626,8 @@
               <span class="info-label">Labels:</span>
               <div class="info-value-container">
                 <div class="kv-list">
-                  {#if rs.metadata?.labels && Object.keys(rs.metadata.labels).length > 0}
-                    {#each Object.entries(rs.metadata.labels) as [k, v]}
+                  {#if cj.metadata?.labels && Object.keys(cj.metadata.labels).length > 0}
+                    {#each Object.entries(cj.metadata.labels) as [k, v]}
                       <div class="kv"><span class="k">{k}</span><span class="v">{v}</span></div>
                     {/each}
                   {:else}
@@ -495,8 +640,8 @@
               <span class="info-label">Annotations:</span>
               <div class="info-value-container">
                 <div class="kv-list">
-                  {#if rs.metadata?.annotations && Object.keys(rs.metadata.annotations).length > 0}
-                    {#each Object.entries(rs.metadata.annotations) as [k, v]}
+                  {#if cj.metadata?.annotations && Object.keys(cj.metadata.annotations).length > 0}
+                    {#each Object.entries(cj.metadata.annotations) as [k, v]}
                       <div class="kv"><span class="k">{k}</span><span class="v">{v}</span></div>
                     {/each}
                   {:else}
@@ -528,11 +673,14 @@
 <QuickActionsMenu
   x={actionsMenuPosition.x}
   y={actionsMenuPosition.y}
-  resource={replicaSetDetails || replicaSet}
-  resourceType="replicaset"
+  resource={cronJobDetails || cronJob}
+  resourceType="cronjob"
   bind:visible={actionsMenuVisible}
   on:close={handleActionMenuClose}
   on:deleted={handleActionDeleted}
+  on:suspended={handleActionSuspended}
+  on:resumed={handleActionResumed}
+  on:triggered={handleActionTriggered}
   on:view-yaml={handleViewYaml}
   on:edit={handleActionEdit}
   on:copied={handleActionCopied}
@@ -543,7 +691,7 @@
   <div class="yaml-viewer-modal" onclick={(e) => e.target === e.currentTarget && closeYamlViewer()}>
     <div class="yaml-viewer-content" onclick={(e) => e.stopPropagation()}>
       <div class="yaml-viewer-header">
-        <h3>ReplicaSet YAML: {replicaSet?.metadata?.name}</h3>
+        <h3>CronJob YAML: {cronJob?.metadata?.name}</h3>
         <button class="yaml-viewer-close" onclick={closeYamlViewer}>×</button>
       </div>
       <div class="yaml-viewer-body">
@@ -557,7 +705,7 @@
   <div class="yaml-viewer-modal" onclick={(e) => e.target === e.currentTarget && closeYamlEditor()}>
     <div class="yaml-viewer-content yaml-editor-content" onclick={(e) => e.stopPropagation()}>
       <div class="yaml-viewer-header">
-        <h3>Edit ReplicaSet YAML: {replicaSet?.metadata?.name}</h3>
+        <h3>Edit CronJob YAML: {cronJob?.metadata?.name}</h3>
         <button class="yaml-viewer-close" onclick={closeYamlEditor}>×</button>
       </div>
       <div class="yaml-editor-body">
@@ -624,7 +772,7 @@
     font-weight: 600;
   }
 
-  .replicaset-namespace {
+  .cronjob-namespace {
     color: var(--text-secondary);
     font-size: 0.9rem;
   }
@@ -645,7 +793,7 @@
     border-color: rgba(255, 255, 255, 0.3);
   }
 
-  .replicaset-details-content {
+  .cronjob-details-content {
     flex: 1;
     overflow-y: auto;
     padding: var(--spacing-md);
@@ -834,6 +982,94 @@
     padding: 8px;
     background: rgba(239, 68, 68, 0.1);
     border-radius: var(--radius-sm);
+  }
+
+  /* CronJob Actions */
+  .action-buttons {
+    display: flex;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+  }
+
+  .restart-button {
+    padding: 8px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-sm);
+    background: var(--primary-color);
+    color: white;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+  }
+
+  .restart-button:hover:not(:disabled) {
+    background: var(--accent-color);
+  }
+
+  .restart-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .action-error {
+    color: var(--error-color);
+    font-size: 0.85rem;
+    padding: 8px;
+    background: rgba(239, 68, 68, 0.1);
+    border-radius: var(--radius-sm);
+    width: 100%;
+  }
+
+  /* Pod Ordinal Display */
+  .pod-ordinal {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    margin-left: 4px;
+    font-weight: normal;
+  }
+
+  /* Conditions Table */
+  .conditions-table {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .conditions-header, .condition-row {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1.5fr 2fr 1fr;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+  }
+
+  .conditions-header {
+    background: rgba(255, 255, 255, 0.05);
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+  }
+
+  .condition-row {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: var(--radius-sm);
+  }
+
+  .condition-type {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .condition-status, .condition-reason, .condition-message, .condition-time {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+  }
+
+  .conditions-placeholder {
+    display: flex;
+    justify-content: center;
+    padding: var(--spacing-md);
+    color: var(--text-secondary);
+    font-style: italic;
   }
 
   /* Pods Table */

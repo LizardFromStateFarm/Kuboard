@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
 
   export let deployment: any;
   export let onBack: () => void;
+  export let currentContext: any = null;
 
   let deploymentDetails: any = null;
   let managedPods: any[] = [];
@@ -35,6 +36,13 @@
   let yamlEditorContent = '';
   let yamlEditorLoading = false;
   let yamlEditorError: string | null = null;
+  
+  // Debug reactive statement
+  $: {
+    if (yamlViewerVisible) {
+      console.log('yamlViewerVisible is now true, yamlContent length:', yamlContent?.length || 0);
+    }
+  }
 
   // Section collapse state
   let sectionsCollapsed = {
@@ -80,16 +88,52 @@
   function getDeploymentStatus(dep: any): string {
     const available = dep.status?.conditions?.find((c: any) => c.type === 'Available');
     const progressing = dep.status?.conditions?.find((c: any) => c.type === 'Progressing');
+    const desired = dep.spec?.replicas || 0;
+    const updated = dep.status?.updatedReplicas || 0;
+    const ready = dep.status?.readyReplicas || 0;
+    const current = dep.status?.replicas || 0;
+    const availableReplicas = dep.status?.availableReplicas || 0;
     
-    if (available?.status === 'True' && progressing?.status === 'True') {
+    // Check if deployment is actively rolling out/restarting
+    // A rollout is happening when:
+    // 1. updatedReplicas < desired (new pods are being created)
+    // 2. OR ready < desired while progressing is True (pods are being updated)
+    // 3. OR progressing condition exists with reason indicating rollout
+    const isRollingOut = (updated < desired) || 
+                        (progressing?.status === 'True' && ready < desired && updated > 0) ||
+                        (progressing?.status === 'True' && progressing?.reason && 
+                         (progressing.reason === 'NewReplicaSetCreated' || 
+                          progressing.reason === 'ReplicaSetUpdated'));
+    
+    // Scaling is when current replicas don't match desired (but not due to rollout)
+    const isScaling = current !== desired && !isRollingOut;
+    
+    // If rolling out, show "Restarting"
+    if (isRollingOut && progressing?.status === 'True') {
+      return 'Restarting';
+    }
+    
+    // If scaling (not rolling out), show "Scaling"
+    if (isScaling) {
+      return 'Scaling';
+    }
+    
+    // Available when all conditions are met and replicas are ready
+    if (available?.status === 'True' && progressing?.status === 'True' && 
+        ready === desired && availableReplicas === desired) {
       return 'Available';
     }
+    
+    // Progressing when condition is True but not fully available
     if (progressing?.status === 'True') {
       return 'Progressing';
     }
+    
+    // Not available when Available condition is False
     if (available?.status === 'False') {
       return 'Not Available';
     }
+    
     return 'Unknown';
   }
 
@@ -97,6 +141,8 @@
     switch (status?.toLowerCase()) {
       case 'available': return 'ready';
       case 'progressing': return 'pending';
+      case 'restarting': return 'pending';
+      case 'scaling': return 'pending';
       case 'not available': return 'failed';
       default: return 'unknown';
     }
@@ -165,11 +211,27 @@
         name: deployment.metadata.name,
         namespace: deployment.metadata.namespace
       });
-      managedReplicaSets = Array.isArray(replicasets) ? replicasets.sort((a, b) => {
+      // Filter out old ReplicaSets with 0 replicas (they're kept for rollback but clutter the UI)
+      // Keep them if they're the newest one or if there's only one
+      const allReplicaSets = Array.isArray(replicasets) ? replicasets.sort((a, b) => {
         const timeA = new Date(a.metadata?.creationTimestamp || 0).getTime();
         const timeB = new Date(b.metadata?.creationTimestamp || 0).getTime();
         return timeB - timeA; // Newest first
       }) : [];
+      
+      // Filter: keep ReplicaSets that have replicas > 0, or are the newest one
+      // This removes old 0/0 ReplicaSets while keeping the current one visible
+      if (allReplicaSets.length > 1) {
+        const newest = allReplicaSets[0];
+        managedReplicaSets = allReplicaSets.filter(rs => {
+          const replicas = rs.status?.replicas || 0;
+          const specReplicas = rs.spec?.replicas || 0;
+          // Keep if it has replicas, or if it's the newest one
+          return replicas > 0 || specReplicas > 0 || rs.metadata?.name === newest.metadata?.name;
+        });
+      } else {
+        managedReplicaSets = allReplicaSets;
+      }
     } catch (err) {
       replicasetsError = String(err);
       managedReplicaSets = [];
@@ -277,27 +339,47 @@
     actionsMenuVisible = false;
   }
 
-  function handleAction(event: CustomEvent) {
-    const action = event.detail.action;
-    const resource = event.detail.resource;
-
-    switch (action) {
-      case 'view-yaml':
-        openYamlViewer();
-        break;
-      case 'edit':
-        openYamlEditor();
-        break;
-      case 'copy-name':
-        copyToClipboard(deployment?.metadata?.name || '');
-        break;
-      case 'copy-namespace':
-        copyToClipboard(deployment?.metadata?.namespace || '');
-        break;
-      default:
-        console.log('Action not implemented:', action);
-    }
+  function handleActionDeleted(event: CustomEvent) {
+    // After deletion, go back to deployments list
     handleActionMenuClose();
+    onBack();
+  }
+
+  function handleActionRestarted(event: CustomEvent) {
+    // Reload deployment details
+    handleActionMenuClose();
+    loadDeploymentDetails();
+  }
+
+  function handleViewYaml(event: any) {
+    console.log('handleViewYaml called in DeploymentDetails', event);
+    console.log('Event type:', typeof event);
+    console.log('Event detail:', event.detail);
+    console.log('Event detail type:', typeof event.detail);
+    console.log('YAML content:', event.detail?.yaml);
+    console.log('YAML content length:', event.detail?.yaml?.length || 0);
+    
+    const yaml = event.detail?.yaml || event.detail || '';
+    yamlContent = yaml;
+    yamlViewerVisible = true;
+    console.log('yamlViewerVisible set to:', yamlViewerVisible, 'yamlContent length:', yamlContent.length);
+    handleActionMenuClose();
+  }
+
+  function handleActionEdit(event: any) {
+    console.log('handleActionEdit called in DeploymentDetails', event);
+    console.log('Event detail:', event.detail);
+    const yaml = event.detail?.yaml || event.detail || '';
+    yamlEditorContent = yaml;
+    yamlEditorVisible = true;
+    yamlEditorError = null;
+    console.log('yamlEditorVisible set to:', yamlEditorVisible, 'yamlEditorContent length:', yamlEditorContent.length);
+    handleActionMenuClose();
+  }
+
+  function handleActionCopied(event: CustomEvent) {
+    // Optionally show a toast notification
+    console.log('Copied:', event.detail.type, event.detail.value);
   }
 
   async function openYamlViewer() {
@@ -348,8 +430,55 @@
     }
   }
 
-  onMount(() => {
+  // Watch event handling for live updates
+  let watchEventListenerUnsubscribe: (() => Promise<void>) | null = null;
+  let watchErrorListenerUnsubscribe: (() => Promise<void>) | null = null;
+
+  function handleWatchEvent(event: any) {
+    const { event_type, deployment: updatedDeployment } = event;
+    
+    if (!updatedDeployment || !updatedDeployment.metadata) return;
+    
+    // Check if this is the deployment we're viewing
+    const currentName = deployment?.metadata?.name;
+    const currentNamespace = deployment?.metadata?.namespace;
+    const updatedName = updatedDeployment.metadata?.name;
+    const updatedNamespace = updatedDeployment.metadata?.namespace;
+    
+    if (currentName === updatedName && currentNamespace === updatedNamespace) {
+      console.log('📡 DeploymentDetails: Received watch event for current deployment', event_type);
+      
+      // Update deployment details
+      deploymentDetails = updatedDeployment;
+      
+      // Reload ReplicaSets and pods to get updated data
+      loadManagedReplicaSets();
+      loadManagedPods();
+    }
+  }
+
+  function handleWatchError(error: any) {
+    console.error('DeploymentDetails watch error:', error);
+  }
+
+  onMount(async () => {
     loadDeploymentDetails();
+    
+    // Listen to watch events for live updates
+    const { listen } = await import('@tauri-apps/api/event');
+    
+    watchEventListenerUnsubscribe = await listen('deployment-watch-event', (event: any) => {
+      handleWatchEvent(event.payload);
+    });
+    
+    watchErrorListenerUnsubscribe = await listen('deployment-watch-error', (event: any) => {
+      handleWatchError(event.payload);
+    });
+  });
+
+  onDestroy(async () => {
+    if (watchEventListenerUnsubscribe) await watchEventListenerUnsubscribe();
+    if (watchErrorListenerUnsubscribe) await watchErrorListenerUnsubscribe();
   });
 </script>
 
@@ -517,9 +646,17 @@
                 <div>Age</div>
               </div>
               {#each managedReplicaSets as rs}
-                <div class="replicaset-row">
-                  <div class="rs-name">{rs.metadata?.name || 'Unknown'}</div>
-                  <div class="rs-replicas">{rs.status?.replicas || 0}/{rs.spec?.replicas || 0}</div>
+                {@const replicas = rs.status?.replicas || 0}
+                {@const specReplicas = rs.spec?.replicas || 0}
+                {@const isOld = replicas === 0 && specReplicas === 0}
+                <div class="replicaset-row {isOld ? 'old-replicaset' : ''}">
+                  <div class="rs-name">
+                    {rs.metadata?.name || 'Unknown'}
+                    {#if isOld}
+                      <span class="old-badge">(Old)</span>
+                    {/if}
+                  </div>
+                  <div class="rs-replicas">{replicas}/{specReplicas}</div>
                   <div class="rs-ready">{rs.status?.readyReplicas || 0}</div>
                   <div class="rs-age">{formatAge(rs.metadata?.creationTimestamp)}</div>
                 </div>
@@ -730,16 +867,19 @@
   {/if}
 </div>
 
-{#if actionsMenuVisible}
-  <QuickActionsMenu
-    x={actionsMenuPosition.x}
-    y={actionsMenuPosition.y}
-    resource={deployment}
-    resourceType="deployment"
-    on:action={handleAction}
-    on:close={handleActionMenuClose}
-  />
-{/if}
+<QuickActionsMenu
+  x={actionsMenuPosition.x}
+  y={actionsMenuPosition.y}
+  resource={deploymentDetails || deployment}
+  resourceType="deployment"
+  bind:visible={actionsMenuVisible}
+  on:close={handleActionMenuClose}
+  on:deleted={handleActionDeleted}
+  on:restarted={handleActionRestarted}
+  on:view-yaml={handleViewYaml}
+  on:edit={handleActionEdit}
+  on:copied={handleActionCopied}
+/>
 
 <!-- YAML Viewer/Editor modals - reuse ServiceDetails styles -->
 {#if yamlViewerVisible}
@@ -1101,9 +1241,24 @@
     border-radius: var(--radius-sm);
   }
 
+  .replicaset-row.old-replicaset {
+    opacity: 0.5;
+    background: rgba(255, 255, 255, 0.01);
+  }
+
   .rs-name {
     font-weight: 500;
     color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+  }
+
+  .old-badge {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    opacity: 0.7;
   }
 
   .rs-replicas, .rs-ready, .rs-age {
