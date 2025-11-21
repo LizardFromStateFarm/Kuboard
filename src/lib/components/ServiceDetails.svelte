@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import PortForwardManager from './PortForwardManager.svelte';
 
   export let service: any;
   export let onBack: () => void;
@@ -22,6 +23,9 @@
   let yamlEditorContent = '';
   let yamlEditorLoading = false;
   let yamlEditorError: string | null = null;
+
+  // Port Forward state
+  let portForwardManagerOpen = false;
 
   // Section collapse state
   let sectionsCollapsed = {
@@ -226,6 +230,7 @@
   <div class="details-header">
     <div class="header-left">
       <button class="back-button" onclick={onBack}>← Back to Services</button>
+      <button class="port-forward-button" onclick={() => portForwardManagerOpen = true} title="Port Forward">🔌 Port Forward</button>
       <button class="actions-button" onclick={openActionsMenu}>⚙️ Actions</button>
     </div>
     <div class="header-right">
@@ -478,6 +483,16 @@
     on:action={handleAction}
     on:close={handleActionMenuClose}
   />
+{/if}
+
+{#if portForwardManagerOpen}
+  <div class="port-forward-overlay">
+    <PortForwardManager
+      isOpen={portForwardManagerOpen}
+      service={service}
+      onClose={() => portForwardManagerOpen = false}
+    />
+  </div>
 {/if}
 
 {#if yamlViewerVisible}
@@ -1063,6 +1078,43 @@
 
   .yaml-editor-cancel:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.2);
+  }
+
+  .port-forward-button {
+    padding: 6px 12px;
+    background: var(--background-secondary, #111);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 4px;
+    color: var(--text-primary, #fff);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+
+  .port-forward-button:hover {
+    background: var(--background-card, #1a1a1a);
+    border-color: var(--primary-color, #2e91be);
+  }
+
+  .port-forward-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+  }
+
+  .port-forward-overlay > :global(*) {
+    width: 100%;
+    max-width: 1200px;
+    height: 80vh;
+    max-height: 800px;
   }
 
   .yaml-editor-save {

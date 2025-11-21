@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import MetricsGraph from './MetricsGraph.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import TerminalWindow from './TerminalWindow.svelte';
+  import PortForwardManager from './PortForwardManager.svelte';
 
   export let pod: any;
   export let onBack: () => void;
@@ -27,6 +29,10 @@
   let yamlEditorContent = '';
   let yamlEditorLoading = false;
   let yamlEditorError: string | null = null;
+
+  // Terminal and Port Forward state
+  let terminalOpen = false;
+  let portForwardManagerOpen = false;
 
   // Section collapse state
   let sectionsCollapsed = {
@@ -298,6 +304,8 @@
     <div class="header-left">
       <button class="back-button" onclick={onBack}>← Back to Pods</button>
       <button class="logs-button" onclick={() => onOpenLogs(pod)}>📋 View Logs</button>
+      <button class="exec-button" onclick={() => terminalOpen = true} title="Exec into Pod">💻 Exec</button>
+      <button class="port-forward-button" onclick={() => portForwardManagerOpen = true} title="Port Forward">🔌 Port Forward</button>
       <button class="actions-button" onclick={openActionsMenu}>⚙️ Actions</button>
     </div>
     <div class="header-right">
@@ -753,6 +761,28 @@
   on:copied={handleActionCopied}
   on:edit={handleActionEdit}
 />
+
+{#if terminalOpen}
+  <div class="terminal-overlay">
+    <TerminalWindow
+      isOpen={terminalOpen}
+      podName={pod?.metadata?.name || ''}
+      namespace={pod?.metadata?.namespace || 'default'}
+      containerName={selectedContainer?.name || pod?.spec?.containers?.[0]?.name || ''}
+      onClose={() => terminalOpen = false}
+    />
+  </div>
+{/if}
+
+{#if portForwardManagerOpen}
+  <div class="port-forward-overlay">
+    <PortForwardManager
+      isOpen={portForwardManagerOpen}
+      pod={pod}
+      onClose={() => portForwardManagerOpen = false}
+    />
+  </div>
+{/if}
 
 <!-- YAML Viewer Modal -->
 {#if yamlViewerVisible}
@@ -1589,6 +1619,43 @@
   .yaml-editor-save:hover:not(:disabled) {
     background: var(--accent-color);
     transform: translateY(-1px);
+  }
+
+  .exec-button, .port-forward-button {
+    padding: 6px 12px;
+    background: var(--background-secondary, #111);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 4px;
+    color: var(--text-primary, #fff);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+
+  .exec-button:hover, .port-forward-button:hover {
+    background: var(--background-card, #1a1a1a);
+    border-color: var(--primary-color, #2e91be);
+  }
+
+  .terminal-overlay, .port-forward-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+  }
+
+  .terminal-overlay > :global(*), .port-forward-overlay > :global(*) {
+    width: 100%;
+    max-width: 1200px;
+    height: 80vh;
+    max-height: 800px;
   }
 </style>
 

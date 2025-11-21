@@ -141,6 +141,14 @@ pub fn run() {
         
         // Resource Describe
         commands::kuboard_describe_pod,
+        
+        // Pod Exec Commands
+        commands::kuboard_exec_into_pod,
+        
+        // Port Forwarding Commands
+        commands::kuboard_port_forward,
+        commands::kuboard_list_port_forwards,
+        commands::kuboard_stop_port_forward,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

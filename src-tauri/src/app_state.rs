@@ -11,6 +11,9 @@ use crate::kubernetes::watch::{
     PodWatcher, DeploymentWatcher, StatefulSetWatcher, DaemonSetWatcher,
     ReplicaSetWatcher, ServiceWatcher, CronJobWatcher
 };
+use crate::kubernetes::exec::ExecSession;
+use crate::kubernetes::port_forward::PortForwardSession;
+use std::collections::HashMap;
 // use crate::commands::optimized::ClusterCache;
 
 #[derive(Clone)]
@@ -25,6 +28,8 @@ pub struct AppState {
     pub replicaset_watcher: Arc<RwLock<ReplicaSetWatcher>>,
     pub service_watcher: Arc<RwLock<ServiceWatcher>>,
     pub cronjob_watcher: Arc<RwLock<CronJobWatcher>>,
+    pub exec_sessions: Arc<RwLock<HashMap<String, ExecSession>>>,
+    pub port_forward_sessions: Arc<RwLock<HashMap<String, PortForwardSession>>>,
     // pub cluster_cache: Arc<RwLock<Option<ClusterCache>>>,
 }
 
@@ -41,6 +46,8 @@ impl AppState {
             replicaset_watcher: Arc::new(RwLock::new(ReplicaSetWatcher::new())),
             service_watcher: Arc::new(RwLock::new(ServiceWatcher::new())),
             cronjob_watcher: Arc::new(RwLock::new(CronJobWatcher::new())),
+            exec_sessions: Arc::new(RwLock::new(HashMap::new())),
+            port_forward_sessions: Arc::new(RwLock::new(HashMap::new())),
             // cluster_cache: Arc::new(RwLock::new(Some(ClusterCache::new()))),
         }
     }

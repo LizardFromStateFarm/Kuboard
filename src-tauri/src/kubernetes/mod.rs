@@ -5,6 +5,8 @@
 // This module contains all Kubernetes-related helper functions
 
 pub mod watch;
+pub mod exec;
+pub mod port_forward;
 
 use anyhow::{anyhow, Result};
 use kube::{Client, Config, Api};
