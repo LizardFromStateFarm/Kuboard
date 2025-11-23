@@ -64,7 +64,10 @@
   let historyDurationMinutes = 30;
   let maxHistoryDurationMinutes = 720;
   let selectedContextName = '';
-
+  let contextLoadingAbortController: AbortController | null = null;
+  let activeLoadingContext: string | null = null; // Track which context we're currently loading
+  const CONTEXT_SET_TIMEOUT = 3000; // 3 seconds for context set
+  const CLUSTER_LOAD_TIMEOUT = 5000; // 5 seconds for cluster overview
 
   // Check if we're running in Tauri environment
   onMount(async () => {
@@ -124,67 +127,206 @@
       return;
     }
 
+    // Cancel any existing context loading
+    if (contextLoadingAbortController) {
+      console.log('🛑 Cancelling previous context load');
+      contextLoadingAbortController.abort();
+    }
+
+    // Set the active loading context FIRST - this ensures we ignore results from old contexts
+    // This must happen before any async operations
+    activeLoadingContext = contextName;
+    
+    // Immediately update UI to show we're switching
+    currentContext = contexts.find(ctx => ctx.name === contextName) || null;
+    selectedContextName = contextName;
+    loading = true;
+    error = ""; // Clear any previous errors
+    
+    // Create new abort controller for this context switch
+    contextLoadingAbortController = new AbortController();
+    const signal = contextLoadingAbortController.signal;
+
     try {
       loading = true;
       error = "";
       const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('kuboard_set_context', { contextName });
       
-      currentContext = contexts.find(ctx => ctx.name === contextName) || null;
-      selectedContextName = contextName;
+      // Set context with timeout
+      const contextPromise = invoke('kuboard_set_context', { contextName });
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Context connection timeout - unable to connect to cluster')), CONTEXT_SET_TIMEOUT);
+      });
+      
+      // Race between context set and timeout
+      await Promise.race([contextPromise, timeoutPromise]);
+      
+      // Check if operation was aborted or if context has changed
+      if (signal.aborted || activeLoadingContext !== contextName) {
+        console.log('🛑 Context switch aborted or context changed');
+        return;
+      }
+      
+      // Context already set above, just verify
+      if (currentContext?.name !== contextName) {
+        currentContext = contexts.find(ctx => ctx.name === contextName) || null;
+      }
+      
+      // Quick connection test - try to get nodes first (fastest check)
+      console.log('🔍 Testing connection...');
+      if (signal.aborted || activeLoadingContext !== contextName) return;
+      
+      const testPromise = invoke('kuboard_get_nodes').catch(() => {
+        throw new Error('Connection test failed - unable to reach cluster');
+      });
+      const testTimeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Connection test timeout')), 3000);
+      });
+      
+      try {
+        await Promise.race([testPromise, testTimeoutPromise]);
+        console.log('✅ Connection test passed');
+      } catch (testErr: any) {
+        // Check if context changed during test
+        if (signal.aborted || activeLoadingContext !== contextName) {
+          console.log('🛑 Connection test aborted - context changed');
+          return;
+        }
+        throw new Error(`Connection failed: ${testErr?.message || 'Unable to connect to cluster'}`);
+      }
+      
+      // Check again before loading full overview
+      if (signal.aborted || activeLoadingContext !== contextName) return;
       
       console.log('✅ Context set, loading cluster overview...');
-      // Load cluster overview after setting context
-      await loadClusterOverview();
+      
+      // Load cluster overview with timeout and abort support
+      const overviewPromise = loadClusterOverview(signal);
+      const overviewTimeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Cluster overview timeout')), CLUSTER_LOAD_TIMEOUT);
+      });
+      
+      await Promise.race([overviewPromise, overviewTimeoutPromise]);
+      
+      if (signal.aborted) return;
+      
+      // Check if operation was aborted before proceeding
+      if (signal.aborted) return;
       
       console.log('✅ Cluster overview loaded, checking metrics...');
-      // Check metrics server availability
-      await checkMetricsAvailability();
+      // Check metrics server availability (non-blocking)
+      checkMetricsAvailability().catch(err => {
+        if (!signal.aborted) {
+          console.warn('⚠️ Metrics check failed:', err);
+        }
+      });
+      
+      // Check again before starting auto-refresh
+      if (signal.aborted) return;
       
       // Start auto-refresh for cluster data
       startAutoRefresh();
       
       // Auto-dismiss success message after 3 seconds
-      success = `Switched to context: ${contextName}`;
-      setTimeout(() => success = '', 3000);
-      console.log('✅ Context switched to:', contextName);
-    } catch (err) {
-      error = `Failed to set context: ${err}`;
-      console.error('❌ Error setting context:', err);
+      if (!signal.aborted) {
+        success = `Switched to context: ${contextName}`;
+        setTimeout(() => success = '', 3000);
+        console.log('✅ Context switched to:', contextName);
+      }
+    } catch (err: any) {
+      // Check if operation was aborted
+      if (signal.aborted) {
+        console.log('🛑 Context switch aborted');
+        return;
+      }
+      
+      // Only show error if this is still the active context
+      if (activeLoadingContext === contextName) {
+        const errorMessage = err?.message || String(err);
+        error = `Failed to set context: ${errorMessage}`;
+        console.error('❌ Error setting context:', err);
+        // Don't auto-dismiss - let user retry manually
+      } else {
+        console.log('🛑 Error from old context, ignoring');
+      }
     } finally {
-      loading = false;
+      if (!signal.aborted) {
+        loading = false;
+      }
     }
   }
 
-  async function loadClusterOverview() {
+  async function loadClusterOverview(abortSignal?: AbortSignal) {
     if (!isTauriAvailable) return;
     
+    // Get the context name we're loading for
+    const loadingContext = activeLoadingContext;
+    if (!loadingContext) {
+      console.log('🛑 No active loading context');
+      return;
+    }
+    
+    // Check if operation was aborted or context changed
+    if (abortSignal?.aborted || contextLoadingAbortController?.signal.aborted || activeLoadingContext !== loadingContext) {
+      console.log('🛑 Cluster overview load aborted');
+      return;
+    }
+    
     try {
-      loading = true;
-      error = "";
       const { invoke } = await import('@tauri-apps/api/core');
       clusterOverview = await invoke('kuboard_get_cluster_overview');
       
+      // Check if operation was aborted or context changed after async call
+      if (abortSignal?.aborted || contextLoadingAbortController?.signal.aborted || activeLoadingContext !== loadingContext) {
+        console.log('🛑 Cluster overview load aborted after API call - context changed');
+        return;
+      }
+      
       console.log('✅ Cluster overview loaded:', clusterOverview);
       
-      // Load resource details
+      // Load resource details (non-blocking, don't wait for it, but pass abort signal)
       console.log('🔄 Loading resource details...');
-      await loadResourceDetails();
+      loadResourceDetails(abortSignal).catch(err => {
+        if (!abortSignal?.aborted && !contextLoadingAbortController?.signal.aborted && activeLoadingContext === loadingContext) {
+          console.warn('⚠️ Resource details loading failed:', err);
+        }
+      });
       
-      // Auto-dismiss success message
-      success = "Cluster overview loaded successfully";
-      setTimeout(() => success = '', 2000);
+      // Success message only if still the active context
+      if (!abortSignal?.aborted && !contextLoadingAbortController?.signal.aborted && activeLoadingContext === loadingContext) {
+        success = "Cluster overview loaded successfully";
+        setTimeout(() => success = '', 2000);
+      }
     } catch (err) {
-      error = `Failed to load cluster overview: ${err}`;
-      console.error('❌ Error loading cluster overview:', err);
-    } finally {
-      loading = false;
+      // Check if operation was aborted or context changed
+      if (abortSignal?.aborted || contextLoadingAbortController?.signal.aborted || activeLoadingContext !== loadingContext) {
+        console.log('🛑 Cluster overview load aborted in catch - context changed');
+        return;
+      }
+      // Only show error if this is still the active context
+      if (activeLoadingContext === loadingContext) {
+        error = `Failed to load cluster overview: ${err}`;
+        console.error('❌ Error loading cluster overview:', err);
+      }
     }
   }
 
-  async function loadResourceDetails() {
+  async function loadResourceDetails(abortSignal?: AbortSignal) {
     if (!isTauriAvailable) {
       console.log('⚠️ Tauri not available, skipping resource details');
+      return;
+    }
+    
+    // Get the context name we're loading for
+    const loadingContext = activeLoadingContext;
+    if (!loadingContext) {
+      console.log('🛑 No active loading context');
+      return;
+    }
+    
+    // Check if operation was aborted before starting
+    if (abortSignal?.aborted || contextLoadingAbortController?.signal.aborted || activeLoadingContext !== loadingContext) {
+      console.log('🛑 Resource details load aborted before start');
       return;
     }
     
@@ -193,14 +335,40 @@
       resourceLoading = true;
       const { invoke } = await import('@tauri-apps/api/core');
       
+      // Check again after async import
+      if (abortSignal?.aborted || contextLoadingAbortController?.signal.aborted || activeLoadingContext !== loadingContext) {
+        console.log('🛑 Resource details load aborted after import');
+        return;
+      }
+      
       console.log('🔄 Calling kuboard_get_nodes...');
-      // Load all resource types in parallel
-      const [nodesData, namespacesData, podsData, deploymentsData] = await Promise.all([
+      // Load all resource types in parallel, but check abort signal after each
+      const promises = [
         invoke('kuboard_get_nodes'),
         invoke('kuboard_get_namespaces'),
         invoke('kuboard_get_pods'),
         invoke('kuboard_get_deployments')
-      ]);
+      ];
+      
+      const results = await Promise.allSettled(promises);
+      
+      // Check if operation was aborted or context changed after API calls
+      if (abortSignal?.aborted || contextLoadingAbortController?.signal.aborted || activeLoadingContext !== loadingContext) {
+        console.log('🛑 Resource details load aborted after API calls - context changed');
+        return;
+      }
+      
+      // Process results only if not aborted and still the active context
+      const nodesData = results[0].status === 'fulfilled' ? results[0].value : null;
+      const namespacesData = results[1].status === 'fulfilled' ? results[1].value : null;
+      const podsData = results[2].status === 'fulfilled' ? results[2].value : null;
+      const deploymentsData = results[3].status === 'fulfilled' ? results[3].value : null;
+      
+      // Check one more time before updating state
+      if (abortSignal?.aborted || contextLoadingAbortController?.signal.aborted || activeLoadingContext !== loadingContext) {
+        console.log('🛑 Resource details load aborted before state update - context changed');
+        return;
+      }
       
       console.log('📊 Raw nodes data:', nodesData);
       console.log('📊 Raw namespaces data:', namespacesData);
@@ -216,10 +384,18 @@
       console.log('📊 Nodes data sample:', nodes[0]);
       console.log('🔄 Main page: Nodes array updated, length:', nodes.length);
     } catch (err) {
-      console.error('❌ Error loading resource details:', err);
-      error = `Failed to load resource details: ${err}`;
+      // Only log error if not aborted and still the active context
+      if (!abortSignal?.aborted && !contextLoadingAbortController?.signal.aborted && activeLoadingContext === loadingContext) {
+        console.error('❌ Error loading resource details:', err);
+        error = `Failed to load resource details: ${err}`;
+      } else {
+        console.log('🛑 Resource details load aborted in catch - context changed');
+      }
     } finally {
-      resourceLoading = false;
+      // Only update loading state if not aborted and still the active context
+      if (!abortSignal?.aborted && !contextLoadingAbortController?.signal.aborted && activeLoadingContext === loadingContext) {
+        resourceLoading = false;
+      }
     }
   }
 
@@ -583,8 +759,22 @@
   <!-- Error Message (shown as toast) -->
   {#if error}
     <div class="error-message toast">
-      <strong>Error:</strong> {error}
-      <button class="toast-close" onclick={() => error = ''}>×</button>
+      <div class="error-content">
+        <strong>Error:</strong> {error}
+      </div>
+      <div class="error-actions">
+        {#if error.includes('Failed to set context') || error.includes('Failed to load cluster overview')}
+          <button class="retry-button" onclick={() => {
+            if (selectedContextName) {
+              error = '';
+              setContext(selectedContextName);
+            }
+          }} title="Retry">
+            🔄 Retry
+          </button>
+        {/if}
+        <button class="toast-close" onclick={() => error = ''} title="Dismiss">×</button>
+      </div>
     </div>
   {/if}
 
@@ -665,7 +855,7 @@
     position: fixed;
     top: 20px;
     right: 20px;
-    max-width: 400px;
+    max-width: 450px;
     color: var(--error-color);
     padding: 12px 16px;
     border: 1px solid var(--error-color);
@@ -675,7 +865,7 @@
     z-index: 1000;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
     animation: slideInRight 0.3s ease-out;
@@ -683,6 +873,37 @@
 
   .error-message.toast {
     display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .error-content {
+    flex: 1;
+  }
+
+  .error-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .retry-button {
+    background: var(--error-color);
+    border: 1px solid var(--error-color);
+    border-radius: var(--radius-sm);
+    color: white;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 4px 12px;
+    transition: all 0.2s;
+    font-weight: 500;
+  }
+
+  .retry-button:hover {
+    background: #dc2626;
+    border-color: #dc2626;
+    transform: translateY(-1px);
   }
 
   .toast-close {

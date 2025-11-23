@@ -86,35 +86,40 @@
   />
 
   <div class="tab-content">
-    {#key activeTab}
-      {#if activeTab === 'workloads'}
-        <WorkloadsTab {currentContext} />
-          {:else if activeTab === 'nodes'}
-            <NodesTab {currentContext} {nodes} />
-      {:else if activeTab === 'config'}
-        <ConfigTab {currentContext} />
-      {:else if activeTab === 'network'}
-        <NetworkTab {currentContext} />
-      {:else if activeTab === 'storage'}
-        <div class="coming-soon-tab">
-          <div class="coming-soon-content">
-            <div class="coming-soon-icon">💾</div>
-            <h4>Storage Management</h4>
-            <p>Storage resources including PersistentVolumes, PersistentVolumeClaims, and StorageClasses will be available in a future update.</p>
-          </div>
+    <!-- Use display: none instead of conditional rendering to prevent layout shifts -->
+    <div class="tab-panel" class:active={activeTab === 'workloads'}>
+      <WorkloadsTab {currentContext} />
+    </div>
+    <div class="tab-panel" class:active={activeTab === 'nodes'}>
+      <NodesTab {currentContext} {nodes} />
+    </div>
+    <div class="tab-panel" class:active={activeTab === 'config'}>
+      <ConfigTab {currentContext} />
+    </div>
+    <div class="tab-panel" class:active={activeTab === 'network'}>
+      <NetworkTab {currentContext} />
+    </div>
+    <div class="tab-panel" class:active={activeTab === 'storage'}>
+      <div class="coming-soon-tab">
+        <div class="coming-soon-content">
+          <div class="coming-soon-icon">💾</div>
+          <h4>Storage Management</h4>
+          <p>Storage resources including PersistentVolumes, PersistentVolumeClaims, and StorageClasses will be available in a future update.</p>
         </div>
-      {:else if activeTab === 'custom'}
-        <CustomResourcesTab {currentContext} />
-      {:else if activeTab === 'security'}
-        <div class="coming-soon-tab">
-          <div class="coming-soon-content">
-            <div class="coming-soon-icon">🔒</div>
-            <h4>Security Management</h4>
-            <p>Security resources including RBAC, SecurityContexts, and PodSecurityPolicies will be available in a future update.</p>
-          </div>
+      </div>
+    </div>
+    <div class="tab-panel" class:active={activeTab === 'custom'}>
+      <CustomResourcesTab {currentContext} />
+    </div>
+    <div class="tab-panel" class:active={activeTab === 'security'}>
+      <div class="coming-soon-tab">
+        <div class="coming-soon-content">
+          <div class="coming-soon-icon">🔒</div>
+          <h4>Security Management</h4>
+          <p>Security resources including RBAC, SecurityContexts, and PodSecurityPolicies will be available in a future update.</p>
         </div>
-      {/if}
-    {/key}
+      </div>
+    </div>
   </div>
 </div>
 
@@ -129,6 +134,31 @@
 
   .tab-content {
     margin-top: 0;
+    position: relative;
+    min-height: 200px;
+  }
+
+  .tab-panel {
+    display: none;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+    animation: fadeIn 0.2s ease-in-out;
+    will-change: opacity;
+    contain: layout style paint;
+  }
+
+  .tab-panel.active {
+    display: block;
+    opacity: 1;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 
   .coming-soon-tab {

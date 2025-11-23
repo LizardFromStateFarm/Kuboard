@@ -436,6 +436,8 @@
 
   .workloads-tab {
     padding: 0;
+    position: relative;
+    min-height: 400px;
   }
 
   .tab-header {
@@ -634,6 +636,8 @@
     gap: var(--spacing-md);
     padding: var(--spacing-xl);
     color: rgba(255, 255, 255, 0.8);
+    min-height: 300px;
+    justify-content: center;
   }
 
   .loading-spinner {
@@ -651,6 +655,8 @@
     border-radius: var(--radius-md);
     padding: var(--spacing-md);
     border: 1px solid rgba(255, 255, 255, 0.05);
+    min-height: 200px;
+    transition: opacity 0.2s ease-in-out;
   }
 
   .content-header {
