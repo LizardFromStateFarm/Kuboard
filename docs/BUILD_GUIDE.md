@@ -84,6 +84,63 @@ npm install
 - Install Visual Studio Build Tools
 - Ensure Windows SDK is installed
 
+### Linux: Blank/White Screen in Tauri Window
+
+If the Tauri window shows a blank or white screen while the localhost server works fine, this is a known issue with WebKitGTK on Linux, especially with:
+- **Wayland** display servers
+- **NVIDIA GPUs**
+- Certain GPU drivers
+
+**Solution 1: Use the included launch scripts**
+```bash
+# For development
+./run-dev.sh
+
+# For running the built app
+./run-kuboard.sh
+```
+
+**Solution 2: Set environment variables manually**
+```bash
+# Set these before running the app
+export WEBKIT_DISABLE_DMABUF_RENDERER=1
+export WEBKIT_DISABLE_COMPOSITING_MODE=1
+
+# Then run
+npm run tauri dev
+# or
+./src-tauri/target/release/kuboard
+```
+
+**Solution 3: Force X11 (if using Wayland)**
+```bash
+export GDK_BACKEND=x11
+npm run tauri dev
+```
+
+**Solution 4: Create a custom .desktop file**
+
+After installing the .deb package, create a custom launcher:
+```bash
+# Create a wrapper script
+sudo tee /usr/local/bin/kuboard-wrapper << 'EOF'
+#!/bin/bash
+export WEBKIT_DISABLE_DMABUF_RENDERER=1
+export WEBKIT_DISABLE_COMPOSITING_MODE=1
+exec /usr/bin/kuboard "$@"
+EOF
+
+sudo chmod +x /usr/local/bin/kuboard-wrapper
+
+# Update your .desktop file to use the wrapper
+# Edit ~/.local/share/applications/Kuboard.desktop
+# Change: Exec=kuboard
+# To: Exec=kuboard-wrapper
+```
+
+**Why this happens:**
+WebKitGTK (used by Tauri on Linux) can have GPU acceleration issues on certain configurations. The `WEBKIT_DISABLE_DMABUF_RENDERER=1` flag disables DMA-BUF rendering which often causes blank screens.
+
 ## 📁 Project Structure
 
 ```

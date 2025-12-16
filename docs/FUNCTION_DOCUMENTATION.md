@@ -130,6 +130,18 @@
 | `kuboard_start_cronjob_watch` | Starts watching CronJobs for real-time updates | ✅ Working | `commands` |
 | `kuboard_stop_cronjob_watch` | Stops CronJob watch | ✅ Working | `commands` |
 
+#### **Port Forwarding Commands**
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `kuboard_port_forward` | Creates a new port forward session | 🔄 Partial | `commands` |
+| `kuboard_list_port_forwards` | Lists all active port forwards | 🔄 Partial | `commands` |
+| `kuboard_stop_port_forward` | Stops an active port forward | 🔄 Partial | `commands` |
+
+#### **Exec Commands**
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `kuboard_exec_into_pod` | Creates exec session for pod container | 🔄 Partial | `commands` |
+
 ### 🔧 **Backend Helper Functions (Rust)**
 
 #### **Kubernetes Integration**
@@ -162,6 +174,27 @@
 | `kuboard_parse_memory_string` | Parses memory string (e.g., "1Gi", "1024Mi") into bytes | ✅ Working | `utils` |
 | `kuboard_format_memory` | Formats bytes into human-readable memory string | ✅ Working | `utils` |
 | `kuboard_format_cpu` | Formats CPU cores into human-readable string | ✅ Working | `utils` |
+
+#### **Exec Session Functions** (`kubernetes/exec.rs`)
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `ExecSession::new` | Creates new exec session with UUID | ✅ Working | `kubernetes/exec` |
+| `start_exec_session` | Initializes exec session for pod container | 🔄 Partial | `kubernetes/exec` |
+
+#### **Port Forward Session Functions** (`kubernetes/port_forward.rs`)
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `PortForwardSession::new` | Creates new port forward session with UUID | ✅ Working | `kubernetes/port_forward` |
+| `PortForwardSession::url` | Returns local URL for the forward | ✅ Working | `kubernetes/port_forward` |
+| `start_port_forward_session` | Initializes port forward session | 🔄 Partial | `kubernetes/port_forward` |
+
+#### **Optimized Commands** (`commands/optimized.rs`)
+| Function Name | Description | Status | Module |
+|---------------|-------------|--------|--------|
+| `kuboard_set_context_optimized` | Context switching with cache invalidation | ⚠️ Experimental | `commands/optimized` |
+| `kuboard_get_cluster_overview_optimized` | Cached cluster overview with parallel API calls | ⚠️ Experimental | `commands/optimized` |
+| `kuboard_get_nodes_optimized` | Cached nodes list with 30-second TTL | ⚠️ Experimental | `commands/optimized` |
+| `kuboard_get_all_resources_optimized` | Batch resource loading for better performance | ⚠️ Experimental | `commands/optimized` |
 
 ### 🎨 **Frontend Functions (Svelte/TypeScript)**
 
@@ -254,11 +287,15 @@ src-tauri/src/
 ├── lib.rs                 # Main entry point (orchestrates modules)
 ├── main.rs               # Application entry point
 ├── commands/
-│   └── mod.rs            # Tauri commands (410 lines)
+│   ├── mod.rs            # Tauri commands (~2800 lines)
+│   └── optimized.rs      # Performance-optimized commands with caching
 ├── kubernetes/
-│   └── mod.rs            # Kubernetes integration
+│   ├── mod.rs            # Kubernetes integration
+│   ├── watch.rs          # Resource watch functionality
+│   ├── exec.rs           # Pod exec session handling
+│   └── port_forward.rs   # Port forwarding session handling
 ├── metrics/
-│   └── mod.rs            # Metrics server integration (402 lines)
+│   └── mod.rs            # Metrics server integration (~400 lines)
 ├── types.rs              # Type definitions
 ├── app_state.rs          # Application state management
 └── utils.rs              # Utility functions
@@ -269,13 +306,22 @@ src-tauri/src/
 src/
 ├── routes/
 │   ├── +layout.ts        # Layout configuration
-│   └── +page.svelte      # Main dashboard (506 lines)
+│   └── +page.svelte      # Main dashboard
 ├── lib/
-│   ├── components/       # Reusable UI components
+│   ├── components/       # Reusable UI components (32 files)
 │   │   ├── Header.svelte
 │   │   ├── ClusterOverview.svelte
+│   │   ├── ClusterMetrics.svelte
 │   │   ├── ResourceOverview.svelte
 │   │   ├── MetricsGraph.svelte
+│   │   ├── DonutChart.svelte
+│   │   ├── TabbedContent.svelte
+│   │   ├── ResourceTabs.svelte
+│   │   ├── WorkloadsTab.svelte
+│   │   ├── NodesTab.svelte
+│   │   ├── ConfigTab.svelte
+│   │   ├── NetworkTab.svelte
+│   │   ├── CustomResourcesTab.svelte
 │   │   ├── PodsPanel.svelte
 │   │   ├── PodDetails.svelte
 │   │   ├── DeploymentsPanel.svelte
@@ -289,24 +335,21 @@ src/
 │   │   ├── CronJobsPanel.svelte
 │   │   ├── CronJobDetails.svelte
 │   │   ├── ServiceDetails.svelte
-│   │   ├── WorkloadsTab.svelte
-│   │   ├── NodesTab.svelte
-│   │   ├── ConfigTab.svelte
-│   │   ├── NetworkTab.svelte
-│   │   ├── CustomResourcesTab.svelte
-│   │   ├── TabbedContent.svelte
-│   │   ├── ResourceTabs.svelte
-│   │   ├── DonutChart.svelte
-│   │   ├── ClusterMetrics.svelte
 │   │   ├── LogsWindow.svelte
 │   │   ├── QuickActionsMenu.svelte
+│   │   ├── PortForwardManager.svelte  # Port forwarding UI
+│   │   ├── TerminalWindow.svelte      # Exec terminal with xterm.js
+│   │   ├── ResourceDescribe.svelte    # Resource describe display
 │   │   └── ThemeSwitcher.svelte
 │   ├── styles/
-│   │   └── variables.css # CSS custom properties
+│   │   ├── color-palette.css  # Centralized color definitions
+│   │   ├── variables.css      # CSS custom properties
+│   │   └── README.md          # Styling guide
 │   ├── types/
 │   │   └── index.ts       # TypeScript interfaces
 │   └── utils/
-│       └── formatters.ts # Data formatting utilities
+│       ├── formatters.ts  # Data formatting utilities
+│       └── performance.ts # Performance utilities
 └── app.html              # App template
 ```
 

@@ -11,7 +11,7 @@ This document provides a comprehensive overview of the Kuboard application archi
   - `types.rs` - Shared type definitions
   - `app_state.rs` - Application state management with async locks
 
-- **Frontend (SvelteKit):** Component-based architecture with 25+ specialized components:
+- **Frontend (SvelteKit):** Component-based architecture with 32 specialized components:
   - Resource management: `PodsPanel`, `DeploymentsPanel`, `StatefulSetsPanel`, `DaemonSetsPanel`, `ReplicaSetsPanel`, `CronJobsPanel`, `NodesTab`, `WorkloadsTab`, `ConfigTab`, `NetworkTab`, `CustomResourcesTab`
   - Detail views: `PodDetails`, `DeploymentDetails`, `StatefulSetDetails`, `DaemonSetDetails`, `ReplicaSetDetails`, `CronJobDetails`, `ServiceDetails`
   - Visualization: `MetricsGraph`, `DonutChart`, `ClusterMetrics`, `LogsWindow`
@@ -90,6 +90,9 @@ src/lib/components/
 ├── ClusterMetrics.svelte      # Cluster-wide metrics display
 ├── LogsWindow.svelte          # Advanced logs panel with structured entries and smart follow mode
 ├── QuickActionsMenu.svelte    # Quick action menu for resources
+├── PortForwardManager.svelte  # Port forwarding management UI
+├── TerminalWindow.svelte      # Terminal/exec window with xterm.js
+├── ResourceDescribe.svelte    # Resource describe information display
 └── ThemeSwitcher.svelte       # Development theme switching tool
 ```
 
@@ -352,6 +355,29 @@ src/lib/components/
 - Pod management actions (delete, restart, view logs)
 - Resource-specific operations
 
+#### **PortForwardManager Component**
+- Port forwarding session management UI
+- Create new port forwards for pods and services
+- Display active port forwards with status
+- Auto-detection of available ports from pod/service specs
+- Clickable local URLs (e.g., `http://localhost:8080`)
+- Stop port forward functionality
+
+#### **TerminalWindow Component**
+- Terminal interface for pod exec using xterm.js
+- Container selector for multi-container pods
+- Connection status indicator
+- Terminal theming matching application theme
+- Resize support with fit addon
+
+#### **ResourceDescribe Component**
+- Structured display of resource describe information
+- Collapsible sections for labels, annotations, status
+- Container details with status and resources
+- Conditions table with status formatting
+- Events table with type highlighting
+- Volume and toleration display
+
 ## 🎨 **UI Organization Guide**
 
 ### **Component Hierarchy**
@@ -491,9 +517,13 @@ src-tauri/src/
 ├── lib.rs                 # Main entry point
 ├── main.rs               # Application entry point
 ├── commands/             # Tauri commands
-│   └── mod.rs            # All Tauri command functions
+│   ├── mod.rs            # All Tauri command functions (~2800 lines)
+│   └── optimized.rs      # Performance-optimized commands with caching
 ├── kubernetes/           # Kubernetes integration
-│   └── mod.rs            # Kubeconfig and client management
+│   ├── mod.rs            # Kubeconfig and client management
+│   ├── watch.rs          # Resource watch functionality
+│   ├── exec.rs           # Pod exec session handling
+│   └── port_forward.rs   # Port forwarding session handling
 ├── metrics/              # Metrics server integration
 │   └── mod.rs            # Real-time metrics fetching
 ├── types.rs              # Type definitions
@@ -633,6 +663,30 @@ src-tauri/src/
 - `PodWatcher::start()` - Start watching pods and emit events to frontend
 - `PodWatcher::stop()` - Stop pod watch
 - `PodWatcher::is_active()` - Check if watch is currently active
+
+**Exec Module** (`kubernetes/exec.rs`):
+- `ExecSession` - Struct representing an exec session
+- `ExecSession::new()` - Create new exec session with UUID
+- `start_exec_session()` - Initialize exec session for a pod container
+  - Verifies pod exists
+  - Creates session with unique ID
+  - Returns session info for WebSocket streaming
+
+**Port Forward Module** (`kubernetes/port_forward.rs`):
+- `PortForwardSession` - Struct representing a port forward session
+- `PortForwardSession::new()` - Create new port forward session with UUID
+- `PortForwardSession::url()` - Get local URL (e.g., `http://localhost:8080`)
+- `start_port_forward_session()` - Initialize port forward session
+  - Verifies pod/service exists
+  - Checks local port availability
+  - Creates session with unique ID
+
+**Optimized Commands Module** (`commands/optimized.rs`):
+- `ClusterCache` - Struct for caching frequently accessed data (30-second TTL)
+- `kuboard_set_context_optimized()` - Context switching with cache invalidation
+- `kuboard_get_cluster_overview_optimized()` - Cached cluster overview with parallel API calls
+- `kuboard_get_nodes_optimized()` - Cached nodes list
+- `kuboard_get_all_resources_optimized()` - Batch resource loading for better performance
 
 #### **Metrics Server Integration** (`metrics/mod.rs`)
 

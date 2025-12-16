@@ -14,13 +14,31 @@ src/
 │   │   ├── DonutChart.svelte       # CSS-based donut chart component
 │   │   ├── TabbedContent.svelte    # Main resource management tabs
 │   │   ├── ResourceTabs.svelte     # Tab navigation component
-│   │   ├── WorkloadsTab.svelte     # Pods, Deployments, Services
+│   │   ├── WorkloadsTab.svelte     # Workloads management container
+│   │   ├── PodsPanel.svelte        # Pod management panel
+│   │   ├── PodDetails.svelte       # Detailed pod information
+│   │   ├── DeploymentsPanel.svelte # Deployment management panel
+│   │   ├── DeploymentDetails.svelte # Detailed deployment information
+│   │   ├── StatefulSetsPanel.svelte # StatefulSet management panel
+│   │   ├── StatefulSetDetails.svelte # Detailed StatefulSet information
+│   │   ├── DaemonSetsPanel.svelte  # DaemonSet management panel
+│   │   ├── DaemonSetDetails.svelte # Detailed DaemonSet information
+│   │   ├── ReplicaSetsPanel.svelte # ReplicaSet management panel
+│   │   ├── ReplicaSetDetails.svelte # Detailed ReplicaSet information
+│   │   ├── CronJobsPanel.svelte    # CronJob management panel
+│   │   ├── CronJobDetails.svelte   # Detailed CronJob information
+│   │   ├── ServiceDetails.svelte   # Detailed service information
 │   │   ├── NodesTab.svelte         # Cluster nodes management
 │   │   ├── ConfigTab.svelte        # ConfigMaps and Secrets
 │   │   ├── NetworkTab.svelte       # Services and networking
 │   │   ├── CustomResourcesTab.svelte # CRDs and custom resources
 │   │   ├── ResourceOverview.svelte # Legacy resource panels
 │   │   ├── MetricsGraph.svelte     # Resource usage graphs
+│   │   ├── LogsWindow.svelte       # Advanced logs panel
+│   │   ├── QuickActionsMenu.svelte # Context menu for resources
+│   │   ├── PortForwardManager.svelte # Port forwarding UI
+│   │   ├── TerminalWindow.svelte   # Terminal/exec with xterm.js
+│   │   ├── ResourceDescribe.svelte # Resource describe display
 │   │   └── ThemeSwitcher.svelte    # Dev mode theme controls
 │   ├── styles/              # CSS organization
 │   │   ├── color-palette.css # Centralized color definitions
@@ -97,7 +115,14 @@ border: 1px solid var(--border-primary);
 - **Individual Tab Components**: Specialized components for each resource type
 
 **Available Tabs:**
-1. **Workloads** (`WorkloadsTab.svelte`): Pods, Deployments, Services
+1. **Workloads** (`WorkloadsTab.svelte`): 
+   - Pods (`PodsPanel.svelte`, `PodDetails.svelte`)
+   - Deployments (`DeploymentsPanel.svelte`, `DeploymentDetails.svelte`)
+   - StatefulSets (`StatefulSetsPanel.svelte`, `StatefulSetDetails.svelte`)
+   - DaemonSets (`DaemonSetsPanel.svelte`, `DaemonSetDetails.svelte`)
+   - ReplicaSets (`ReplicaSetsPanel.svelte`, `ReplicaSetDetails.svelte`)
+   - CronJobs (`CronJobsPanel.svelte`, `CronJobDetails.svelte`)
+   - Services (`ServiceDetails.svelte`)
 2. **Nodes** (`NodesTab.svelte`): Cluster nodes with detailed management
 3. **Config** (`ConfigTab.svelte`): ConfigMaps and Secrets
 4. **Network** (`NetworkTab.svelte`): Services and networking resources

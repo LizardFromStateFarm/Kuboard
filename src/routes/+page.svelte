@@ -813,8 +813,90 @@
         <p>Fetching cluster overview...</p>
         <div class="loading-spinner">⏳</div>
       </div>
+    </div>
+  {:else if loading}
+    <div class="welcome-screen">
+      <div class="welcome-content">
+        <div class="welcome-icon">🔄</div>
+        <h2>Connecting...</h2>
+        <p>Loading Kubernetes configurations...</p>
+      </div>
+    </div>
+  {:else if !isTauriAvailable}
+    <!-- Demo mode - handled by showDemoData() -->
+  {:else if contexts.length === 0 && error}
+    <!-- No kubeconfig found or error loading -->
+    <div class="welcome-screen error-screen">
+      <div class="welcome-content">
+        <div class="welcome-icon">⚠️</div>
+        <h2>No Kubernetes Configuration Found</h2>
+        <p class="error-detail">{error}</p>
+        <div class="help-section">
+          <h3>How to fix this:</h3>
+          <ul class="help-list">
+            <li>
+              <strong>Install kubectl:</strong> Make sure kubectl is installed and configured
+            </li>
+            <li>
+              <strong>Check kubeconfig:</strong> Verify <code>~/.kube/config</code> exists and is valid
+            </li>
+            <li>
+              <strong>Set KUBECONFIG:</strong> Or set the <code>KUBECONFIG</code> environment variable
+            </li>
+            <li>
+              <strong>Create a cluster:</strong> Use minikube, kind, or connect to an existing cluster
+            </li>
+          </ul>
         </div>
-      {/if}
+        <div class="action-buttons">
+          <button class="retry-btn" onclick={handleRefresh}>
+            🔄 Retry
+          </button>
+        </div>
+      </div>
+    </div>
+  {:else if contexts.length === 0}
+    <!-- No contexts in kubeconfig -->
+    <div class="welcome-screen">
+      <div class="welcome-content">
+        <div class="welcome-icon">📋</div>
+        <h2>No Kubernetes Contexts Found</h2>
+        <p>Your kubeconfig file was found, but it doesn't contain any contexts.</p>
+        <div class="help-section">
+          <h3>To add a context:</h3>
+          <ul class="help-list">
+            <li>
+              <strong>minikube:</strong> Run <code>minikube start</code> to create a local cluster
+            </li>
+            <li>
+              <strong>kind:</strong> Run <code>kind create cluster</code> for a Docker-based cluster
+            </li>
+            <li>
+              <strong>Cloud:</strong> Use your cloud provider's CLI (gcloud, aws, az) to configure access
+            </li>
+          </ul>
+        </div>
+        <div class="action-buttons">
+          <button class="retry-btn" onclick={handleRefresh}>
+            🔄 Refresh
+          </button>
+        </div>
+      </div>
+    </div>
+  {:else}
+    <!-- Contexts available but none selected -->
+    <div class="welcome-screen">
+      <div class="welcome-content">
+        <div class="welcome-icon">🚀</div>
+        <h2>Welcome to Kuboard</h2>
+        <p>Select a Kubernetes context from the dropdown above to get started.</p>
+        <div class="context-hint">
+          <span class="arrow-hint">👆</span>
+          <span>{contexts.length} context{contexts.length !== 1 ? 's' : ''} available</span>
+        </div>
+      </div>
+    </div>
+  {/if}
 
   
   <!-- Theme Switcher (Dev Mode Only) -->
@@ -976,10 +1058,178 @@
     to { transform: rotate(360deg); }
   }
 
+  /* Welcome Screen Styles */
+  .welcome-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 80px);
+    padding: var(--spacing-xl);
+  }
+
+  .welcome-content {
+    text-align: center;
+    max-width: 600px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-2xl);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+
+  .welcome-icon {
+    font-size: 4rem;
+    margin-bottom: var(--spacing-lg);
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .welcome-content h2 {
+    color: var(--text-primary);
+    margin: 0 0 var(--spacing-md) 0;
+    font-size: 1.75rem;
+    font-weight: 600;
+  }
+
+  .welcome-content p {
+    color: var(--text-secondary);
+    margin: 0 0 var(--spacing-lg) 0;
+    line-height: 1.6;
+    font-size: 1.1rem;
+  }
+
+  .error-screen .welcome-content {
+    border-color: rgba(239, 68, 68, 0.3);
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.02) 100%);
+  }
+
+  .error-detail {
+    color: var(--error-color) !important;
+    background: rgba(239, 68, 68, 0.1);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    font-family: monospace;
+    font-size: 0.9rem !important;
+    word-break: break-word;
+    margin-bottom: var(--spacing-xl) !important;
+  }
+
+  .help-section {
+    text-align: left;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-xl);
+  }
+
+  .help-section h3 {
+    color: var(--text-primary);
+    margin: 0 0 var(--spacing-md) 0;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .help-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .help-list li {
+    color: var(--text-secondary);
+    padding: var(--spacing-sm) 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    line-height: 1.6;
+  }
+
+  .help-list li:last-child {
+    border-bottom: none;
+  }
+
+  .help-list li strong {
+    color: var(--primary-color);
+  }
+
+  .help-list code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.9em;
+    color: var(--info-color);
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: center;
+  }
+
+  .retry-btn {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: var(--spacing-md) var(--spacing-xl);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+
+  .retry-btn:hover {
+    background: var(--primary-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(46, 145, 190, 0.3);
+  }
+
+  .context-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    color: var(--text-secondary);
+    font-size: 1rem;
+    margin-top: var(--spacing-lg);
+    padding: var(--spacing-md);
+    background: rgba(46, 145, 190, 0.1);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(46, 145, 190, 0.2);
+  }
+
+  .arrow-hint {
+    animation: bounce 2s ease-in-out infinite;
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+
   /* Responsive Design */
   @media (max-width: 768px) {
     main {
       padding: 10px;
+    }
+
+    .welcome-content {
+      padding: var(--spacing-lg);
+      margin: var(--spacing-md);
+    }
+
+    .welcome-icon {
+      font-size: 3rem;
+    }
+
+    .welcome-content h2 {
+      font-size: 1.5rem;
     }
   }
 </style>
