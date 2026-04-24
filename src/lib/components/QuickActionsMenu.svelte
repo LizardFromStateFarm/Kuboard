@@ -3,7 +3,7 @@
   import { createEventDispatcher } from 'svelte';
 
   export let resource: any; // Pod, Deployment, Service, etc.
-  export let resourceType: 'pod' | 'deployment' | 'statefulset' | 'daemonset' | 'cronjob' | 'service' | 'replicaset' | 'node' | 'configmap' | 'secret' = 'pod';
+  export let resourceType: 'pod' | 'deployment' | 'statefulset' | 'daemonset' | 'cronjob' | 'service' | 'replicaset' | 'node' | 'configmap' | 'secret' | 'persistentvolumeclaim' | 'persistentvolume' | 'storageclass' | 'role' | 'clusterrole' | 'rolebinding' | 'clusterrolebinding' | 'serviceaccount' = 'pod';
   export let position: { x: number; y: number } | undefined = undefined;
   export let x: number | undefined = undefined;
   export let y: number | undefined = undefined;
@@ -127,14 +127,24 @@
             'daemonset': 'kuboard_delete_daemonset',
             'replicaset': 'kuboard_delete_replicaset',
             'service': 'kuboard_delete_service',
-            'cronjob': 'kuboard_delete_cronjob'
+            'cronjob': 'kuboard_delete_cronjob',
+            'persistentvolumeclaim': 'kuboard_delete_persistent_volume_claim',
+            'persistentvolume': 'kuboard_delete_persistent_volume',
+            'storageclass': 'kuboard_delete_storage_class',
+            'role': 'kuboard_delete_role',
+            'clusterrole': 'kuboard_delete_cluster_role',
+            'rolebinding': 'kuboard_delete_role_binding',
+            'clusterrolebinding': 'kuboard_delete_cluster_role_binding',
+            'serviceaccount': 'kuboard_delete_service_account'
           };
           
           const deleteCmd = deleteCommands[resourceType];
           if (deleteCmd) {
-            const params = resourceType === 'pod' 
+            const params = (resourceType === 'pod')
               ? { podName: getResourceName(), namespace: getResourceNamespace() }
-              : { name: getResourceName(), namespace: getResourceNamespace() };
+              : (resourceType === 'persistentvolume' || resourceType === 'storageclass' || resourceType === 'clusterrole' || resourceType === 'clusterrolebinding')
+                ? { name: getResourceName() }
+                : { name: getResourceName(), namespace: getResourceNamespace() };
             await invoke(deleteCmd, params);
             dispatch('deleted', { resource, resourceType });
           }
@@ -412,6 +422,44 @@
           { id: 'delete', label: 'Delete', icon: '🗑️' },
         ];
       
+      case 'persistentvolumeclaim':
+        return [
+          ...commonActions,
+          ...baseActions,
+          { id: 'delete', label: 'Delete', icon: '🗑️' },
+        ];
+      
+      case 'persistentvolume':
+        return [
+          { id: 'copy-name', label: 'Copy Name', icon: '📋' },
+          ...baseActions,
+          { id: 'delete', label: 'Delete', icon: '🗑️' },
+        ];
+      
+      case 'storageclass':
+        return [
+          { id: 'copy-name', label: 'Copy Name', icon: '📋' },
+          ...baseActions,
+          { id: 'delete', label: 'Delete', icon: '🗑️' },
+        ];
+      
+      case 'role':
+      case 'rolebinding':
+      case 'serviceaccount':
+        return [
+          ...commonActions,
+          ...baseActions,
+          { id: 'delete', label: 'Delete', icon: '🗑️' },
+        ];
+      
+      case 'clusterrole':
+      case 'clusterrolebinding':
+        return [
+          { id: 'copy-name', label: 'Copy Name', icon: '📋' },
+          ...baseActions,
+          { id: 'delete', label: 'Delete', icon: '🗑️' },
+        ];
+
       default:
         return baseActions;
     }

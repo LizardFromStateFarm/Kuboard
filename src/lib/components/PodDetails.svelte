@@ -4,6 +4,9 @@
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   import TerminalWindow from './TerminalWindow.svelte';
   import PortForwardManager from './PortForwardManager.svelte';
+  import PodConditions from './PodConditions.svelte';
+  import PodEvents from './PodEvents.svelte';
+  import PodVolumes from './PodVolumes.svelte';
 
   export let pod: any;
   export let onBack: () => void;
@@ -84,15 +87,6 @@
     }
   }
 
-  function getConditionStatusClass(status: string): string {
-    switch (status?.toLowerCase()) {
-      case 'true': return 'condition-true';
-      case 'false': return 'condition-false';
-      case 'unknown': return 'condition-unknown';
-      default: return 'condition-unknown';
-    }
-  }
-
   function formatObject(obj: any): string {
     if (typeof obj === 'string') return obj;
     if (typeof obj === 'number') return obj.toString();
@@ -100,36 +94,6 @@
     if (Array.isArray(obj)) return obj.join(', ');
     if (obj && typeof obj === 'object') return JSON.stringify(obj, null, 2);
     return 'N/A';
-  }
-
-  function formatEventTime(timestamp: string): string {
-    if (!timestamp) return 'Unknown';
-    try { return new Date(timestamp).toLocaleString(); } catch { return timestamp; }
-  }
-
-  function getEventTypeClass(type: string): string {
-    switch (type?.toLowerCase()) {
-      case 'normal': return 'event-normal';
-      case 'warning': return 'event-warning';
-      case 'error': return 'event-error';
-      default: return 'event-unknown';
-    }
-  }
-
-  function getEventReasonClass(reason: string): string {
-    switch (reason?.toLowerCase()) {
-      case 'created': return 'reason-created';
-      case 'scheduled': return 'reason-scheduled';
-      case 'pulling': return 'reason-pulling';
-      case 'pulled': return 'reason-pulled';
-      case 'started': return 'reason-started';
-      case 'killing': return 'reason-killing';
-      case 'killed': return 'reason-killed';
-      case 'failed': return 'reason-failed';
-      case 'backoff': return 'reason-backoff';
-      case 'unhealthy': return 'reason-unhealthy';
-      default: return 'reason-unknown';
-    }
   }
 
   function getContainerStatus(containerStatus: any): string {
@@ -511,18 +475,7 @@
         <span class="collapse-icon">{sectionsCollapsed.volumes ? '▶' : '▼'}</span>
       </h6>
       {#if !sectionsCollapsed.volumes}
-        {#if pod.spec?.volumes && pod.spec.volumes.length > 0}
-          <div class="volumes-list">
-            {#each pod.spec.volumes as v}
-              <div class="volume-item">
-                <span class="volume-name">{v.name}</span>
-                <span class="volume-source">{Object.keys(v).find(k => k !== 'name')}</span>
-              </div>
-            {/each}
-          </div>
-        {:else}
-          <div class="events-placeholder"><p>No volumes</p></div>
-        {/if}
+        <PodVolumes volumes={pod.spec?.volumes || []} />
       {/if}
     </div>
 
@@ -700,26 +653,7 @@
         <span class="collapse-icon">{sectionsCollapsed.events ? '▶' : '▼'}</span>
       </h6>
       {#if !sectionsCollapsed.events}
-        {#if eventsLoading}
-        <div class="events-loading"><div class="loading-spinner">⏳</div><p>Loading events...</p></div>
-      {:else if eventsError}
-        <div class="events-error"><div class="error-icon">⚠️</div><p>Failed to load events: {eventsError}</p><button class="retry-button" onclick={loadPodEvents}>Retry</button></div>
-      {:else if podEvents && podEvents.length > 0}
-        <div class="events-list">
-          {#each podEvents as event}
-            <div class="event-item">
-              <div class="event-header">
-                <div class="event-type-badge event-{getEventTypeClass(event.type)}">{event.type}</div>
-                <div class="event-reason reason-{getEventReasonClass(event.reason)}">{event.reason}</div>
-                <div class="event-time">{formatEventTime(event.firstTimestamp || event.eventTime)}</div>
-              </div>
-              <div class="event-message">{event.message}</div>
-            </div>
-          {/each}
-        </div>
-        {:else}
-          <div class="events-placeholder"><p>No events found for this pod</p></div>
-        {/if}
+        <PodEvents events={podEvents} loading={eventsLoading} error={eventsError} onRetry={loadPodEvents} />
       {/if}
     </div>
 
@@ -729,20 +663,7 @@
         <span class="collapse-icon">{sectionsCollapsed.conditions ? '▶' : '▼'}</span>
       </h6>
       {#if !sectionsCollapsed.conditions}
-        {#if pod.status?.conditions && pod.status.conditions.length > 0}
-          <div class="conditions-list">
-            {#each pod.status.conditions as c}
-              <div class="condition-item">
-                <span class="condition-type">{c.type}</span>
-                <span class="condition-status {getConditionStatusClass(c.status)}">{c.status}</span>
-                <span class="condition-reason">{c.reason}</span>
-                <span class="condition-message">{c.message}</span>
-              </div>
-            {/each}
-          </div>
-        {:else}
-          <div class="events-placeholder"><p>No conditions available</p></div>
-        {/if}
+        <PodConditions conditions={pod.status?.conditions || []} />
       {/if}
     </div>
   </div>
@@ -1030,54 +951,14 @@
     max-width: 200px;
   }
 
-  .conditions-list { 
-    display: grid; 
-    gap: 8px; 
-    max-width: 100%;
-  }
-  .condition-item { 
-    display: grid; 
-    grid-template-columns: 160px 90px 1fr; 
-    align-items: start; 
-    gap: 8px; 
-    padding: 8px 10px; 
-    border: 1px solid var(--border-primary); 
+  .events-placeholder { 
+    padding: 24px; 
+    text-align: center; 
+    color: var(--text-muted); 
+    background: rgba(0,0,0,0.1); 
     border-radius: 8px; 
-    background: rgba(255,255,255,0.03);
-    min-height: 40px;
-  }
-  .condition-type { 
-    font-weight: 700; 
-    color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .condition-status { 
-    padding: 2px 8px; 
-    border-radius: 999px; 
-    font-size: 12px; 
-    font-weight: 700; 
-    text-transform: uppercase; 
-    text-align: center;
-    flex-shrink: 0;
-  }
-  .condition-true { background: rgba(34, 197, 94, 0.12); color: #22c55e; border: 1px solid rgba(34, 197, 94, .24); }
-  .condition-false { background: rgba(239, 68, 68, 0.12); color: #ef4444; border: 1px solid rgba(239, 68, 68, .24); }
-  .condition-unknown { background: rgba(156, 163, 175, 0.12); color: #9ca3af; border: 1px solid rgba(156, 163, 175, .24); }
-  .condition-reason { 
-    color: var(--text-secondary); 
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .condition-message { 
-    grid-column: 1 / -1; 
-    color: var(--text-muted);
-    word-break: break-word;
-    overflow-wrap: break-word;
-    margin-top: 4px;
+    border: 1px dashed var(--border-primary);
+    margin-top: 8px;
   }
 
   .tolerations-list { 
@@ -1102,10 +983,7 @@
     font-size: 11px;
   }
 
-  .volumes-list { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-  .volume-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border-primary); border-radius: 8px; background: rgba(255,255,255,0.03); }
-  .volume-name { font-weight: 700; color: var(--text-primary); }
-  .volume-source { color: var(--text-secondary); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; }
+
 
   .containers-table { display: grid; gap: 6px; }
   .containers-header { 
@@ -1333,87 +1211,11 @@
     margin-top: var(--spacing-sm);
   }
 
-  .metrics-loading, .metrics-error, .events-loading, .events-error, .events-placeholder, .metrics-placeholder {
+  .metrics-loading, .metrics-error, .metrics-placeholder {
     display: flex;
     align-items: center;
     gap: 10px;
     color: var(--text-secondary);
-  }
-
-  .events-list {
-    display: grid;
-    gap: 8px;
-    max-width: 100%;
-  }
-
-  .event-item {
-    padding: 8px 10px;
-    border: 1px solid var(--border-primary);
-    border-radius: 8px;
-    background: rgba(255,255,255,0.02);
-    max-width: 100%;
-  }
-
-  .event-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
-    flex-wrap: wrap;
-  }
-
-  .event-type-badge {
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    flex-shrink: 0;
-  }
-
-  .event-normal { background: rgba(34, 197, 94, 0.12); color: #22c55e; }
-  .event-warning { background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
-  .event-error { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
-  .event-unknown { background: rgba(156, 163, 175, 0.12); color: #9ca3af; }
-
-  .event-reason {
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 10px;
-    font-weight: 600;
-    flex-shrink: 0;
-  }
-
-  .reason-created, .reason-scheduled, .reason-pulled, .reason-started { background: rgba(34, 197, 94, 0.12); color: #22c55e; }
-  .reason-pulling, .reason-killing, .reason-backoff { background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
-  .reason-failed, .reason-killed, .reason-unhealthy { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
-  .reason-unknown { background: rgba(156, 163, 175, 0.12); color: #9ca3af; }
-
-  .event-time {
-    color: var(--text-muted);
-    font-size: 11px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    margin-left: auto;
-    flex-shrink: 0;
-  }
-
-  .event-message {
-    color: var(--text-primary);
-    font-size: 12px;
-    word-break: break-word;
-    overflow-wrap: break-word;
-    line-height: 1.4;
-  }
-
-  .retry-button {
-    padding: 4px 8px;
-    background: var(--primary-color);
-    border: 1px solid var(--primary-color);
-    color: white;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 11px;
-    font-weight: 600;
   }
 
   .retry-button:hover {

@@ -142,6 +142,29 @@ pub fn run() {
         // Resource Describe
         commands::kuboard_describe_pod,
         
+        // Storage Management Commands
+        commands::kuboard_list_persistent_volumes,
+        commands::kuboard_get_persistent_volume,
+        commands::kuboard_delete_persistent_volume,
+        commands::kuboard_list_persistent_volume_claims,
+        commands::kuboard_get_persistent_volume_claim,
+        commands::kuboard_delete_persistent_volume_claim,
+        commands::kuboard_list_storage_classes,
+        commands::kuboard_get_storage_class,
+        commands::kuboard_delete_storage_class,
+        
+        // Security & RBAC Commands
+        commands::kuboard_list_roles,
+        commands::kuboard_list_cluster_roles,
+        commands::kuboard_list_role_bindings,
+        commands::kuboard_list_cluster_role_bindings,
+        commands::kuboard_list_service_accounts,
+        commands::kuboard_delete_role,
+        commands::kuboard_delete_cluster_role,
+        commands::kuboard_delete_role_binding,
+        commands::kuboard_delete_cluster_role_binding,
+        commands::kuboard_delete_service_account,
+        
         // Pod Exec Commands
         commands::kuboard_exec_into_pod,
         

@@ -263,30 +263,15 @@
   <div class="replicasets-panel">
     <div class="panel-header">
       <h4>📦 ReplicaSets ({filteredReplicaSets.length})</h4>
-      <div class="header-controls">
-        <input
-          type="text"
-          class="search-input"
-          placeholder="Search ReplicaSets..."
-          bind:value={searchQuery}
-        />
-      </div>
-    </div>
-
-    {#if replicasets.length === 0}
-      <div class="empty-state">
-        <div class="empty-icon">📭</div>
-        <h5>No ReplicaSets Found</h5>
-        <p>No ReplicaSets are currently in this cluster</p>
-      </div>
-    {:else if filteredReplicaSets.length === 0}
-      <div class="empty-state">
-        <div class="empty-icon">🔍</div>
-        <h5>No ReplicaSets Match</h5>
-        <p>No ReplicaSets match your search query: "{searchQuery}"</p>
-      </div>
-    {:else}
-      <div class="replicasets-table">
+      <ResourceTable
+        items={getRenderReplicaSetss()}
+        filteredItems={filteredReplicaSetss}
+        bind:searchQuery
+        searchPlaceholder="Search ReplicaSets..."
+        noItemsMessage="No ReplicaSets are currently in this cluster"
+        noSearchResultsMessage="No ReplicaSets match your search query:"
+      >
+        <svelte:fragment slot="table">      <div class="replicasets-table">
         <div class="table-header">
           <div class="header-cell sortable" onclick={() => handleSort('name')} role="button" tabindex="0">
             Name
@@ -359,7 +344,8 @@
           {/each}
         </div>
       </div>
-    {/if}
+        </svelte:fragment>
+      </ResourceTable>
   </div>
 
   <!-- Quick Actions Menu -->
@@ -461,65 +447,6 @@
     color: var(--text-primary);
     font-size: 1.1rem;
     font-weight: 600;
-  }
-
-  .header-controls {
-    display: flex;
-    gap: var(--spacing-sm);
-    align-items: center;
-  }
-
-  .search-input {
-    padding: 8px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    width: 250px;
-    transition: all 0.2s;
-  }
-
-  .search-input:focus {
-    outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-  }
-
-  .loading-message, .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: var(--spacing-xl);
-    gap: var(--spacing-md);
-    color: var(--text-secondary);
-  }
-
-  .loading-spinner {
-    font-size: 2rem;
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  .empty-icon {
-    font-size: 3rem;
-    opacity: 0.7;
-  }
-
-  .empty-state h5 {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 1.1rem;
-  }
-
-  .empty-state p {
-    margin: 0;
-    font-size: 0.9rem;
   }
 
   .replicasets-table {

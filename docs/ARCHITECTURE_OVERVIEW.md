@@ -4,7 +4,7 @@ This document provides a comprehensive overview of the Kuboard application archi
 
 ### **Key Architecture Points:**
 - **Backend (Rust/Tauri):** Modular structure with `kuboard_` prefixed functions organized into:
-  - `commands/mod.rs` - Tauri commands (context, cluster, resources, metrics, pod actions, watch)
+  - `commands/` - Resource-specific Tauri command modules (`pods.rs`, `deployments.rs`, `cluster.rs`, etc.)
   - `kubernetes/mod.rs` - Kubernetes client and API integration
   - `metrics/mod.rs` - Metrics server integration with real-time/historical data
   - `utils.rs` - CPU/memory parsing and formatting utilities
@@ -13,6 +13,7 @@ This document provides a comprehensive overview of the Kuboard application archi
 
 - **Frontend (SvelteKit):** Component-based architecture with 32 specialized components:
   - Resource management: `PodsPanel`, `DeploymentsPanel`, `StatefulSetsPanel`, `DaemonSetsPanel`, `ReplicaSetsPanel`, `CronJobsPanel`, `NodesTab`, `WorkloadsTab`, `ConfigTab`, `NetworkTab`, `CustomResourcesTab`
+  - Generic UI components: `ResourceTable`
   - Detail views: `PodDetails`, `DeploymentDetails`, `StatefulSetDetails`, `DaemonSetDetails`, `ReplicaSetDetails`, `CronJobDetails`, `ServiceDetails`
   - Visualization: `MetricsGraph`, `DonutChart`, `ClusterMetrics`, `LogsWindow`
   - Layout: `Header`, `ClusterOverview`, `TabbedContent`, `ResourceTabs`, `ResourceOverview`
@@ -533,7 +534,18 @@ src-tauri/src/
 
 ### **Function Organization**
 
-#### **Tauri Commands** (`commands/mod.rs`)
+#### **Tauri Commands** (`commands/`)
+The `commands/` module has been refactored into domain-specific files to avoid a monolithic structure:
+- `contexts.rs` - Context management commands
+- `cluster.rs` - Cluster overview and status commands
+- `resources.rs` - Core Kubernetes resource commands
+- `pods.rs` - Pod specific commands and actions
+- `deployments.rs` - Deployment specific actions
+- `metrics.rs` - Metrics related commands
+- `port_forward.rs` - Port forwarding session commands
+- `exec.rs` - Terminal execution commands
+- `describe.rs` - Resource describe commands
+- `cronjobs.rs`, `daemonsets.rs`, `statefulsets.rs` - Workload-specific commands
 
 **Context Management:**
 - `kuboard_list_contexts` - List available Kubernetes contexts from kubeconfig
