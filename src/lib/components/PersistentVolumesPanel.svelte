@@ -122,9 +122,6 @@
 </script>
 
 <div class="pv-panel">
-  <div class="panel-header">
-    <h4>💾 Persistent Volumes ({filteredPVs.length})</h4>
-  </div>
 
   {#if loading && pvs.length === 0}
     <div class="loading-state">

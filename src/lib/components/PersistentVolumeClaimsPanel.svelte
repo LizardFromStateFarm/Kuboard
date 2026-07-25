@@ -68,6 +68,23 @@
     }
   }
 
+  function calculateTotalStorage(claims: any[]): string {
+    let totalGiB = 0;
+    claims.forEach(pvc => {
+      const raw = pvc.status?.capacity?.storage || pvc.spec?.resources?.requests?.storage || '0';
+      if (raw.endsWith('Gi')) totalGiB += parseFloat(raw);
+      else if (raw.endsWith('Mi')) totalGiB += parseFloat(raw) / 1024;
+      else if (raw.endsWith('Ti')) totalGiB += parseFloat(raw) * 1024;
+      else totalGiB += parseFloat(raw) || 0;
+    });
+    return totalGiB > 1024 ? `${(totalGiB / 1024).toFixed(1)} TiB` : `${totalGiB.toFixed(1)} GiB`;
+  }
+
+  function getStorageClassCount(claims: any[]): number {
+    const scs = new Set(claims.map(p => p.spec?.storageClassName).filter(Boolean));
+    return scs.size;
+  }
+
   function handleContextMenu(event: MouseEvent, pvc: any) {
     event.preventDefault();
     selectedResource = pvc;
@@ -122,9 +139,30 @@
 </script>
 
 <div class="pvc-panel">
-  <div class="panel-header">
-    <h4>💾 Persistent Volume Claims ({filteredPVCs.length})</h4>
-  </div>
+
+  <!-- Storage Capacity & Utilization Summary Strip -->
+  {#if pvcs.length > 0}
+    <div class="storage-summary-strip">
+      <div class="stat-card">
+        <span class="stat-label">Total Bound PVCs</span>
+        <span class="stat-val">{pvcs.filter(p => (p.status?.phase || '').toLowerCase() === 'bound').length} / {pvcs.length}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Total Claimed Storage</span>
+        <span class="stat-val font-mono">{calculateTotalStorage(pvcs)}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Pending Claims</span>
+        <span class="stat-val {pvcs.filter(p => (p.status?.phase || '').toLowerCase() === 'pending').length > 0 ? 'warn' : ''}">
+          {pvcs.filter(p => (p.status?.phase || '').toLowerCase() === 'pending').length}
+        </span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Storage Classes</span>
+        <span class="stat-val">{getStorageClassCount(pvcs)}</span>
+      </div>
+    </div>
+  {/if}
 
   {#if loading && pvcs.length === 0}
     <div class="loading-state">
@@ -203,6 +241,27 @@
   .panel-header {
     margin-bottom: var(--spacing-md);
   }
+
+  .storage-summary-strip {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .stat-card {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
+  .stat-val { font-size: 1.1rem; color: var(--text-primary); font-weight: 700; }
+  .stat-val.warn { color: #fbbf24; }
 
   .panel-header h4 {
     margin: 0;

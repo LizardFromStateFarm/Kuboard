@@ -2,6 +2,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { ShieldAlert } from 'lucide-svelte';
   import ResourceTable from './ResourceTable.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
 
@@ -110,7 +111,7 @@
 
 <div class="cluster-roles-panel">
   <div class="panel-header">
-    <h4>🔒 Cluster Roles ({filteredRoles.length})</h4>
+    <h4><ShieldAlert size={16} /> Cluster Roles ({filteredRoles.length})</h4>
   </div>
 
   {#if loading && clusterRoles.length === 0}

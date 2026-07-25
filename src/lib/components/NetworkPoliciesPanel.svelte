@@ -113,9 +113,6 @@
 </script>
 
 <div class="network-policies-panel">
-  <div class="panel-header">
-    <h4>🛡️ Network Policies ({filteredPolicies.length})</h4>
-  </div>
 
   {#if loading && networkPolicies.length === 0}
     <div class="loading-state">

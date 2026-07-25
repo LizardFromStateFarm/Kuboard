@@ -2,6 +2,8 @@
 <script lang="ts">
   import type { KubeContext } from '../types/index.js';
   import ThemeSwitcher from './ThemeSwitcher.svelte';
+  import ReportGeneratorModal from './ReportGeneratorModal.svelte';
+  import { Ship, FileText, RefreshCw, Plus, X } from 'lucide-svelte';
 
   // Props
   export let contexts: KubeContext[] = [];
@@ -22,6 +24,7 @@
   let clusterTabs: ClusterTabItem[] = [];
   let activeTabId: string = '';
   let showNewTabModal = false;
+  let showReportModal = false;
   let selectedContextName = '';
 
   // New tab modal state
@@ -38,6 +41,7 @@
         contextName: currentContext.name
       }];
       activeTabId = id;
+      dispatch('contextChange', { contextName: currentContext.name, tabId: id });
     }
   }
 
@@ -49,7 +53,7 @@
         activeTab.name = selectedContextName;
         clusterTabs = [...clusterTabs];
       }
-      dispatch('contextChange', selectedContextName);
+      dispatch('contextChange', { contextName: selectedContextName, tabId: activeTabId });
     }
   }
 
@@ -62,7 +66,7 @@
     if (tab) {
       activeTabId = tabId;
       selectedContextName = tab.contextName;
-      dispatch('contextChange', tab.contextName);
+      dispatch('contextChange', { contextName: tab.contextName, tabId: tab.id });
     }
   }
 
@@ -89,7 +93,7 @@
     selectedContextName = newTabContextName;
     showNewTabModal = false;
 
-    dispatch('contextChange', newTabContextName);
+    dispatch('contextChange', { contextName: newTabContextName, tabId: id });
   }
 
   function closeTab(tabId: string) {
@@ -100,8 +104,19 @@
       const nextTab = clusterTabs[Math.max(0, index - 1)];
       activeTabId = nextTab.id;
       selectedContextName = nextTab.contextName;
-      dispatch('contextChange', nextTab.contextName);
+      dispatch('contextChange', { contextName: nextTab.contextName, tabId: nextTab.id });
     }
+  }
+  function getEnvironmentType(contextName: string): { label: string; tag: 'prod' | 'staging' | 'dev'; emoji: string } {
+    if (!contextName) return { label: 'DEV', tag: 'dev', emoji: '🟢' };
+    const lower = contextName.toLowerCase();
+    if (lower.includes('prod') || lower.includes('prd')) {
+      return { label: 'PROD', tag: 'prod', emoji: '🔴' };
+    }
+    if (lower.includes('stage') || lower.includes('stg') || lower.includes('qa')) {
+      return { label: 'STAGING', tag: 'staging', emoji: '🟡' };
+    }
+    return { label: 'DEV', tag: 'dev', emoji: '🟢' };
   }
 </script>
 
@@ -109,30 +124,31 @@
   <div class="header-main-row">
     <!-- Brand Title -->
     <div class="brand">
-      <span class="brand-logo">🚢</span>
+      <Ship size={22} class="brand-logo-icon" />
       <span class="brand-name">Kuboard</span>
     </div>
 
     <!-- Cluster Tabs Bar (Kubeconfig contexts only) -->
     <div class="cluster-tabs-list">
       {#each clusterTabs as tab}
+        {@const env = getEnvironmentType(tab.contextName)}
         <div 
-          class="cluster-tab" 
+          class="cluster-tab env-{env.tag}" 
           class:active={tab.id === activeTabId}
           onclick={() => selectTab(tab.id)}
           role="button"
           tabindex="0"
           onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && selectTab(tab.id)}
         >
-          <span class="tab-icon">☸️</span>
+          <span class="env-badge env-badge-{env.tag}">{env.emoji} {env.label}</span>
           <span class="tab-name">{tab.name}</span>
           {#if clusterTabs.length > 1}
-            <button class="tab-close" onclick={(e) => { e.stopPropagation(); closeTab(tab.id); }} title="Close tab">×</button>
+            <button class="tab-close" onclick={(e) => { e.stopPropagation(); closeTab(tab.id); }} title="Close tab">✕</button>
           {/if}
         </div>
       {/each}
 
-      <button class="add-tab-trigger" onclick={openNewTabModal} title="Open new cluster tab">+</button>
+      <button class="add-tab-trigger" onclick={openNewTabModal} title="Open new cluster tab"><Plus size={14} /></button>
     </div>
 
     <!-- Header Actions -->
@@ -157,13 +173,19 @@
         </select>
       </div>
 
+      <button onclick={() => showReportModal = true} disabled={!currentContext} class="report-btn" title="Generate Cluster Health Report">
+        <FileText size={15} /> Report
+      </button>
+
       <button onclick={handleRefresh} disabled={loading} class="refresh-btn" title="Refresh cluster data">
-        {loading ? "⏳" : "↻"}
+        <RefreshCw size={15} class={loading ? 'spin' : ''} />
       </button>
       <ThemeSwitcher />
     </div>
   </div>
 </header>
+
+<ReportGeneratorModal {currentContext} isOpen={showReportModal} onClose={() => showReportModal = false} />
 
 <!-- Modal for Opening New Tab -->
 {#if showNewTabModal}
@@ -266,6 +288,35 @@
     border-color: var(--primary-color);
     color: white;
     font-weight: 600;
+  }
+
+  .env-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+    letter-spacing: 0.03em;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .env-badge-prod {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+  }
+
+  .env-badge-staging {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+  }
+
+  .env-badge-dev {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.3);
   }
 
   .tab-icon {
@@ -441,6 +492,25 @@
     border-color: var(--border-secondary);
   }
 
+  .report-btn {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: #60a5fa;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .report-btn:hover:not(:disabled) {
+    background: rgba(59, 130, 246, 0.3);
+  }
+  .report-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
   .refresh-btn {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid var(--border-primary);
@@ -462,5 +532,18 @@
   .refresh-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  :global(.spin) {
+    animation: spinIcon 1s linear infinite;
+  }
+
+  @keyframes spinIcon {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  :global(.brand-logo-icon) {
+    color: var(--primary-color);
   }
 </style>

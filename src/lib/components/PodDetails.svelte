@@ -4,9 +4,13 @@
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   import TerminalWindow from './TerminalWindow.svelte';
   import PortForwardManager from './PortForwardManager.svelte';
+  import { openGlobalPodTerminal } from '../stores/logs';
+  import YamlEditor from './YamlEditor.svelte';
+  import MiniTopologyDAG from './MiniTopologyDAG.svelte';
   import PodConditions from './PodConditions.svelte';
   import PodEvents from './PodEvents.svelte';
   import PodVolumes from './PodVolumes.svelte';
+  import { Activity, HardDrive, Boxes, CheckCircle2, ArrowLeft, Terminal, FileText } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -95,7 +99,22 @@
 
   function openActionsMenu(event: MouseEvent) {
     event.stopPropagation();
-    actionsMenuPosition = { x: event.clientX, y: event.clientY };
+    event.preventDefault();
+    if (actionsMenuVisible) {
+      actionsMenuVisible = false;
+      return;
+    }
+    const btn = event.currentTarget as HTMLElement;
+    if (btn && typeof btn.getBoundingClientRect === 'function') {
+      const rect = btn.getBoundingClientRect();
+      if (rect.width > 0 || rect.height > 0) {
+        actionsMenuPosition = { x: rect.left, y: rect.bottom + 4 };
+      } else if (event.clientX > 0 || event.clientY > 0) {
+        actionsMenuPosition = { x: event.clientX, y: event.clientY };
+      }
+    } else if (event.clientX > 0 || event.clientY > 0) {
+      actionsMenuPosition = { x: event.clientX, y: event.clientY };
+    }
     actionsMenuVisible = true;
   }
 
@@ -252,6 +271,63 @@ spec:
     } finally { eventsLoading = false; }
   }
 
+  let selectedMetricsContainerName = 'all';
+
+  function parseCpuToCores(val: string | undefined): number {
+    if (!val) return 0;
+    if (val.endsWith('m')) return parseFloat(val.replace('m', '')) / 1000;
+    return parseFloat(val) || 0;
+  }
+
+  function parseMemoryToGB(val: string | undefined): number {
+    if (!val) return 0;
+    if (val.endsWith('Gi')) return parseFloat(val.replace('Gi', ''));
+    if (val.endsWith('Mi')) return parseFloat(val.replace('Mi', '')) / 1024;
+    if (val.endsWith('Ki')) return parseFloat(val.replace('Ki', '')) / (1024 * 1024);
+    if (val.endsWith('G')) return parseFloat(val.replace('G', ''));
+    if (val.endsWith('M')) return parseFloat(val.replace('M', '')) / 1000;
+    return (parseFloat(val) || 0) / (1024 * 1024 * 1024);
+  }
+
+  $: containerList = pod.spec?.containers || [];
+
+  $: currentLimitValue = (() => {
+    const containersToSum = selectedMetricsContainerName === 'all' 
+      ? containerList 
+      : containerList.filter((c: any) => c.name === selectedMetricsContainerName);
+
+    if (selectedResourceType === 'cpu') {
+      return containersToSum.reduce((acc: number, c: any) => acc + parseCpuToCores(c.resources?.limits?.cpu), 0);
+    } else {
+      return containersToSum.reduce((acc: number, c: any) => acc + parseMemoryToGB(c.resources?.limits?.memory), 0);
+    }
+  })();
+
+  $: currentRequestValue = (() => {
+    const containersToSum = selectedMetricsContainerName === 'all' 
+      ? containerList 
+      : containerList.filter((c: any) => c.name === selectedMetricsContainerName);
+
+    if (selectedResourceType === 'cpu') {
+      return containersToSum.reduce((acc: number, c: any) => acc + parseCpuToCores(c.resources?.requests?.cpu), 0);
+    } else {
+      return containersToSum.reduce((acc: number, c: any) => acc + parseMemoryToGB(c.resources?.requests?.memory), 0);
+    }
+  })();
+
+  let copiedNotice = false;
+
+  async function copyPodName() {
+    if (!pod?.metadata?.name) return;
+    try {
+      await navigator.clipboard.writeText(pod.metadata.name);
+      copiedNotice = true;
+      setTimeout(() => { copiedNotice = false; }, 1500);
+    } catch (err) {
+      console.error('Failed to copy pod name:', err);
+    }
+  }
+
   function changeResourceType(type: 'cpu' | 'memory') { selectedResourceType = type; }
   
   $: if (selectedTimeRange && pod?.metadata?.name && metricsInitialized) {
@@ -278,16 +354,11 @@ spec:
   <!-- Sleek Top Action Bar -->
   <div class="pod-nav-bar">
     <div class="nav-actions">
-      <button class="btn-back" onclick={onBack}>← Back to Pods</button>
+      <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}>← Back to Pods</button>
       <button class="btn-subtle" onclick={() => onOpenLogs(pod)}>📋 Logs</button>
-      <button class="btn-subtle" onclick={() => terminalOpen = true} title="Exec into Pod">💻 Exec</button>
+      <button class="btn-subtle" onclick={() => openGlobalPodTerminal(undefined, pod?.metadata?.name, pod?.metadata?.namespace, selectedContainer?.name)} title="Exec into Pod">💻 Exec</button>
       <button class="btn-subtle" onclick={() => portForwardManagerOpen = true} title="Port Forward">🔌 Port Forward</button>
-      <button class="btn-subtle" onclick={openActionsMenu}>⚙️ Actions</button>
-    </div>
-    <div class="pod-heading">
-      <span class="status-pill status-{getStatusClass(pod.status?.phase)}">{pod.status?.phase}</span>
-      <h3 class="pod-title">{pod.metadata?.name}</h3>
-      <span class="namespace-pill">{pod.metadata?.namespace}</span>
+      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}>⚙️ Actions</button>
     </div>
   </div>
 
@@ -295,6 +366,23 @@ spec:
   <div class="pod-sheet">
     <!-- Key Specs Summary Strip -->
     <div class="sheet-section specs-strip">
+      <div class="spec-cell pod-name-spec-cell">
+        <span class="spec-label">Pod Name {#if copiedNotice}<span class="copy-success-badge">✓ Copied!</span>{/if}</span>
+        <div class="pod-name-wrap">
+          <span class="status-pill status-{getStatusClass(pod.status?.phase)}">{pod.status?.phase}</span>
+          <h3 
+            class="pod-title clickable" 
+            onclick={copyPodName}
+            onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && copyPodName()}
+            role="button"
+            tabindex="0"
+            title="Click to copy pod name ({pod.metadata?.name})"
+          >
+            {pod.metadata?.name}
+          </h3>
+          <span class="namespace-pill">{pod.metadata?.namespace}</span>
+        </div>
+      </div>
       <div class="spec-cell">
         <span class="spec-label">Node</span>
         <span class="spec-val" title={pod.spec?.nodeName}>{pod.spec?.nodeName || '-'}</span>
@@ -323,11 +411,24 @@ spec:
       </div>
     </div>
 
+    <!-- Mini Topology DAG -->
+    <div class="sheet-section">
+      <MiniTopologyDAG resource={pod} resourceType="pod" />
+    </div>
+
     <!-- Resource Usage Metrics -->
     <div class="sheet-section">
       <div class="section-title-row">
-        <h5>📊 Resource Usage Metrics</h5>
+        <h5><Activity size={16} /> Resource Usage Metrics</h5>
         <div class="metrics-controls">
+          {#if containerList.length > 1}
+            <select bind:value={selectedMetricsContainerName} class="select-sm">
+              <option value="all">All Containers ({containerList.length})</option>
+              {#each containerList as c}
+                <option value={c.name}>{c.name}</option>
+              {/each}
+            </select>
+          {/if}
           <select bind:value={selectedTimeRange} class="select-sm">
             <option value={30}>30m</option>
             <option value={60}>1h</option>
@@ -343,7 +444,18 @@ spec:
       {#if metricsLoading}
         <div class="metrics-loading"><div class="spinner-sm">⏳</div><p>Loading metrics...</p></div>
       {:else if podMetrics}
-        <MetricsGraph data={podMetrics} type={selectedResourceType} duration={selectedTimeRange} loading={metricsLoading} error={metricsError} maxCpuCores={1} maxMemoryBytes={1024 * 1024 * 1024} isPodMetrics={true} />
+        <MetricsGraph 
+          data={podMetrics} 
+          type={selectedResourceType} 
+          duration={selectedTimeRange} 
+          loading={metricsLoading} 
+          error={metricsError} 
+          maxCpuCores={currentLimitValue || 1} 
+          maxMemoryBytes={(currentLimitValue || 1) * 1024 * 1024 * 1024} 
+          limitValue={currentLimitValue}
+          requestValue={currentRequestValue}
+          isPodMetrics={true} 
+        />
       {:else}
         <div class="no-metrics-hint"><p>No live metrics data available</p></div>
       {/if}
@@ -413,13 +525,13 @@ spec:
 
     <!-- Volumes -->
     <div class="sheet-section">
-      <h5>💾 Volumes</h5>
+      <h5><HardDrive size={16} /> Volumes</h5>
       <PodVolumes volumes={pod.spec?.volumes || []} />
     </div>
 
     <!-- Containers -->
     <div class="sheet-section">
-      <h5>📦 Containers ({pod.spec?.containers?.length || 0})</h5>
+      <h5><Boxes size={16} /> Containers ({pod.spec?.containers?.length || 0})</h5>
       {#if pod.spec?.containers && pod.spec.containers.length > 0}
         <div class="containers-list-view">
           <div class="c-head">
@@ -496,7 +608,7 @@ spec:
 
     <!-- Pod Conditions -->
     <div class="sheet-section">
-      <h5>📋 Pod Conditions</h5>
+      <h5><CheckCircle2 size={16} /> Pod Conditions</h5>
       <PodConditions conditions={pod.status?.conditions || []} />
     </div>
   </div>
@@ -551,17 +663,7 @@ spec:
   on:edit={handleActionEdit}
 />
 
-{#if terminalOpen}
-  <div class="terminal-overlay">
-    <TerminalWindow
-      isOpen={terminalOpen}
-      podName={pod?.metadata?.name || ''}
-      namespace={pod?.metadata?.namespace || 'default'}
-      containerName={selectedContainer?.name || pod?.spec?.containers?.[0]?.name || ''}
-      onClose={() => terminalOpen = false}
-    />
-  </div>
-{/if}
+
 
 {#if portForwardManagerOpen}
   <div class="port-forward-overlay">
@@ -629,11 +731,46 @@ spec:
     gap: 8px;
   }
 
+  .pod-name-spec-cell {
+    max-width: 340px;
+    overflow: hidden;
+  }
+
+  .pod-name-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+    overflow: hidden;
+  }
+
   .pod-title {
     margin: 0;
     font-size: 1.1rem;
     font-weight: 700;
     color: var(--text-primary);
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pod-title.clickable {
+    cursor: pointer;
+    transition: opacity 0.15s ease, color 0.15s ease;
+  }
+
+  .pod-title.clickable:hover {
+    color: #60a5fa;
+    text-decoration: underline;
+  }
+
+  .copy-success-badge {
+    color: #4ade80;
+    font-weight: 700;
+    font-size: 0.75rem;
+    margin-left: 6px;
+    animation: fadeIn 0.15s ease-in;
   }
 
   .namespace-pill {
@@ -642,6 +779,7 @@ spec:
     font-size: 0.8rem;
     padding: 2px 8px;
     border-radius: 12px;
+    flex-shrink: 0;
   }
 
   .status-pill {
@@ -650,6 +788,7 @@ spec:
     font-weight: 700;
     border-radius: 12px;
     text-transform: uppercase;
+    flex-shrink: 0;
   }
 
   .status-running { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
@@ -690,7 +829,8 @@ spec:
     align-items: center;
     gap: 24px;
     background: rgba(255, 255, 255, 0.02);
-    overflow-x: auto;
+    overflow-x: hidden;
+    flex-wrap: wrap;
   }
 
   .spec-cell {

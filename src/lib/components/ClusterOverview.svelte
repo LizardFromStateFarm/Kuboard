@@ -9,6 +9,7 @@
   // Props
   export let clusterOverview: ClusterOverview | null = null;
   export let currentContext: any = null;
+  export let tabSessionId: string = 'tab-default';
   export let selectedNode: NodeDetails | null = null;
   export let nodes: any[] = [];
   export let metricsLoading: boolean = false;
@@ -134,7 +135,7 @@
 {:else if clusterOverview}
   <div class="cluster-overview">
     <!-- Resource Management Tabs -->
-    <TabbedContent {currentContext} {nodes} />
+    <TabbedContent {currentContext} {nodes} {tabSessionId} />
   </div>
 {/if}
 

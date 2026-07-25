@@ -3,16 +3,20 @@
   import PersistentVolumeClaimsPanel from './PersistentVolumeClaimsPanel.svelte';
   import PersistentVolumesPanel from './PersistentVolumesPanel.svelte';
   import StorageClassesPanel from './StorageClassesPanel.svelte';
+  import { HardDrive, Database, Layers } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
   export let namespace: string = 'all';
+  export let tabSessionId: string = 'tab-default';
 
   // State
-  let activeTab: 'pvc' | 'pv' | 'sc' = 'pvc';
+  let sessionTabMap: Record<string, 'pvc' | 'pv' | 'sc'> = {};
+  $: activeTab = sessionTabMap[tabSessionId] || 'pvc';
 
   function setActiveTab(tab: 'pvc' | 'pv' | 'sc') {
-    activeTab = tab;
+    sessionTabMap[tabSessionId] = tab;
+    sessionTabMap = { ...sessionTabMap };
   }
 </script>
 
@@ -23,21 +27,21 @@
       class:active={activeTab === 'pvc'} 
       onclick={() => setActiveTab('pvc')}
     >
-      Volume Claims
+      <HardDrive size={15} /> Volume Claims
     </button>
     <button 
       class="nav-item" 
       class:active={activeTab === 'pv'} 
       onclick={() => setActiveTab('pv')}
     >
-      Volumes
+      <Database size={15} /> Volumes
     </button>
     <button 
       class="nav-item" 
       class:active={activeTab === 'sc'} 
       onclick={() => setActiveTab('sc')}
     >
-      Storage Classes
+      <Layers size={15} /> Storage Classes
     </button>
   </div>
 

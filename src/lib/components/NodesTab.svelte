@@ -4,6 +4,7 @@
   import { createEventDispatcher } from 'svelte';
   import { formatMemory, formatCPU } from '$lib/utils/formatters';
   import MetricsGraph from './MetricsGraph.svelte';
+  import { navigationStore } from '../stores/nav';
 
   // Props
   export let currentContext: any = null;
@@ -33,6 +34,15 @@
     isLoading = true;
   } else {
     isLoading = false;
+  }
+
+  $: if ($navigationStore && $navigationStore.tab === 'nodes' && $navigationStore.resourceName && nodes && nodes.length > 0) {
+    const targetNodeName = $navigationStore.resourceName;
+    const targetNode = nodes.find(n => n.metadata?.name === targetNodeName);
+    if (targetNode) {
+      selectNode(targetNode);
+      showFullDetails = true;
+    }
   }
 
   // Select node (for dispatching to other components if needed)
@@ -156,7 +166,6 @@
     <div class="nodes-tab">
   
   <div class="tab-header">
-    <h4>🖥️ Nodes</h4>
     <div class="tab-controls">
       <button 
         class="refresh-button" 

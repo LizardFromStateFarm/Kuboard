@@ -7,10 +7,60 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
+  import TerminalWindow from './TerminalWindow.svelte';
+  import { activeLogsState } from '$lib/stores/logs';
   
   // Props
   export let isOpen = false;
   export let onClose: () => void = () => {};
+  export let currentContext: any = null;
+
+  let isMinimized = false;
+  let lastContext: any = null;
+
+  $: if ($activeLogsState && $activeLogsState.tabs) {
+    syncStoreTabs($activeLogsState.tabs, $activeLogsState.activeTab);
+  }
+
+  function syncStoreTabs(newTabs: Array<{ id: string; podName: string; namespace: string; containerName?: string; type?: 'log' | 'terminal' }>, newActiveTab: string) {
+    for (const t of newTabs) {
+      if (!tabs.find((existing) => existing.id === t.id)) {
+        tabs = [...tabs, t];
+        if (t.type !== 'terminal') {
+          loadLogs(t.id, t.podName, t.namespace, t.containerName, true);
+        }
+      }
+    }
+
+    const newTabIds = new Set(newTabs.map((t) => t.id));
+    tabs = tabs.filter((existing) => newTabIds.has(existing.id));
+
+    if (newActiveTab && activeTab !== newActiveTab) {
+      activeTab = newActiveTab;
+    }
+
+    if (followMode && !refreshInterval && tabs.length > 0) {
+      refreshInterval = window.setInterval(() => {
+        refreshAllLogs();
+      }, 2000);
+    }
+  }
+
+  export function closeAllTabs() {
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+      refreshInterval = null;
+    }
+    tabs = [];
+    activeTab = '';
+    logs = {};
+    loading = {};
+    errors = {};
+    entriesByTab = {};
+    nextEntryIdByTab = {};
+    isOpen = false;
+    onClose();
+  }
   
   // State
   type LogEntry = {
@@ -108,6 +158,18 @@
   
   function setActiveTab(tabId: string) {
     activeTab = tabId;
+  }
+
+  function switchTabContainer(tabId: string, newContainer: string) {
+    const tabIndex = tabs.findIndex(t => t.id === tabId);
+    if (tabIndex >= 0) {
+      const tab = tabs[tabIndex];
+      tab.containerName = newContainer.trim() || undefined;
+      tabs = [...tabs];
+      delete entriesByTab[tabId];
+      delete lastSeenLine[tabId];
+      loadLogs(tabId, tab.podName, tab.namespace, tab.containerName, true);
+    }
   }
   
   // Log loading - incremental approach
@@ -479,6 +541,40 @@
     }
   }
 
+  function isStackTraceLine(msg: string): boolean {
+    if (!msg) return false;
+    const lower = msg.toLowerCase();
+    return (
+      lower.includes('panic:') ||
+      lower.includes('nullpointerexception') ||
+      lower.includes('fatal') ||
+      lower.includes('error:') ||
+      lower.includes('traceback') ||
+      lower.includes('stack trace') ||
+      lower.includes('exception:') ||
+      /at\s+[a-zA-Z0-9_.]+\([a-zA-Z0-9_.:]+\)/.test(msg)
+    );
+  }
+
+  $: errorIndices = (entriesByTab[activeTab] || [])
+    .map((entry, i) => (isStackTraceLine(entry.message) || entry.level === 'ERROR' || entry.level === 'FATAL') ? i : -1)
+    .filter(idx => idx !== -1);
+
+  let currentErrorIndex = 0;
+
+  function jumpToNextError() {
+    if (errorIndices.length === 0) return;
+    currentErrorIndex = (currentErrorIndex + 1) % errorIndices.length;
+    const targetIdx = errorIndices[currentErrorIndex];
+    const container = logContainers[activeTab];
+    if (container) {
+      const logLines = container.querySelectorAll('.log-line');
+      if (logLines[targetIdx]) {
+        logLines[targetIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }
+
   function highlightText(text: string, query: string): string {
     if (!query.trim()) return text;
     const queryRegex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, searchCaseSensitive ? 'g' : 'gi');
@@ -502,11 +598,11 @@
 
 {#if isOpen}
   <div 
-    class="logs-window" 
+    class="logs-window {isMinimized ? 'is-minimized' : ''}" 
     onkeydown={(e) => e.key === 'Escape' && onClose()}
     role="dialog"
     tabindex="-1"
-    style="height: {windowHeight}vh;"
+    style="height: {isMinimized ? '42px' : `${windowHeight}vh`};"
   >
       <!-- Resize Handle -->
       <div 
@@ -534,7 +630,7 @@
                   id="log-tab-{tab.id}"
                 >
                   <span class="tab-name">
-                    {tab.podName}
+                    {tab.type === 'terminal' ? '💻 exec: ' : '📋 '}{tab.podName}
                     {#if tab.containerName}
                       <span class="container-name">/{tab.containerName}</span>
                     {/if}
@@ -554,6 +650,23 @@
         
         <!-- Controls Section -->
         <div class="logs-controls">
+          <!-- Container Selector -->
+          {#if activeTab}
+            {@const activeTabObj = tabs.find(t => t.id === activeTab)}
+            {#if activeTabObj}
+              <div class="container-select-wrapper" title="Switch container logs">
+                <span class="container-label">📦 Container:</span>
+                <input
+                  type="text"
+                  class="container-input"
+                  placeholder="all / container..."
+                  value={activeTabObj.containerName || ''}
+                  onchange={(e) => switchTabContainer(activeTabObj.id, e.currentTarget.value)}
+                />
+              </div>
+            {/if}
+          {/if}
+
           <!-- Search Box -->
           <div class="search-container">
             <input
@@ -611,6 +724,15 @@
               Aa
             </button>
           </div>
+          {#if errorIndices.length > 0}
+            <button 
+              class="control-button compact error-jump-btn"
+              onclick={jumpToNextError}
+              title="Jump to next error/stack trace"
+            >
+              🚨 Errors ({errorIndices.length})
+            </button>
+          {/if}
           <button 
             class="control-button compact {followMode ? 'active' : ''}" 
             onclick={toggleFollowMode}
@@ -621,6 +743,13 @@
           <button class="control-button compact" onclick={refreshCurrentLogs} title="Refresh current logs">
             🔄
           </button>
+          <button 
+            class="control-button compact" 
+            onclick={() => isMinimized = !isMinimized} 
+            title={isMinimized ? 'Expand logs window' : 'Minimize logs window'}
+          >
+            {isMinimized ? '▲' : '▼'}
+          </button>
           <button class="control-button compact" onclick={onClose} title="Close logs window">
             ✕
           </button>
@@ -629,51 +758,65 @@
         
         <!-- Log Content -->
         <div class="logs-content" role="tabpanel" aria-labelledby="log-tab-{activeTab}">
-          {#if loading[activeTab] && !(entriesByTab[activeTab] && entriesByTab[activeTab].length > 0)}
-            <div class="logs-loading">
-              <div class="loading-spinner">⏳</div>
-              <p>Loading logs...</p>
-            </div>
-          {:else if errors[activeTab]}
-            <div class="logs-error">
-              <div class="error-icon">⚠️</div>
-              <p>{errors[activeTab]}</p>
-              <button class="retry-button" onclick={refreshCurrentLogs}>
-                Retry
-              </button>
-            </div>
-          {:else if entriesByTab[activeTab] && entriesByTab[activeTab].length > 0}
-            <div 
-              class="logs-viewer"
-              bind:this={logContainers[activeTab]}
-              onscroll={(e) => handleScroll(e, activeTab)}
-            >
-              {#each (searchQuery.trim() ? (filteredEntriesByTab[activeTab] || []) : (entriesByTab[activeTab] || [])) as entry, idx (entry.id)}
-                {@const originalIndex = entriesByTab[activeTab]?.indexOf(entry) ?? -1}
-                {@const isCurrentMatch = searchQuery.trim() && matchIndices.length > 0 && currentMatchIndex >= 0 && matchIndices[currentMatchIndex] === originalIndex}
-                {@const displayMessage = entry.isExpanded ? entry.message : (entry.message.split('\n')[0].length > 300 ? entry.message.split('\n')[0].slice(0, 300) + '…' : entry.message.split('\n')[0])}
-                <div class="log-line {getLevelClass(entry.level || 'INFO')} {entry.isJson ? 'log-json' : ''} {isCurrentMatch ? 'highlight-match' : ''}">
-                  <span 
-                    class="log-message" 
-                    role="button" 
-                    tabindex="0" 
-                    onclick={() => entry.isExpanded = !entry.isExpanded} 
-                    onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (entry.isExpanded = !entry.isExpanded)}
-                  >
-                    {@html searchQuery.trim() ? highlightText(displayMessage, searchQuery) : displayMessage}
-                  </span>
-                </div>
-              {/each}
-              {#if searchQuery.trim() && (!filteredEntriesByTab[activeTab] || filteredEntriesByTab[activeTab].length === 0)}
-                <div class="search-no-results">
-                  <p>No results found for "{searchQuery}"</p>
-                </div>
-              {/if}
-            </div>
-          {:else}
-            <div class="logs-placeholder">
-              <p>No logs available</p>
-            </div>
+          {#if activeTab}
+            {@const activeTabItem = tabs.find(t => t.id === activeTab)}
+            {#if activeTabItem && activeTabItem.type === 'terminal'}
+              <TerminalWindow
+                embedded={true}
+                isOpen={true}
+                podName={activeTabItem.podName}
+                namespace={activeTabItem.namespace}
+                containerName={activeTabItem.containerName || ''}
+                onClose={() => closeTab(activeTabItem.id)}
+              />
+            {:else if loading[activeTab] && !(entriesByTab[activeTab] && entriesByTab[activeTab].length > 0)}
+              <div class="logs-loading">
+                <div class="loading-spinner">⏳</div>
+                <p>Loading logs...</p>
+              </div>
+            {:else if errors[activeTab]}
+              <div class="logs-error">
+                <div class="error-icon">⚠️</div>
+                <p>{errors[activeTab]}</p>
+                <button class="retry-button" onclick={refreshCurrentLogs}>
+                  Retry
+                </button>
+              </div>
+            {:else if entriesByTab[activeTab] && entriesByTab[activeTab].length > 0}
+              <div 
+                class="logs-viewer"
+                bind:this={logContainers[activeTab]}
+                onscroll={(e) => handleScroll(e, activeTab)}
+              >
+                {#each (searchQuery.trim() ? (filteredEntriesByTab[activeTab] || []) : (entriesByTab[activeTab] || [])) as entry, idx (entry.id)}
+                  {@const originalIndex = entriesByTab[activeTab]?.indexOf(entry) ?? -1}
+                  {@const isCurrentMatch = searchQuery.trim() && matchIndices.length > 0 && currentMatchIndex >= 0 && matchIndices[currentMatchIndex] === originalIndex}
+                  {@const hasStackTrace = isStackTraceLine(entry.message)}
+                  {@const displayMessage = entry.isExpanded ? entry.message : (entry.message.split('\n')[0].length > 300 ? entry.message.split('\n')[0].slice(0, 300) + '…' : entry.message.split('\n')[0])}
+                  <div class="log-line {getLevelClass(entry.level || 'INFO')} {entry.isJson ? 'log-json' : ''} {hasStackTrace ? 'log-stack-trace' : ''} {isCurrentMatch ? 'highlight-match' : ''}">
+                    <span 
+                      class="log-message" 
+                      role="button" 
+                      tabindex="0" 
+                      onclick={() => entry.isExpanded = !entry.isExpanded} 
+                      onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (entry.isExpanded = !entry.isExpanded)}
+                    >
+                      {#if hasStackTrace}<span class="stack-trace-badge">🚨 STACK TRACE</span>{/if}
+                      {@html searchQuery.trim() ? highlightText(displayMessage, searchQuery) : displayMessage}
+                    </span>
+                  </div>
+                {/each}
+                {#if searchQuery.trim() && (!filteredEntriesByTab[activeTab] || filteredEntriesByTab[activeTab].length === 0)}
+                  <div class="search-no-results">
+                    <p>No results found for "{searchQuery}"</p>
+                  </div>
+                {/if}
+              </div>
+            {:else}
+              <div class="logs-placeholder">
+                <p>No logs available</p>
+              </div>
+            {/if}
           {/if}
         </div>
         
@@ -716,7 +859,7 @@
     display: flex;
     flex-direction: column;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-    z-index: 1000;
+    z-index: 9000;
   }
   
   .resize-handle {
@@ -780,6 +923,33 @@
     border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 2px 4px;
+  }
+
+  .container-select-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--background-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin-right: 8px;
+  }
+
+  .container-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+
+  .container-input {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    padding: 2px 4px;
+    font-size: 12px;
+    width: 100px;
+    outline: none;
   }
 
   .search-input {
@@ -997,6 +1167,35 @@
     background: rgba(245, 158, 11, 0.2);
     border-left: 3px solid #f59e0b;
     animation: highlightPulse 1s ease-out;
+  }
+
+  .log-line.log-stack-trace {
+    background: rgba(239, 68, 68, 0.12) !important;
+    border-left: 3px solid #ef4444 !important;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+
+  .stack-trace-badge {
+    background: #ef4444;
+    color: white;
+    font-weight: 800;
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-right: 6px;
+    letter-spacing: 0.05em;
+  }
+
+  .error-jump-btn {
+    background: rgba(239, 68, 68, 0.2) !important;
+    border-color: rgba(239, 68, 68, 0.4) !important;
+    color: #f87171 !important;
+    font-weight: 700 !important;
+  }
+
+  .error-jump-btn:hover {
+    background: rgba(239, 68, 68, 0.35) !important;
   }
 
   @keyframes highlightPulse {

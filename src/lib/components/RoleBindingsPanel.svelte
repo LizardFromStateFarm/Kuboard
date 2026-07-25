@@ -4,6 +4,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import ResourceTable from './ResourceTable.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import { Link } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
@@ -114,7 +115,7 @@
 
 <div class="role-bindings-panel">
   <div class="panel-header">
-    <h4>🔒 Role Bindings ({filteredBindings.length})</h4>
+    <h4><Link size={16} /> Role Bindings ({filteredBindings.length})</h4>
   </div>
 
   {#if loading && roleBindings.length === 0}

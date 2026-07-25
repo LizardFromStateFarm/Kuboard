@@ -1,408 +1,143 @@
-# Kuboard Function Documentation
+# 📖 Kuboard Function Documentation & API Inventory
 
-## 📋 **Complete Function Inventory**
+This document provides a comprehensive inventory of all backend Tauri command handlers, helper modules, and frontend functions in Kuboard.
 
-### 🔧 **Backend Functions (Rust - Tauri Commands)**
+---
 
-#### **Context Management Commands**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_list_contexts` | Lists available Kubernetes contexts from kubeconfig | ✅ Working | `commands` |
-| `kuboard_set_context` | Sets the active Kubernetes context | ✅ Working | `commands` |
-| `kuboard_get_current_context` | Returns the currently active context | ✅ Working | `commands` |
+## 🔧 **Backend Command Inventory (Rust - Tauri RPC)**
 
-#### **Cluster Overview Commands**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_get_cluster_overview` | Gets cluster information and metrics | ✅ Working | `commands` |
+Below is the complete, reconciled list of registered Tauri commands exposed via `tauri::generate_handler!` in `src-tauri/src/lib.rs`.
 
-#### **Resource Management Commands**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_get_nodes` | Fetches all nodes in the cluster | ✅ Working | `commands` |
-| `kuboard_get_namespaces` | Fetches all namespaces in the cluster | ✅ Working | `commands` |
-| `kuboard_get_pods` | Fetches all pods in the cluster | ✅ Working | `commands` |
-| `kuboard_get_deployments` | Fetches all deployments in the cluster | ✅ Working | `commands` |
-| `kuboard_get_deployment` | Fetches single deployment by name and namespace | ✅ Working | `commands` |
-| `kuboard_get_replicasets` | Fetches all ReplicaSets in the cluster | ✅ Working | `commands` |
-| `kuboard_get_replicaset` | Fetches single ReplicaSet by name and namespace | ✅ Working | `commands` |
-| `kuboard_get_statefulsets` | Fetches all StatefulSets in the cluster | ✅ Working | `commands` |
-| `kuboard_get_statefulset` | Fetches single StatefulSet by name and namespace | ✅ Working | `commands` |
-| `kuboard_get_daemonsets` | Fetches all DaemonSets in the cluster | ✅ Working | `commands` |
-| `kuboard_get_daemonset` | Fetches single DaemonSet by name and namespace | ✅ Working | `commands` |
-| `kuboard_get_cronjobs` | Fetches all CronJobs in the cluster | ✅ Working | `commands` |
-| `kuboard_get_cronjob` | Fetches single CronJob by name and namespace | ✅ Working | `commands` |
-| `kuboard_get_services` | Fetches all services in the cluster | ✅ Working | `commands` |
-| `kuboard_get_service` | Fetches single service by name and namespace | ✅ Working | `commands` |
-| `kuboard_get_service_endpoints` | Fetches service endpoints | ✅ Working | `commands` |
-| `kuboard_get_configmaps` | Fetches all ConfigMaps in the cluster | ✅ Working | `commands` |
-| `kuboard_get_secrets` | Fetches all Secrets in the cluster | ✅ Working | `commands` |
-| `kuboard_get_custom_resources` | Fetches custom resources in the cluster | ✅ Working | `commands` |
+### **1. Context Management Commands (`commands/contexts.rs`)**
+| Function Name | Parameters | Description | Status |
+|---------------|------------|-------------|--------|
+| `kuboard_list_contexts` | None | Reads local `~/.kube/config` and returns available context objects | ✅ Working |
+| `kuboard_set_context` | `context_name: String` | Sets the active kubeconfig context and initializes the Kubernetes client | ✅ Working |
+| `kuboard_get_current_context` | None | Returns the active Kubernetes context name | ✅ Working |
 
-#### **Metrics Commands (Real Implementation)**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_get_node_metrics` | Fetches current node metrics from metrics server | ✅ Working | `commands` |
-| `kuboard_get_node_metrics_history` | Fetches historical node metrics data | ✅ Working | `commands` |
-| `kuboard_get_pod_metrics` | Fetches current pod metrics from metrics server | ✅ Working | `commands` |
-| `kuboard_get_pod_metrics_history` | Fetches historical pod metrics data | ✅ Working | `commands` |
-| `kuboard_get_pod_events` | Fetches pod events for troubleshooting | ✅ Working | `commands` |
-| `kuboard_get_cluster_metrics` | Fetches cluster-wide metrics | ✅ Working | `commands` |
-| `kuboard_check_metrics_availability` | Checks if metrics server is available | ✅ Working | `commands` |
+### **2. Cluster & Resource Overview Commands (`commands/cluster.rs`, `commands/resources.rs`)**
+| Function Name | Parameters | Description | Status |
+|---------------|------------|-------------|--------|
+| `kuboard_get_cluster_overview` | None | Returns node/pod/namespace counts, Kubernetes API version, and cluster health | ✅ Working |
+| `kuboard_get_cluster_metrics` | None | Computes cluster-wide aggregated CPU, Memory, and Disk utilization | ✅ Working |
+| `kuboard_get_cluster_events` | None | Fetches cluster-wide Kubernetes warning/error events | ✅ Working |
+| `kuboard_get_nodes` | None | Fetches all node manifests with conditions, specs, and status | ✅ Working |
+| `kuboard_get_namespaces` | None | Fetches all namespaces in the cluster | ✅ Working |
+| `kuboard_get_configmaps` | None | Fetches ConfigMaps across all or specified namespaces | ✅ Working |
+| `kuboard_get_secrets` | None | Fetches Secrets metadata and masked data | ✅ Working |
 
-#### **Pod Operations Commands**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_get_pod_logs` | Fetches pod logs with container support and follow mode | ✅ Working | `commands` |
-| `kuboard_delete_pod` | Deletes a pod by name and namespace | ✅ Working | `commands` |
-| `kuboard_restart_pod` | Restarts a pod (delete for recreation by controller) | ✅ Working | `commands` |
-| `kuboard_get_pod_yaml` | Gets pod YAML/JSON representation | ✅ Working | `commands` |
-| `kuboard_update_pod_from_yaml` | Updates pod from YAML/JSON content | ✅ Working | `commands` |
-| `kuboard_describe_pod` | Gets pod describe output | ✅ Working | `commands` |
+### **3. Workload Management Commands (`commands/pods.rs`, `deployments.rs`, `replicasets.rs`, etc.)**
+| Function Name | Parameters | Description | Status |
+|---------------|------------|-------------|--------|
+| `kuboard_get_pods` | None | Fetches all pods in active namespace / cluster | ✅ Working |
+| `kuboard_get_pod_events` | `name: String, namespace: String` | Fetches K8s events related to specific pod | ✅ Working |
+| `kuboard_get_pod_logs` | `name: String, namespace: String, container: Option<String>, tail: Option<i64>` | Streams pod/container logs | ✅ Working |
+| `kuboard_get_workload_logs` | `resource_type: String, resource_name: String, namespace: String, tail_lines: Option<u32>` | Aggregates and streams color-coded merged logs across all pods matching workload label selectors | ✅ Working |
+| `kuboard_delete_pod` | `name: String, namespace: String` | Deletes specified pod | ✅ Working |
+| `kuboard_restart_pod` | `name: String, namespace: String` | Restarts pod (deletes for controller recreation) | ✅ Working |
+| `kuboard_get_pod_yaml` | `name: String, namespace: String` | Returns raw Pod YAML string | ✅ Working |
+| `kuboard_update_pod_from_yaml` | `yaml: String` | Applies updated Pod manifest | ✅ Working |
+| `kuboard_describe_pod` | `name: String, namespace: String` | Generates structured describe view output | ✅ Working |
+| `kuboard_get_deployments` | None | Fetches all Deployments | ✅ Working |
+| `kuboard_get_deployment` | `name: String, namespace: String` | Fetches single Deployment by name | ✅ Working |
+| `kuboard_scale_deployment` | `name: String, namespace: String, replicas: i32` | Scales Deployment replica count | ✅ Working |
+| `kuboard_rollback_deployment` | `name: String, namespace: String` | Rollback Deployment revision | ✅ Working |
+| `kuboard_restart_deployment` | `name: String, namespace: String` | Triggers rolling restart of Deployment | ✅ Working |
+| `kuboard_get_deployment_replicasets` | `name: String, namespace: String` | Fetches owned ReplicaSets for Deployment | ✅ Working |
+| `kuboard_get_deployment_pods` | `name: String, namespace: String` | Fetches managed Pods for Deployment | ✅ Working |
+| `kuboard_delete_deployment` | `name: String, namespace: String` | Deletes Deployment | ✅ Working |
+| `kuboard_get_deployment_yaml` | `name: String, namespace: String` | Gets Deployment manifest YAML | ✅ Working |
+| `kuboard_get_replicasets` | None | Fetches all ReplicaSets | ✅ Working |
+| `kuboard_get_replicaset` | `name: String, namespace: String` | Fetches single ReplicaSet by name | ✅ Working |
+| `kuboard_scale_replicaset` | `name: String, namespace: String, replicas: i32` | Scales ReplicaSet replica count | ✅ Working |
+| `kuboard_get_replicaset_pods` | `name: String, namespace: String` | Fetches Pods owned by ReplicaSet | ✅ Working |
+| `kuboard_delete_replicaset` | `name: String, namespace: String` | Deletes ReplicaSet | ✅ Working |
+| `kuboard_get_replicaset_yaml` | `name: String, namespace: String` | Gets ReplicaSet YAML | ✅ Working |
+| `kuboard_get_statefulsets` | None | Fetches all StatefulSets | ✅ Working |
+| `kuboard_get_statefulset` | `name: String, namespace: String` | Fetches single StatefulSet by name | ✅ Working |
+| `kuboard_scale_statefulset` | `name: String, namespace: String, replicas: i32` | Scales StatefulSet replica count | ✅ Working |
+| `kuboard_restart_statefulset` | `name: String, namespace: String` | Triggers rolling restart of StatefulSet | ✅ Working |
+| `kuboard_get_statefulset_pods` | `name: String, namespace: String` | Fetches Pods owned by StatefulSet | ✅ Working |
+| `kuboard_delete_statefulset` | `name: String, namespace: String` | Deletes StatefulSet | ✅ Working |
+| `kuboard_get_statefulset_yaml` | `name: String, namespace: String` | Gets StatefulSet YAML | ✅ Working |
+| `kuboard_get_daemonsets` | None | Fetches all DaemonSets | ✅ Working |
+| `kuboard_get_daemonset` | `name: String, namespace: String` | Fetches single DaemonSet by name | ✅ Working |
+| `kuboard_restart_daemonset` | `name: String, namespace: String` | Restarts DaemonSet pods | ✅ Working |
+| `kuboard_get_daemonset_pods` | `name: String, namespace: String` | Fetches Pods owned by DaemonSet | ✅ Working |
+| `kuboard_delete_daemonset` | `name: String, namespace: String` | Deletes DaemonSet | ✅ Working |
+| `kuboard_get_daemonset_yaml` | `name: String, namespace: String` | Gets DaemonSet YAML | ✅ Working |
+| `kuboard_get_cronjobs` | None | Fetches all CronJobs | ✅ Working |
+| `kuboard_get_cronjob` | `name: String, namespace: String` | Fetches single CronJob by name | ✅ Working |
+| `kuboard_trigger_cronjob` | `name: String, namespace: String` | Triggers immediate execution (creates Job) | ✅ Working |
+| `kuboard_suspend_cronjob` | `name: String, namespace: String` | Suspends CronJob schedule | ✅ Working |
+| `kuboard_resume_cronjob` | `name: String, namespace: String` | Resumes CronJob schedule | ✅ Working |
+| `kuboard_get_cronjob_jobs` | `name: String, namespace: String` | Fetches historical Jobs triggered by CronJob | ✅ Working |
+| `kuboard_delete_cronjob` | `name: String, namespace: String` | Deletes CronJob | ✅ Working |
+| `kuboard_get_cronjob_yaml` | `name: String, namespace: String` | Gets CronJob YAML | ✅ Working |
 
-#### **Deployment Operations Commands**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_scale_deployment` | Scales deployment to specified replica count | ✅ Working | `commands` |
-| `kuboard_rollback_deployment` | Rollbacks deployment to previous revision | ✅ Working | `commands` |
-| `kuboard_restart_deployment` | Restarts deployment (rolling restart) | ✅ Working | `commands` |
-| `kuboard_get_deployment_replicasets` | Gets ReplicaSets managed by deployment | ✅ Working | `commands` |
-| `kuboard_get_deployment_pods` | Gets pods managed by deployment | ✅ Working | `commands` |
-| `kuboard_delete_deployment` | Deletes a deployment | ✅ Working | `commands` |
-| `kuboard_get_deployment_yaml` | Gets deployment YAML/JSON representation | ✅ Working | `commands` |
+### **4. Networking, Storage & RBAC Commands**
+| Function Name | Parameters | Description | Status |
+|---------------|------------|-------------|--------|
+| `kuboard_get_services` | None | Fetches all Services | ✅ Working |
+| `kuboard_get_service` | `name: String, namespace: String` | Fetches single Service | ✅ Working |
+| `kuboard_get_service_endpoints` | `name: String, namespace: String` | Fetches Endpoints for Service | ✅ Working |
+| `kuboard_delete_service` | `name: String, namespace: String` | Deletes Service | ✅ Working |
+| `kuboard_get_service_yaml` | `name: String, namespace: String` | Gets Service YAML | ✅ Working |
+| `kuboard_list_ingresses` | None | Fetches all Ingresses | ✅ Working |
+| `kuboard_list_ingress_classes` | None | Fetches IngressClasses | ✅ Working |
+| `kuboard_list_network_policies` | None | Fetches NetworkPolicies | ✅ Working |
+| `kuboard_delete_ingress` | `name: String, namespace: String` | Deletes Ingress | ✅ Working |
+| `kuboard_delete_ingress_class` | `name: String` | Deletes IngressClass | ✅ Working |
+| `kuboard_delete_network_policy` | `name: String, namespace: String` | Deletes NetworkPolicy | ✅ Working |
+| `kuboard_list_persistent_volumes` | None | Fetches PersistentVolumes | ✅ Working |
+| `kuboard_get_persistent_volume` | `name: String` | Fetches single PersistentVolume | ✅ Working |
+| `kuboard_delete_persistent_volume` | `name: String` | Deletes PersistentVolume | ✅ Working |
+| `kuboard_list_persistent_volume_claims` | None | Fetches PersistentVolumeClaims | ✅ Working |
+| `kuboard_get_persistent_volume_claim` | `name: String, namespace: String` | Fetches single PVC | ✅ Working |
+| `kuboard_delete_persistent_volume_claim` | `name: String, namespace: String` | Deletes PVC | ✅ Working |
+| `kuboard_list_storage_classes` | None | Fetches StorageClasses | ✅ Working |
+| `kuboard_get_storage_class` | `name: String` | Fetches StorageClass details | ✅ Working |
+| `kuboard_delete_storage_class` | `name: String` | Deletes StorageClass | ✅ Working |
+| `kuboard_list_roles` | None | Fetches Roles | ✅ Working |
+| `kuboard_list_cluster_roles` | None | Fetches ClusterRoles | ✅ Working |
+| `kuboard_list_role_bindings` | None | Fetches RoleBindings | ✅ Working |
+| `kuboard_list_cluster_role_bindings` | None | Fetches ClusterRoleBindings | ✅ Working |
+| `kuboard_list_service_accounts` | None | Fetches ServiceAccounts | ✅ Working |
+| `kuboard_delete_role` / `delete_cluster_role` | `name: String` | Deletes Role/ClusterRole | ✅ Working |
+| `kuboard_delete_role_binding` / `delete_cluster_role_binding` | `name: String` | Deletes RoleBinding/ClusterRoleBinding | ✅ Working |
+| `kuboard_delete_service_account` | `name: String, namespace: String` | Deletes ServiceAccount | ✅ Working |
 
-#### **StatefulSet Operations Commands**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_scale_statefulset` | Scales StatefulSet to specified replica count | ✅ Working | `commands` |
-| `kuboard_restart_statefulset` | Restarts StatefulSet (rolling restart) | ✅ Working | `commands` |
-| `kuboard_get_statefulset_pods` | Gets pods managed by StatefulSet | ✅ Working | `commands` |
-| `kuboard_delete_statefulset` | Deletes a StatefulSet | ✅ Working | `commands` |
-| `kuboard_get_statefulset_yaml` | Gets StatefulSet YAML/JSON representation | ✅ Working | `commands` |
+### **5. Special Operations (Metrics, Grafana, Helm, Graph, Search, Exec, Port Forward)**
+| Function Name | Parameters | Description | Status |
+|---------------|------------|-------------|--------|
+| `kuboard_get_node_metrics` | None | Fetches live Node metrics from `/apis/metrics.k8s.io/v1beta1` | ✅ Working |
+| `kuboard_get_node_metrics_history` | `duration: u64` | Fetches Node metrics history timeline | ✅ Working |
+| `kuboard_get_pod_metrics` | None | Fetches live Pod metrics | ✅ Working |
+| `kuboard_get_pod_metrics_history` | `duration: u64` | Fetches Pod metrics history timeline | ✅ Working |
+| `kuboard_check_metrics_availability` | None | Checks if Metrics Server API is reachable | ✅ Working |
+| `kuboard_configure_grafana` | `url: String, token: Option<String>` | Configures Grafana endpoint & credentials | 💡 Planned (Phase 4) |
+| `kuboard_query_grafana_promql` | `query: String, start: u64, end: u64, step: String` | Executes PromQL range query via Grafana `/api/ds/query` bridge | 💡 Planned (Phase 4) |
+| `kuboard_list_helm_releases` | None | Lists installed Helm releases via K8s secrets parsing | 🔄 Partial (Needs robust decoder) |
+| `kuboard_get_helm_release_details` | `name: String, namespace: String, revision: i32` | Gets Helm values & manifests | 🔄 Partial |
+| `kuboard_get_resource_graph` | None | Builds resource relationship DAG for X-Ray visualization | ✅ Working |
+| `kuboard_list_crds` | None | Discovers installed CustomResourceDefinitions | ✅ Working |
+| `kuboard_list_custom_resource_instances` | `crd_name: String` | Fetches custom resource instances | ✅ Working |
+| `kuboard_run_linter` | None | Evaluates K8s resources against security/best-practice rules | ✅ Working |
+| `kuboard_search_resources` | `query: String` | Performs fuzzy search across all cluster resources | ✅ Working |
+| `kuboard_get_resource_yaml` | `kind: String, name: String, namespace: String` | Generic YAML fetcher for any resource | ✅ Working |
+| `kuboard_apply_resource_yaml` | `yaml: String` | Applies generic YAML manifest to cluster | ✅ Working |
+| `kuboard_exec_into_pod` | `pod: String, container: String, command: String` | Launches PTY exec session for pod | 🔄 Partial |
+| `kuboard_port_forward` | `pod: String, namespace: String, target_port: u16, local_port: u16` | Establishes port forward tunnel | 🔄 Partial |
+| `kuboard_list_port_forwards` / `stop_port_forward` | `id: String` | Manages active port forward tunnels | 🔄 Partial |
 
-#### **DaemonSet Operations Commands**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_restart_daemonset` | Restarts DaemonSet (rolling restart) | ✅ Working | `commands` |
-| `kuboard_get_daemonset_pods` | Gets pods managed by DaemonSet | ✅ Working | `commands` |
-| `kuboard_delete_daemonset` | Deletes a DaemonSet | ✅ Working | `commands` |
-| `kuboard_get_daemonset_yaml` | Gets DaemonSet YAML/JSON representation | ✅ Working | `commands` |
+---
 
-#### **ReplicaSet Operations Commands**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_scale_replicaset` | Scales ReplicaSet to specified replica count | ✅ Working | `commands` |
-| `kuboard_get_replicaset_pods` | Gets pods managed by ReplicaSet | ✅ Working | `commands` |
-| `kuboard_delete_replicaset` | Deletes a ReplicaSet | ✅ Working | `commands` |
-| `kuboard_get_replicaset_yaml` | Gets ReplicaSet YAML/JSON representation | ✅ Working | `commands` |
+## ⚠️ Identified Discrepancies & Backend/Frontend Alignment Fixes Required
 
-#### **CronJob Operations Commands**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_trigger_cronjob` | Triggers CronJob immediately (create Job) | ✅ Working | `commands` |
-| `kuboard_suspend_cronjob` | Suspends CronJob | ✅ Working | `commands` |
-| `kuboard_resume_cronjob` | Resumes CronJob | ✅ Working | `commands` |
-| `kuboard_get_cronjob_jobs` | Gets Jobs created by CronJob | ✅ Working | `commands` |
-| `kuboard_delete_cronjob` | Deletes a CronJob | ✅ Working | `commands` |
-| `kuboard_get_cronjob_yaml` | Gets CronJob YAML/JSON representation | ✅ Working | `commands` |
-
-#### **Service Operations Commands**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_delete_service` | Deletes a service | ✅ Working | `commands` |
-| `kuboard_get_service_yaml` | Gets service YAML/JSON representation | ✅ Working | `commands` |
-
-#### **Watch Operations Commands**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_start_pod_watch` | Starts watching pods for real-time updates | ✅ Working | `commands` |
-| `kuboard_stop_pod_watch` | Stops pod watch | ✅ Working | `commands` |
-| `kuboard_start_deployment_watch` | Starts watching deployments for real-time updates | ✅ Working | `commands` |
-| `kuboard_stop_deployment_watch` | Stops deployment watch | ✅ Working | `commands` |
-| `kuboard_start_statefulset_watch` | Starts watching StatefulSets for real-time updates | ✅ Working | `commands` |
-| `kuboard_stop_statefulset_watch` | Stops StatefulSet watch | ✅ Working | `commands` |
-| `kuboard_start_daemonset_watch` | Starts watching DaemonSets for real-time updates | ✅ Working | `commands` |
-| `kuboard_stop_daemonset_watch` | Stops DaemonSet watch | ✅ Working | `commands` |
-| `kuboard_start_replicaset_watch` | Starts watching ReplicaSets for real-time updates | ✅ Working | `commands` |
-| `kuboard_stop_replicaset_watch` | Stops ReplicaSet watch | ✅ Working | `commands` |
-| `kuboard_start_service_watch` | Starts watching services for real-time updates | ✅ Working | `commands` |
-| `kuboard_stop_service_watch` | Stops service watch | ✅ Working | `commands` |
-| `kuboard_start_cronjob_watch` | Starts watching CronJobs for real-time updates | ✅ Working | `commands` |
-| `kuboard_stop_cronjob_watch` | Stops CronJob watch | ✅ Working | `commands` |
-
-#### **Port Forwarding Commands**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_port_forward` | Creates a new port forward session | 🔄 Partial | `commands` |
-| `kuboard_list_port_forwards` | Lists all active port forwards | 🔄 Partial | `commands` |
-| `kuboard_stop_port_forward` | Stops an active port forward | 🔄 Partial | `commands` |
-
-#### **Exec Commands**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_exec_into_pod` | Creates exec session for pod container | 🔄 Partial | `commands` |
-
-### 🔧 **Backend Helper Functions (Rust)**
-
-#### **Kubernetes Integration**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_load_kubeconfig` | Loads kubeconfig from environment or default location | ✅ Working | `kubernetes` |
-| `kuboard_create_client_from_context` | Creates Kubernetes client from context | ✅ Working | `kubernetes` |
-| `kuboard_fetch_node_metrics` | Fetches node metrics (currently mock data) | ⚠️ Mock | `kubernetes` |
-| `kuboard_calculate_cluster_metrics` | Calculates cluster-wide metrics from nodes | ✅ Working | `kubernetes` |
-| `kuboard_fetch_pod_events` | Fetches pod events from Kubernetes API | ✅ Working | `kubernetes` |
-
-#### **Metrics Server Integration**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_fetch_node_metrics_real` | Fetches real-time metrics from metrics server | ✅ Working | `metrics` |
-| `kuboard_fetch_node_metrics_history` | Fetches historical metrics data | ✅ Working | `metrics` |
-| `kuboard_fetch_pod_metrics_real` | Fetches real-time pod metrics from metrics server | ✅ Working | `metrics` |
-| `kuboard_fetch_pod_metrics_history` | Fetches historical pod metrics data | ✅ Working | `metrics` |
-| `kuboard_check_metrics_server_availability` | Checks if metrics server is available | ✅ Working | `metrics` |
-| `metrics_api_available` | Internal function to check metrics API availability | ✅ Working | `metrics` |
-| `get_node_metrics_by_name` | Internal function to fetch node metrics by name | ✅ Working | `metrics` |
-| `get_pod_metrics_by_name` | Internal function to fetch pod metrics by name | ✅ Working | `metrics` |
-| `parse_cpu_quantity` | Parses CPU quantity strings (150m, 1.5, etc.) | ✅ Working | `metrics` |
-| `parse_memory_quantity` | Parses memory quantity strings (1Gi, 1024Mi, etc.) | ✅ Working | `metrics` |
-
-#### **Utility Functions**
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_parse_cpu_string` | Parses CPU string (e.g., "1000m", "1") into CPU cores | ✅ Working | `utils` |
-| `kuboard_parse_memory_string` | Parses memory string (e.g., "1Gi", "1024Mi") into bytes | ✅ Working | `utils` |
-| `kuboard_format_memory` | Formats bytes into human-readable memory string | ✅ Working | `utils` |
-| `kuboard_format_cpu` | Formats CPU cores into human-readable string | ✅ Working | `utils` |
-
-#### **Exec Session Functions** (`kubernetes/exec.rs`)
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `ExecSession::new` | Creates new exec session with UUID | ✅ Working | `kubernetes/exec` |
-| `start_exec_session` | Initializes exec session for pod container | 🔄 Partial | `kubernetes/exec` |
-
-#### **Port Forward Session Functions** (`kubernetes/port_forward.rs`)
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `PortForwardSession::new` | Creates new port forward session with UUID | ✅ Working | `kubernetes/port_forward` |
-| `PortForwardSession::url` | Returns local URL for the forward | ✅ Working | `kubernetes/port_forward` |
-| `start_port_forward_session` | Initializes port forward session | 🔄 Partial | `kubernetes/port_forward` |
-
-#### **Optimized Commands** (`commands/optimized.rs`)
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `kuboard_set_context_optimized` | Context switching with cache invalidation | ⚠️ Experimental | `commands/optimized` |
-| `kuboard_get_cluster_overview_optimized` | Cached cluster overview with parallel API calls | ⚠️ Experimental | `commands/optimized` |
-| `kuboard_get_nodes_optimized` | Cached nodes list with 30-second TTL | ⚠️ Experimental | `commands/optimized` |
-| `kuboard_get_all_resources_optimized` | Batch resource loading for better performance | ⚠️ Experimental | `commands/optimized` |
-
-### 🎨 **Frontend Functions (Svelte/TypeScript)**
-
-#### **PodsPanel Component** (`src/lib/components/PodsPanel.svelte`)
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `showFullPodDetails` | Shows detailed pod information and loads metrics/events | ✅ Working | `PodsPanel` |
-| `loadPodMetrics` | Loads pod metrics from backend | ✅ Working | `PodsPanel` |
-| `loadPodEvents` | Loads pod events from backend | ✅ Working | `PodsPanel` |
-| `loadContainerMetrics` | Loads metrics for specific container | ✅ Working | `PodsPanel` |
-| `selectContainer` | Selects container and loads its metrics | ✅ Working | `PodsPanel` |
-| `changeResourceType` | Changes resource type for metrics graph | ✅ Working | `PodsPanel` |
-| `changeContainerResourceType` | Changes resource type for container metrics | ✅ Working | `PodsPanel` |
-| `backToPodsList` | Returns to pods list view | ✅ Working | `PodsPanel` |
-| `getControllerInfo` | Extracts controller information from pod | ✅ Working | `PodsPanel` |
-| `getPodError` | Detects pod errors (CrashLoopBackOff, OOMKilled, etc.) | ✅ Working | `PodsPanel` |
-| `handleSort` | Handles column sorting with three-state cycle (asc → desc → unsorted) | ✅ Working | `PodsPanel` |
-| `getSortedPods` | Returns pods sorted by current sort column and direction | ✅ Working | `PodsPanel` |
-| `parseSearchQuery` | Parses search query to detect label, field, IP, or general search | ✅ Working | `PodsPanel` |
-| `matchLabels` | Matches pod labels against search query | ✅ Working | `PodsPanel` |
-| `searchPodFields` | Searches all pod fields and returns match count and locations | ✅ Working | `PodsPanel` |
-| `scorePod` | Scores pod relevance for search results (exact matches prioritized) | ✅ Working | `PodsPanel` |
-| `searchPods` | Main search function that filters pods based on query type | ✅ Working | `PodsPanel` |
-| `compareName` | Compares pod names for sorting | ✅ Working | `PodsPanel` |
-| `compareStatus` | Compares pod status for sorting | ✅ Working | `PodsPanel` |
-| `compareErrors` | Compares pod error states for sorting | ✅ Working | `PodsPanel` |
-| `compareNamespace` | Compares pod namespaces for sorting | ✅ Working | `PodsPanel` |
-| `compareRestarts` | Compares pod restart counts for sorting | ✅ Working | `PodsPanel` |
-| `compareAge` | Compares pod creation timestamps for sorting | ✅ Working | `PodsPanel` |
-| `compareNode` | Compares pod node names for sorting | ✅ Working | `PodsPanel` |
-| `getQoSClassClass` | Gets CSS class for QoS class | ✅ Working | `PodsPanel` |
-| `getConditionStatusClass` | Gets CSS class for condition status | ✅ Working | `PodsPanel` |
-| `getTolerationEffectClass` | Gets CSS class for toleration effect | ✅ Working | `PodsPanel` |
-| `formatObject` | Formats object for display | ✅ Working | `PodsPanel` |
-| `formatEventTime` | Formats event timestamp | ✅ Working | `PodsPanel` |
-| `getEventTypeClass` | Gets CSS class for event type | ✅ Working | `PodsPanel` |
-| `getEventReasonClass` | Gets CSS class for event reason | ✅ Working | `PodsPanel` |
-| `generateMockEvents` | Generates mock events for demonstration | ✅ Working | `PodsPanel` |
-
-#### **Main Page Orchestration** (`src/routes/+page.svelte`)
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `loadContexts` | Loads available contexts from backend | ✅ Working | `+page.svelte` |
-| `setContext` | Switches to selected context | ✅ Working | `+page.svelte` |
-| `loadClusterOverview` | Loads cluster overview data | ✅ Working | `+page.svelte` |
-| `loadResourceDetails` | Loads detailed resource data (nodes, pods, etc.) | ✅ Working | `+page.svelte` |
-| `showDemoData` | Shows demo data when not connected | ✅ Working | `+page.svelte` |
-| `fetchNodeMetrics` | Fetches current node metrics | ✅ Working | `+page.svelte` |
-| `fetchNodeMetricsHistory` | Fetches historical node metrics | ✅ Working | `+page.svelte` |
-| `startAutoRefresh` | Starts auto-refresh for metrics | ✅ Working | `+page.svelte` |
-
-#### **Event Handlers** (`src/routes/+page.svelte`)
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `handleContextChange` | Handles context change events | ✅ Working | `+page.svelte` |
-| `handleRefresh` | Handles refresh button events | ✅ Working | `+page.svelte` |
-| `handleNodeSelect` | Handles node selection events | ✅ Working | `+page.svelte` |
-| `handleTabChange` | Handles resource tab changes | ✅ Working | `+page.svelte` |
-| `handleRefreshIntervalChange` | Handles refresh interval changes | ✅ Working | `+page.svelte` |
-| `handleHistoryDurationChange` | Handles history duration changes | ✅ Working | `+page.svelte` |
-| `handlePanelToggle` | Handles panel toggle events | ✅ Working | `+page.svelte` |
-| `handleResourceSelect` | Handles resource selection events | ✅ Working | `+page.svelte` |
-| `handleDebugConsoleToggle` | Handles debug console toggle | ✅ Working | `+page.svelte` |
-| `handleDebugConsoleClear` | Handles debug console clear | ✅ Working | `+page.svelte` |
-| `handleMetricsRetry` | Handles metrics retry events | ✅ Working | `+page.svelte` |
-
-#### **Utility Functions** (`src/lib/utils/formatters.ts`)
-| Function Name | Description | Status | Module |
-|---------------|-------------|--------|--------|
-| `formatMemory` | Formats bytes into human-readable memory units | ✅ Working | `formatters.ts` |
-| `formatCPU` | Formats CPU cores into readable format | ✅ Working | `formatters.ts` |
-| `formatPercentage` | Calculates and formats percentage values | ✅ Working | `formatters.ts` |
-| `formatTime` | Formats timestamps into readable time | ✅ Working | `formatters.ts` |
-| `formatDate` | Formats date strings into localized format | ✅ Working | `formatters.ts` |
-| `formatDuration` | Formats duration in minutes to human-readable string | ✅ Working | `formatters.ts` |
-| `formatResourceQuantity` | Formats Kubernetes quantity strings | ✅ Working | `formatters.ts` |
-| `truncateText` | Truncates text to specified length with ellipsis | ✅ Working | `formatters.ts` |
-| `formatStatus` | Formats status for display | ✅ Working | `formatters.ts` |
-| `getStatusClass` | Gets status color class for CSS | ✅ Working | `formatters.ts` |
-| `formatNodeConditions` | Formats node conditions for display | ✅ Working | `formatters.ts` |
-| `formatLabels` | Formats labels for display | ✅ Working | `formatters.ts` |
-| `formatAnnotations` | Formats annotations for display | ✅ Working | `formatters.ts` |
-| `formatTaints` | Formats taints for display | ✅ Working | `formatters.ts` |
-
-## 🏗️ **Current File Structure**
-
-### **Backend Structure (Rust)**
-```
-src-tauri/src/
-├── lib.rs                 # Main entry point (orchestrates modules)
-├── main.rs               # Application entry point
-├── commands/
-│   ├── mod.rs            # Tauri commands (~2800 lines)
-│   └── optimized.rs      # Performance-optimized commands with caching
-├── kubernetes/
-│   ├── mod.rs            # Kubernetes integration
-│   ├── watch.rs          # Resource watch functionality
-│   ├── exec.rs           # Pod exec session handling
-│   └── port_forward.rs   # Port forwarding session handling
-├── metrics/
-│   └── mod.rs            # Metrics server integration (~400 lines)
-├── types.rs              # Type definitions
-├── app_state.rs          # Application state management
-└── utils.rs              # Utility functions
-```
-
-### **Frontend Structure (Svelte)**
-```
-src/
-├── routes/
-│   ├── +layout.ts        # Layout configuration
-│   └── +page.svelte      # Main dashboard
-├── lib/
-│   ├── components/       # Reusable UI components (32 files)
-│   │   ├── Header.svelte
-│   │   ├── ClusterOverview.svelte
-│   │   ├── ClusterMetrics.svelte
-│   │   ├── ResourceOverview.svelte
-│   │   ├── MetricsGraph.svelte
-│   │   ├── DonutChart.svelte
-│   │   ├── TabbedContent.svelte
-│   │   ├── ResourceTabs.svelte
-│   │   ├── WorkloadsTab.svelte
-│   │   ├── NodesTab.svelte
-│   │   ├── ConfigTab.svelte
-│   │   ├── NetworkTab.svelte
-│   │   ├── CustomResourcesTab.svelte
-│   │   ├── PodsPanel.svelte
-│   │   ├── PodDetails.svelte
-│   │   ├── DeploymentsPanel.svelte
-│   │   ├── DeploymentDetails.svelte
-│   │   ├── StatefulSetsPanel.svelte
-│   │   ├── StatefulSetDetails.svelte
-│   │   ├── DaemonSetsPanel.svelte
-│   │   ├── DaemonSetDetails.svelte
-│   │   ├── ReplicaSetsPanel.svelte
-│   │   ├── ReplicaSetDetails.svelte
-│   │   ├── CronJobsPanel.svelte
-│   │   ├── CronJobDetails.svelte
-│   │   ├── ServiceDetails.svelte
-│   │   ├── LogsWindow.svelte
-│   │   ├── QuickActionsMenu.svelte
-│   │   ├── PortForwardManager.svelte  # Port forwarding UI
-│   │   ├── TerminalWindow.svelte      # Exec terminal with xterm.js
-│   │   ├── ResourceDescribe.svelte    # Resource describe display
-│   │   └── ThemeSwitcher.svelte
-│   ├── styles/
-│   │   ├── color-palette.css  # Centralized color definitions
-│   │   ├── variables.css      # CSS custom properties
-│   │   └── README.md          # Styling guide
-│   ├── types/
-│   │   └── index.ts       # TypeScript interfaces
-│   └── utils/
-│       ├── formatters.ts  # Data formatting utilities
-│       └── performance.ts # Performance utilities
-└── app.html              # App template
-```
-
-## 🎯 **Naming Convention Benefits**
-
-### **Why `kuboard_` Prefix?**
-1. **Namespace Protection**: Prevents conflicts with external crates
-2. **Clear Ownership**: Immediately identifies Kuboard-specific functions
-3. **IDE Support**: Better autocomplete and search
-4. **Documentation**: Easier to generate API docs
-5. **Maintenance**: Clear separation of concerns
-
-### **Function Naming Pattern**
-- **Backend**: `kuboard_<action>_<resource>` (e.g., `kuboard_get_nodes`)
-- **Frontend**: `<action><Resource>` (e.g., `loadContexts`)
-- **Utilities**: `kuboard_<action>_<type>` (e.g., `kuboard_format_memory`)
-
-## 📊 **Implementation Status**
-
-### **✅ Phase 1: File Structure - COMPLETED**
-1. ✅ Created modular file structure
-2. ✅ Moved functions to appropriate modules
-3. ✅ Added `kuboard_` prefixes to all backend functions
-4. ✅ Updated imports and references
-
-### **✅ Phase 2: Function Optimization - COMPLETED**
-1. ✅ Implemented real metrics server integration
-2. ✅ Added comprehensive error handling
-3. ✅ Optimized performance for large clusters
-4. ✅ Added robust parsing for CPU/memory quantities
-
-### **✅ Phase 3: Documentation & Testing - COMPLETED**
-1. ✅ Updated comprehensive documentation
-2. ✅ Created UI organization guide
-3. ✅ Documented all functions and components
-4. ✅ Verified build and functionality
-
-## 🎯 **Current Status**
-
-### **✅ Completed Features:**
-- **Modular UI Architecture:** 4 main components with clear separation
-- **Backend Function Organization:** All functions properly prefixed and organized
-- **Real Metrics Integration:** Working metrics server integration
-- **Comprehensive Documentation:** Updated guides and function documentation
-- **Build System:** Successfully building and generating installers
-- **Type Safety:** Full TypeScript integration with proper interfaces
-
-### **🚀 Benefits Achieved:**
-1. **Maintainability:** Easy to find and modify specific functionality
-2. **Reusability:** Components can be used in multiple places
-3. **Testing:** Isolated components are easier to test
-4. **Collaboration:** Clear separation of concerns
-5. **Scalability:** Easy to add new features without conflicts
-6. **Documentation:** Comprehensive guides for developers
-
-This modular approach has successfully transformed the codebase into a maintainable and professional structure! 🚀
+1. **`ReplicaSetDetails.svelte` Mismatches**:
+   - Frontend calls `kuboard_get_replicaset_details` -> Backend actual function name is `kuboard_get_replicaset`.
+   - Frontend calls `kuboard_get_pods_by_selector` -> Backend actual function name is `kuboard_get_replicaset_pods`.
+2. **Generic Resource YAML Editing**:
+   - `ReplicaSetsPanel.svelte` calls `kuboard_update_replicaset` (unregistered). Frontend should be standardized to use `kuboard_apply_resource_yaml`.
+3. **Helm Secret Decompression**:
+   - `helm.rs` uses double base64 decoding prior to GzDecoder. Certain Helm 3 releases format storage with single base64 or protobuf encoding. Requires fallback decoder logic.

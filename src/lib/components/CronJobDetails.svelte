@@ -85,11 +85,20 @@
 
   function openActionsMenu(event: MouseEvent) {
     event.stopPropagation();
+    event.preventDefault();
+    if (actionsMenuVisible) {
+      actionsMenuVisible = false;
+      return;
+    }
     const btn = event.currentTarget as HTMLElement;
-    if (btn && btn.getBoundingClientRect) {
+    if (btn && typeof btn.getBoundingClientRect === 'function') {
       const rect = btn.getBoundingClientRect();
-      actionsMenuPosition = { x: Math.max(12, rect.right - 220), y: rect.bottom + 6 };
-    } else {
+      if (rect.width > 0 || rect.height > 0) {
+        actionsMenuPosition = { x: rect.left, y: rect.bottom + 4 };
+      } else if (event.clientX > 0 || event.clientY > 0) {
+        actionsMenuPosition = { x: event.clientX, y: event.clientY };
+      }
+    } else if (event.clientX > 0 || event.clientY > 0) {
       actionsMenuPosition = { x: event.clientX, y: event.clientY };
     }
     actionsMenuVisible = true;
@@ -111,8 +120,8 @@
   <!-- Top Action Bar -->
   <div class="details-nav-bar">
     <div class="nav-actions">
-      <button class="btn-back" onclick={onBack}>← Back to CronJobs</button>
-      <button class="btn-subtle" onclick={openActionsMenu}>⚙️ Actions</button>
+      <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}>← Back to CronJobs</button>
+      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}>⚙️ Actions</button>
     </div>
     <div class="nav-heading">
       <span class="status-pill status-{getStatusClass(status)}">{status}</span>

@@ -8,10 +8,13 @@
   import GlobalSearch from '$lib/components/GlobalSearch.svelte';
   import YamlEditor from '$lib/components/YamlEditor.svelte';
   import XRayViewer from '$lib/components/XRayViewer.svelte';
+  import LogsWindow from '$lib/components/LogsWindow.svelte';
+  import TerminalWindow from '$lib/components/TerminalWindow.svelte';
   import KeyboardManager from '$lib/components/KeyboardManager.svelte';
   import { navigationStore } from '$lib/stores/nav';
   import { editorStore, closeEditor } from '$lib/stores/editor';
   import { xrayStore, closeXRay } from '$lib/stores/xray';
+  import { switchLogsContext, activeLogsState, setGlobalLogsOpen } from '$lib/stores/logs';
   
   // Import types
   import type { 
@@ -149,6 +152,10 @@
     selectedContextName = contextName;
     loading = true;
     error = ""; // Clear any previous errors
+
+    // Clear active overlays on context switch
+    closeEditor();
+    closeXRay();
     
     // Create new abort controller for this context switch
     contextLoadingAbortController = new AbortController();
@@ -518,10 +525,22 @@
     setTimeout(() => success = '', 2000);
   }
 
+  let activeTabSessionId: string = 'tab-default';
+
   // Event handlers for components
-  function handleContextChange(event: CustomEvent<string>) {
-    const contextName = event.detail;
-    setContext(contextName);
+  function handleContextChange(event: CustomEvent<any>) {
+    const detail = event.detail;
+    const contextName = typeof detail === 'string' ? detail : detail?.contextName;
+    const tabId = typeof detail === 'object' && detail?.tabId ? detail.tabId : 'tab-default';
+
+    const oldTabId = activeTabSessionId;
+    activeTabSessionId = tabId;
+
+    switchLogsContext(oldTabId, activeTabSessionId);
+
+    if (contextName) {
+      setContext(contextName);
+    }
   }
 
   function handleRefresh() {
@@ -752,7 +771,7 @@
 <!-- Import CSS variables -->
 <link rel="stylesheet" href="/src/lib/styles/variables.css">
 
-<main>
+<main style="padding-bottom: {$activeLogsState && $activeLogsState.isOpen ? '360px' : '20px'}; transition: padding-bottom 0.2s ease;">
   <!-- Header Component -->
   <Header 
     {contexts} 
@@ -786,6 +805,14 @@
     />
   {/if}
 
+  {#if $activeLogsState && $activeLogsState.isOpen}
+    <LogsWindow
+      isOpen={$activeLogsState.isOpen}
+      currentContext={currentContext}
+      onClose={() => setGlobalLogsOpen(activeTabSessionId, false)}
+    />
+  {/if}
+
   <!-- Error Message (shown as toast) -->
   {#if error}
     <div class="error-message toast">
@@ -813,6 +840,7 @@
     <ClusterOverviewComponent 
       {clusterOverview}
       {currentContext}
+      tabSessionId={activeTabSessionId}
       {selectedNode}
       {nodes}
       {metricsLoading}

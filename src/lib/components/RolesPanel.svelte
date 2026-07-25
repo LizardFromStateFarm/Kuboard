@@ -4,6 +4,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import ResourceTable from './ResourceTable.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import RoleDetails from './RoleDetails.svelte';
+  import { ShieldCheck } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
@@ -17,6 +19,7 @@
   let sortColumn: string = 'name';
   let sortDirection: 'asc' | 'desc' = 'asc';
   let refreshTimer: any;
+  let selectedRole: any = null;
 
   // Context Menu State
   let contextMenuVisible = false;
@@ -113,50 +116,54 @@
 </script>
 
 <div class="roles-panel">
-  <div class="panel-header">
-    <h4>🔒 Roles ({filteredRoles.length})</h4>
-  </div>
-
-  {#if loading && roles.length === 0}
-    <div class="loading-state">
-      <div class="spinner"></div>
-      <p>Loading Roles...</p>
-    </div>
-  {:else if error}
-    <div class="error-state">
-      <span class="error-icon">⚠️</span>
-      <p>{error}</p>
-      <button onclick={fetchRoles}>Retry</button>
-    </div>
+  {#if selectedRole}
+    <RoleDetails role={selectedRole} onBack={() => selectedRole = null} />
   {:else}
-    <ResourceTable
-      items={roles}
-      filteredItems={filteredRoles}
-      bind:searchQuery
-      searchPlaceholder="Search Roles..."
-      noItemsMessage="No Roles found."
-      noSearchResultsMessage="No Roles match your search query:"
-    >
-      <svelte:fragment slot="header">
-        <th class="sortable" onclick={() => handleSort('name')}>Name</th>
-        <th class="sortable" onclick={() => handleSort('namespace')}>Namespace</th>
-        <th class="sortable" onclick={() => handleSort('age')}>Age</th>
-        <th>Actions</th>
-      </svelte:fragment>
+    <div class="panel-header">
+      <h4><ShieldCheck size={16} /> Roles ({filteredRoles.length})</h4>
+    </div>
 
-      <svelte:fragment slot="rows">
-        {#each filteredRoles as role (role.metadata.uid)}
-          <tr class="resource-row" oncontextmenu={(e) => handleContextMenu(e, role)}>
-            <td class="name-cell">{role.metadata.name}</td>
-            <td>{role.metadata.namespace}</td>
-            <td>{formatAge(role.metadata.creationTimestamp)}</td>
-            <td class="actions-cell">
-              <button class="action-btn" onclick={(e) => handleContextMenu(e, role)}>⚙️</button>
-            </td>
-          </tr>
-        {/each}
-      </svelte:fragment>
-    </ResourceTable>
+    {#if loading && roles.length === 0}
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading Roles...</p>
+      </div>
+    {:else if error}
+      <div class="error-state">
+        <span class="error-icon">⚠️</span>
+        <p>{error}</p>
+        <button onclick={fetchRoles}>Retry</button>
+      </div>
+    {:else}
+      <ResourceTable
+        items={roles}
+        filteredItems={filteredRoles}
+        bind:searchQuery
+        searchPlaceholder="Search Roles..."
+        noItemsMessage="No Roles found."
+        noSearchResultsMessage="No Roles match your search query:"
+      >
+        <svelte:fragment slot="header">
+          <th class="sortable" onclick={() => handleSort('name')}>Name</th>
+          <th class="sortable" onclick={() => handleSort('namespace')}>Namespace</th>
+          <th class="sortable" onclick={() => handleSort('age')}>Age</th>
+          <th>Actions</th>
+        </svelte:fragment>
+
+        <svelte:fragment slot="rows">
+          {#each filteredRoles as role (role.metadata.uid)}
+            <tr class="resource-row clickable-row" onclick={() => selectedRole = role} oncontextmenu={(e) => handleContextMenu(e, role)}>
+              <td class="name-cell">{role.metadata.name}</td>
+              <td>{role.metadata.namespace || 'Cluster-wide'}</td>
+              <td>{formatAge(role.metadata.creationTimestamp)}</td>
+              <td class="actions-cell">
+                <button class="action-btn" onclick={(e) => { e.stopPropagation(); handleContextMenu(e, role); }}>⚙️</button>
+              </td>
+            </tr>
+          {/each}
+        </svelte:fragment>
+      </ResourceTable>
+    {/if}
   {/if}
 </div>
 

@@ -17,15 +17,13 @@
   let selectedDeployment: any = null;
   let showFullDetails: boolean = false;
 
-  $: if (initialSelectedName && deployments && deployments.length > 0) {
-    const found = deployments.find((d: any) => d.metadata?.name === initialSelectedName);
-    if (found) {
-      selectedDeployment = found;
-      showFullDetails = true;
-    } else if (!showFullDetails || selectedDeployment?.metadata?.name !== initialSelectedName) {
-      selectedDeployment = { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
-      showFullDetails = true;
-    }
+  let lastProcessedInitialName: string | null = null;
+
+  $: if (initialSelectedName && initialSelectedName !== lastProcessedInitialName) {
+    lastProcessedInitialName = initialSelectedName;
+    const found = deployments?.find((d: any) => d.metadata?.name === initialSelectedName);
+    selectedDeployment = found || { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
+    showFullDetails = true;
   }
   
   // Sorting state
@@ -485,6 +483,8 @@
 
   // Back to deployments list
   function backToDeploymentsList() {
+    initialSelectedName = null;
+    lastProcessedInitialName = null;
     showFullDetails = false;
     selectedDeployment = null;
   }
@@ -498,7 +498,6 @@
 {:else}
   <div class="deployments-panel">
     <div class="panel-header">
-      <h4>📦 Deployments ({filteredDeployments.length})</h4>
       <div class="panel-controls">
         <span class="live-indicator {watchError ? 'error' : watchActive ? 'active' : ''}">
           {watchError ? 'Watch Error' : watchActive ? '🟢 Live' : '⏸️ Paused'}

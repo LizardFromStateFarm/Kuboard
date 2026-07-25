@@ -6,16 +6,21 @@
   import ClusterRoleBindingsPanel from './ClusterRoleBindingsPanel.svelte';
   import ServiceAccountsPanel from './ServiceAccountsPanel.svelte';
   import SecretsPanel from './SecretsPanel.svelte';
+  import { Key, ShieldCheck, ShieldAlert, Link, Link2, User } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
   export let namespace: string = 'all';
+  export let tabSessionId: string = 'tab-default';
 
   // State
-  let activeTab: 'secrets' | 'roles' | 'clusterroles' | 'rolebindings' | 'clusterrolebindings' | 'serviceaccounts' = 'secrets';
+  type SecuritySubTab = 'secrets' | 'roles' | 'clusterroles' | 'rolebindings' | 'clusterrolebindings' | 'serviceaccounts';
+  let sessionTabMap: Record<string, SecuritySubTab> = {};
+  $: activeTab = sessionTabMap[tabSessionId] || 'secrets';
 
-  function setActiveTab(tab: any) {
-    activeTab = tab;
+  function setActiveTab(tab: SecuritySubTab) {
+    sessionTabMap[tabSessionId] = tab;
+    sessionTabMap = { ...sessionTabMap };
   }
 </script>
 
@@ -26,42 +31,42 @@
       class:active={activeTab === 'secrets'} 
       onclick={() => setActiveTab('secrets')}
     >
-      🔒 Secrets
+      <Key size={15} /> Secrets
     </button>
     <button 
       class="nav-item" 
       class:active={activeTab === 'roles'} 
       onclick={() => setActiveTab('roles')}
     >
-      Roles
+      <ShieldCheck size={15} /> Roles
     </button>
     <button 
       class="nav-item" 
       class:active={activeTab === 'clusterroles'} 
       onclick={() => setActiveTab('clusterroles')}
     >
-      Cluster Roles
+      <ShieldAlert size={15} /> Cluster Roles
     </button>
     <button 
       class="nav-item" 
       class:active={activeTab === 'rolebindings'} 
       onclick={() => setActiveTab('rolebindings')}
     >
-      Role Bindings
+      <Link size={15} /> Role Bindings
     </button>
     <button 
       class="nav-item" 
       class:active={activeTab === 'clusterrolebindings'} 
       onclick={() => setActiveTab('clusterrolebindings')}
     >
-      Cluster Role Bindings
+      <Link2 size={15} /> Cluster Role Bindings
     </button>
     <button 
       class="nav-item" 
       class:active={activeTab === 'serviceaccounts'} 
       onclick={() => setActiveTab('serviceaccounts')}
     >
-      Service Accounts
+      <User size={15} /> Service Accounts
     </button>
   </div>
 

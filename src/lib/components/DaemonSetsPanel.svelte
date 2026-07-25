@@ -17,15 +17,13 @@
   let selectedDaemonSet: any = null;
   let showFullDetails: boolean = false;
 
-  $: if (initialSelectedName && daemonsets && daemonsets.length > 0) {
-    const found = daemonsets.find((ds: any) => ds.metadata?.name === initialSelectedName);
-    if (found) {
-      selectedDaemonSet = found;
-      showFullDetails = true;
-    } else if (!showFullDetails || selectedDaemonSet?.metadata?.name !== initialSelectedName) {
-      selectedDaemonSet = { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
-      showFullDetails = true;
-    }
+  let lastProcessedInitialName: string | null = null;
+
+  $: if (initialSelectedName && initialSelectedName !== lastProcessedInitialName) {
+    lastProcessedInitialName = initialSelectedName;
+    const found = daemonsets?.find((ds: any) => ds.metadata?.name === initialSelectedName);
+    selectedDaemonSet = found || { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
+    showFullDetails = true;
   }
   
   // Sorting state
@@ -278,7 +276,7 @@
         default:
           return 0;
       }
-      
+
       return sortDirection === 'asc' ? comparison : -comparison;
     });
     
@@ -307,21 +305,17 @@
 
   // Back to daemonsets list
   function backToDaemonSetsList() {
+    initialSelectedName = null;
+    lastProcessedInitialName = null;
     showFullDetails = false;
     selectedDaemonSet = null;
   }
-
-  // Loading state is managed by parent WorkloadsTab
-  // This panel just displays the data it receives
 </script>
 
 {#if showFullDetails && selectedDaemonSet}
   <DaemonSetDetails daemonSet={selectedDaemonSet} onBack={backToDaemonSetsList} on:navigateToWorkload />
 {:else}
   <div class="daemonsets-panel">
-    <div class="panel-header">
-      <h4>📦 DaemonSets ({filteredDaemonSets.length})</h4>
-    </div>
       <ResourceTable
         items={sortedDaemonSets}
         filteredItems={filteredDaemonSets}

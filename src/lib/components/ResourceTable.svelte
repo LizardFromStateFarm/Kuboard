@@ -1,17 +1,35 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
+  import { Search, RefreshCw, Trash2, X } from 'lucide-svelte';
+
   export let items: any[] = [];
   export let filteredItems: any[] = [];
   export let searchQuery: string = '';
   export let searchPlaceholder: string = 'Search...';
   export let noItemsMessage: string = 'No items available in this context.';
   export let noSearchResultsMessage: string = 'No items match your search query:';
+  export let selectedCount: number = 0;
+
+  const dispatch = createEventDispatcher();
+
+  function triggerBulkDelete() {
+    dispatch('bulkDelete');
+  }
+
+  function triggerBulkRestart() {
+    dispatch('bulkRestart');
+  }
+
+  function triggerClearSelection() {
+    dispatch('clearSelection');
+  }
 </script>
 
 {#if items && items.length > 0}
-  <!-- Search Bar -->
+  <!-- Search & Bulk Actions Bar -->
   <div class="search-bar-container">
     <div class="search-input-wrapper">
-      <span class="search-icon">🔍</span>
+      <span class="search-icon"><Search size={14} /></span>
       <input
         type="text"
         class="search-input"
@@ -20,14 +38,25 @@
         autocomplete="off"
       />
       {#if searchQuery}
-        <button class="search-clear" onclick={() => searchQuery = ''} title="Clear search">×</button>
+        <button class="search-clear" onclick={() => searchQuery = ''} title="Clear search"><X size={14} /></button>
       {/if}
     </div>
-    <div class="search-results-count">
-      {#if searchQuery}
-        Showing {filteredItems.length} of {items.length} items
-      {:else}
-        {items.length} items
+    <div class="search-results-row">
+      <div class="search-results-count">
+        {#if searchQuery}
+          Showing {filteredItems.length} of {items.length} items
+        {:else}
+          {items.length} items
+        {/if}
+      </div>
+
+      {#if selectedCount > 0}
+        <div class="bulk-action-bar">
+          <span class="selected-badge">Selected: {selectedCount}</span>
+          <button class="btn-bulk btn-restart" onclick={triggerBulkRestart}><RefreshCw size={13} /> Bulk Restart ({selectedCount})</button>
+          <button class="btn-bulk btn-delete" onclick={triggerBulkDelete}><Trash2 size={13} /> Bulk Delete ({selectedCount})</button>
+          <button class="btn-bulk btn-clear" onclick={triggerClearSelection}><X size={13} /> Clear</button>
+        </div>
       {/if}
     </div>
   </div>
@@ -130,12 +159,48 @@
     transform: scale(1.1);
   }
 
+  .search-results-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
   .search-results-count {
     font-size: 0.85rem;
     color: var(--text-muted);
     font-weight: 500;
     padding-left: var(--spacing-xs);
   }
+
+  .bulk-action-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .selected-badge {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    font-weight: 700;
+    font-size: 0.8rem;
+    padding: 3px 8px;
+    border-radius: 12px;
+  }
+
+  .btn-bulk {
+    border: none;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+
+  .btn-bulk.btn-restart { background: #eab308; color: black; }
+  .btn-bulk.btn-delete { background: #ef4444; color: white; }
+  .btn-bulk.btn-clear { background: rgba(255, 255, 255, 0.1); color: var(--text-secondary); }
+  .btn-bulk:hover { opacity: 0.9; }
 
   .no-search-results {
     display: flex;

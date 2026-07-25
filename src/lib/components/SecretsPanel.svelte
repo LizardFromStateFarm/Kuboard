@@ -4,6 +4,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import ResourceTable from './ResourceTable.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import SecretDetails from './SecretDetails.svelte';
+  import { Key } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
@@ -118,49 +120,14 @@
 
 <div class="secrets-panel">
   <div class="panel-header">
-    <h4>🔒 Secrets ({filteredSecrets.length})</h4>
+    <h4><Key size={16} /> Secrets ({filteredSecrets.length})</h4>
     <button class="refresh-btn" onclick={fetchSecrets} disabled={loading}>
       {loading ? '🔄' : '↻ Refresh'}
     </button>
   </div>
 
   {#if selectedSecret}
-    <div class="secret-details-view">
-      <div class="details-header">
-        <button class="back-btn" onclick={() => selectedSecret = null}>← Back to Secrets</button>
-        <h3>🔒 {selectedSecret.metadata?.name}</h3>
-        <span class="namespace-badge">{selectedSecret.metadata?.namespace}</span>
-      </div>
-
-      <div class="details-card">
-        <h5>Secret Metadata</h5>
-        <div class="meta-row"><strong>Type:</strong> <code>{selectedSecret.type || 'Opaque'}</code></div>
-        <div class="meta-row"><strong>Created:</strong> {formatAge(selectedSecret.metadata?.creationTimestamp)}</div>
-      </div>
-
-      <div class="details-card">
-        <div class="card-header">
-          <h5>Secret Data Keys ({Object.keys(selectedSecret.data || selectedSecret.stringData || {}).length})</h5>
-        </div>
-        <div class="data-keys-list">
-          {#each Object.entries(selectedSecret.data || selectedSecret.stringData || {}) as [k, v]}
-            <div class="data-key-item">
-              <div class="key-name"><code>{k}</code></div>
-              <div class="key-value-wrapper">
-                {#if showDecoded[`${selectedSecret.metadata?.name}-${k}`]}
-                  <pre class="decoded-val">{typeof v === 'string' ? decodeBase64(v) : JSON.stringify(v)}</pre>
-                {:else}
-                  <span class="masked-val">••••••••••••••••</span>
-                {/if}
-                <button class="toggle-decode-btn" onclick={() => toggleDecode(`${selectedSecret.metadata?.name}-${k}`)}>
-                  {showDecoded[`${selectedSecret.metadata?.name}-${k}`] ? '👁️ Hide' : '🔓 Decode'}
-                </button>
-              </div>
-            </div>
-          {/each}
-        </div>
-      </div>
-    </div>
+    <SecretDetails secret={selectedSecret} onBack={() => selectedSecret = null} />
   {:else}
     <ResourceTable
       items={secrets}
@@ -195,7 +162,7 @@
             onclick={() => selectedSecret = sec}
             oncontextmenu={(e) => handleContextMenu(e, sec)}
           >
-            <td class="name-cell">🔒 {sec.metadata?.name}</td>
+            <td class="name-cell"><Key size={14} /> {sec.metadata?.name}</td>
             <td>{sec.metadata?.namespace || 'default'}</td>
             <td><span class="type-badge">{sec.type || 'Opaque'}</span></td>
             <td>{Object.keys(sec.data || sec.stringData || {}).length} keys</td>

@@ -4,6 +4,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import ResourceTable from './ResourceTable.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import ServiceAccountDetails from './ServiceAccountDetails.svelte';
+  import { User } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
@@ -17,6 +19,7 @@
   let sortColumn: string = 'name';
   let sortDirection: 'asc' | 'desc' = 'asc';
   let refreshTimer: any;
+  let selectedSA: any = null;
 
   // Context Menu State
   let contextMenuVisible = false;
@@ -113,52 +116,56 @@
 </script>
 
 <div class="service-accounts-panel">
-  <div class="panel-header">
-    <h4>🔒 Service Accounts ({filteredAccounts.length})</h4>
-  </div>
-
-  {#if loading && serviceAccounts.length === 0}
-    <div class="loading-state">
-      <div class="spinner"></div>
-      <p>Loading Service Accounts...</p>
-    </div>
-  {:else if error}
-    <div class="error-state">
-      <span class="error-icon">⚠️</span>
-      <p>{error}</p>
-      <button onclick={fetchServiceAccounts}>Retry</button>
-    </div>
+  {#if selectedSA}
+    <ServiceAccountDetails sa={selectedSA} onBack={() => selectedSA = null} />
   {:else}
-    <ResourceTable
-      items={serviceAccounts}
-      filteredItems={filteredAccounts}
-      bind:searchQuery
-      searchPlaceholder="Search Service Accounts..."
-      noItemsMessage="No Service Accounts found."
-      noSearchResultsMessage="No Service Accounts match your search query:"
-    >
-      <svelte:fragment slot="header">
-        <th class="sortable" onclick={() => handleSort('name')}>Name</th>
-        <th class="sortable" onclick={() => handleSort('namespace')}>Namespace</th>
-        <th>Secrets</th>
-        <th class="sortable" onclick={() => handleSort('age')}>Age</th>
-        <th>Actions</th>
-      </svelte:fragment>
+    <div class="panel-header">
+      <h4><User size={16} /> Service Accounts ({filteredAccounts.length})</h4>
+    </div>
 
-      <svelte:fragment slot="rows">
-        {#each filteredAccounts as sa (sa.metadata.uid)}
-          <tr class="resource-row" oncontextmenu={(e) => handleContextMenu(e, sa)}>
-            <td class="name-cell">{sa.metadata.name}</td>
-            <td>{sa.metadata.namespace}</td>
-            <td>{sa.secrets?.length || 0}</td>
-            <td>{formatAge(sa.metadata.creationTimestamp)}</td>
-            <td class="actions-cell">
-              <button class="action-btn" onclick={(e) => handleContextMenu(e, sa)}>⚙️</button>
-            </td>
-          </tr>
-        {/each}
-      </svelte:fragment>
-    </ResourceTable>
+    {#if loading && serviceAccounts.length === 0}
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading Service Accounts...</p>
+      </div>
+    {:else if error}
+      <div class="error-state">
+        <span class="error-icon">⚠️</span>
+        <p>{error}</p>
+        <button onclick={fetchServiceAccounts}>Retry</button>
+      </div>
+    {:else}
+      <ResourceTable
+        items={serviceAccounts}
+        filteredItems={filteredAccounts}
+        bind:searchQuery
+        searchPlaceholder="Search Service Accounts..."
+        noItemsMessage="No Service Accounts found."
+        noSearchResultsMessage="No Service Accounts match your search query:"
+      >
+        <svelte:fragment slot="header">
+          <th class="sortable" onclick={() => handleSort('name')}>Name</th>
+          <th class="sortable" onclick={() => handleSort('namespace')}>Namespace</th>
+          <th>Secrets</th>
+          <th class="sortable" onclick={() => handleSort('age')}>Age</th>
+          <th>Actions</th>
+        </svelte:fragment>
+
+        <svelte:fragment slot="rows">
+          {#each filteredAccounts as sa (sa.metadata.uid)}
+            <tr class="resource-row clickable-row" onclick={() => selectedSA = sa} oncontextmenu={(e) => handleContextMenu(e, sa)}>
+              <td class="name-cell">{sa.metadata.name}</td>
+              <td>{sa.metadata.namespace}</td>
+              <td>{sa.secrets?.length || 0}</td>
+              <td>{formatAge(sa.metadata.creationTimestamp)}</td>
+              <td class="actions-cell">
+                <button class="action-btn" onclick={(e) => { e.stopPropagation(); handleContextMenu(e, sa); }}>⚙️</button>
+              </td>
+            </tr>
+          {/each}
+        </svelte:fragment>
+      </ResourceTable>
+    {/if}
   {/if}
 </div>
 

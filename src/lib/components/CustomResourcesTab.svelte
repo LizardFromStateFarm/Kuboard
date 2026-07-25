@@ -91,7 +91,6 @@
 
 <div class="custom-resources-tab">
   <div class="tab-header">
-    <h4>🔧 Custom Resources</h4>
     <div class="tab-controls">
       <button 
         class="refresh-button" 

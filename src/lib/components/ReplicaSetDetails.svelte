@@ -2,6 +2,7 @@
   import { onMount, createEventDispatcher } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import { openGlobalPodLogs } from '../stores/logs';
 
   const dispatch = createEventDispatcher();
 
@@ -88,7 +89,7 @@
     if (!replicaSet?.metadata?.name || !replicaSet?.metadata?.namespace) return;
     loading = true; error = null;
     try {
-      const details = await invoke('kuboard_get_replicaset_details', {
+      const details = await invoke('kuboard_get_replicaset', {
         name: replicaSet.metadata.name,
         namespace: replicaSet.metadata.namespace
       });
@@ -108,17 +109,11 @@
     if (!replicaSet?.metadata?.name || !replicaSet?.metadata?.namespace) return;
     podsLoading = true; podsError = null;
     try {
-      const selector = replicaSet.spec?.selector?.matchLabels;
-      if (selector) {
-        const labelSelector = Object.entries(selector).map(([k, v]) => `${k}=${v}`).join(',');
-        const pods = await invoke('kuboard_get_pods_by_selector', {
-          namespace: replicaSet.metadata.namespace,
-          labelSelector
-        }) as any[];
-        managedPods = pods || [];
-      } else {
-        managedPods = [];
-      }
+      const pods = await invoke('kuboard_get_replicaset_pods', {
+        name: replicaSet.metadata.name,
+        namespace: replicaSet.metadata.namespace
+      }) as any[];
+      managedPods = pods || [];
     } catch (err: any) {
       console.warn('Failed to load managed pods:', err);
       managedPods = [];
@@ -147,11 +142,20 @@
 
   function openActionsMenu(event: MouseEvent) {
     event.stopPropagation();
+    event.preventDefault();
+    if (actionsMenuVisible) {
+      actionsMenuVisible = false;
+      return;
+    }
     const btn = event.currentTarget as HTMLElement;
-    if (btn && btn.getBoundingClientRect) {
+    if (btn && typeof btn.getBoundingClientRect === 'function') {
       const rect = btn.getBoundingClientRect();
-      actionsMenuPosition = { x: Math.max(12, rect.right - 220), y: rect.bottom + 6 };
-    } else {
+      if (rect.width > 0 || rect.height > 0) {
+        actionsMenuPosition = { x: rect.left, y: rect.bottom + 4 };
+      } else if (event.clientX > 0 || event.clientY > 0) {
+        actionsMenuPosition = { x: event.clientX, y: event.clientY };
+      }
+    } else if (event.clientX > 0 || event.clientY > 0) {
       actionsMenuPosition = { x: event.clientX, y: event.clientY };
     }
     actionsMenuVisible = true;
@@ -173,11 +177,14 @@
   <!-- Sleek Top Action Bar -->
   <div class="details-nav-bar">
     <div class="nav-actions">
-      <button class="btn-back" onclick={onBack}>← Back to ReplicaSets</button>
+      <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}>← Back to ReplicaSets</button>
       <button class="btn-subtle" onclick={() => { showScaleInput = !showScaleInput; scaleValue = desired; }}>
         ⚡ {showScaleInput ? 'Cancel Scale' : 'Scale'}
       </button>
-      <button class="btn-subtle" onclick={openActionsMenu}>⚙️ Actions</button>
+      <button class="btn-subtle" onclick={() => openGlobalPodLogs(undefined, rs?.metadata?.name, rs?.metadata?.namespace)}>
+        📋 Logs
+      </button>
+      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}>⚙️ Actions</button>
     </div>
     <div class="nav-heading">
       <span class="status-pill status-{getStatusClass(status)}">{status}</span>
