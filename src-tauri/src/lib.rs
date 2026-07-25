@@ -33,6 +33,13 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            use tauri::Manager;
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.center();
+            }
+            Ok(())
+        })
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             // Context Management
@@ -82,12 +89,13 @@ pub fn run() {
             // Metrics (Real Implementation)
             commands::kuboard_get_node_metrics,
             commands::kuboard_get_node_metrics_history,
-        commands::kuboard_get_pod_metrics,
-        commands::kuboard_get_pod_metrics_history,
-        commands::kuboard_get_pod_events,
-        commands::kuboard_get_pod_logs,
-        commands::kuboard_check_metrics_availability,
-        commands::kuboard_get_cluster_metrics,
+            commands::kuboard_get_pod_metrics,
+            commands::kuboard_get_pod_metrics_history,
+            commands::kuboard_get_pod_events,
+            commands::kuboard_get_cluster_events,
+            commands::kuboard_get_pod_logs,
+            commands::kuboard_check_metrics_availability,
+            commands::kuboard_get_cluster_metrics,
         
         // Pod Actions
         commands::kuboard_delete_pod,
@@ -164,6 +172,35 @@ pub fn run() {
         commands::kuboard_delete_role_binding,
         commands::kuboard_delete_cluster_role_binding,
         commands::kuboard_delete_service_account,
+        
+        // Networking Commands
+        commands::kuboard_list_ingresses,
+        commands::kuboard_list_ingress_classes,
+        commands::kuboard_list_network_policies,
+        commands::kuboard_delete_ingress,
+        commands::kuboard_delete_ingress_class,
+        commands::kuboard_delete_network_policy,
+        
+        // Search Commands
+        commands::kuboard_search_resources,
+        
+        // YAML Commands
+        commands::kuboard_get_resource_yaml,
+        commands::kuboard_apply_resource_yaml,
+        
+        // Helm Commands
+        commands::kuboard_list_helm_releases,
+        commands::kuboard_get_helm_release_details,
+        
+        // Graph Commands
+        commands::kuboard_get_resource_graph,
+        
+        // Custom Resource Commands
+        commands::kuboard_list_crds,
+        commands::kuboard_list_custom_resource_instances,
+        
+        // Linter Commands
+        commands::kuboard_run_linter,
         
         // Pod Exec Commands
         commands::kuboard_exec_into_pod,

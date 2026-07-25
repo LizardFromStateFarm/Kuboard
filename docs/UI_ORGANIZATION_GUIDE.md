@@ -37,10 +37,14 @@ src/
   │   │   ├── ClusterRolesPanel.svelte # ClusterRole management panel
   │   │   ├── RoleBindingsPanel.svelte # RoleBinding management panel
   │   │   ├── ClusterRoleBindingsPanel.svelte # ClusterRoleBinding management panel
-  │   │   ├── ServiceAccountsPanel.svelte # ServiceAccount management panel
-  │   │   ├── NodesTab.svelte         # Cluster nodes management
+│   │   ├── ServiceAccountsPanel.svelte # ServiceAccount management panel
+│   │   ├── NodesTab.svelte         # Cluster nodes management
 │   │   ├── ConfigTab.svelte        # ConfigMaps and Secrets
-│   │   ├── NetworkTab.svelte       # Services and networking
+│   │   ├── NetworkTab.svelte       # Network management container
+│   │   ├── ServicesPanel.svelte     # Service management panel
+│   │   ├── IngressesPanel.svelte    # Ingress management panel
+│   │   ├── IngressClassesPanel.svelte # IngressClass management panel
+│   │   ├── NetworkPoliciesPanel.svelte # NetworkPolicy management panel
 │   │   ├── CustomResourcesTab.svelte # CRDs and custom resources
 │   │   ├── ResourceOverview.svelte # Legacy resource panels
 │   │   ├── MetricsGraph.svelte     # Resource usage graphs
@@ -49,6 +53,7 @@ src/
 │   │   ├── PortForwardManager.svelte # Port forwarding UI
 │   │   ├── TerminalWindow.svelte   # Terminal/exec with xterm.js
 │   │   ├── ResourceDescribe.svelte # Resource describe display
+│   │   ├── YamlEditor.svelte       # Live Monaco YAML editor
 │   │   └── ThemeSwitcher.svelte    # Dev mode theme controls
 │   ├── styles/              # CSS organization
 │   │   ├── color-palette.css # Centralized color definitions
@@ -135,7 +140,11 @@ border: 1px solid var(--border-primary);
    - Services (`ServiceDetails.svelte`)
 2. **Nodes** (`NodesTab.svelte`): Cluster nodes with detailed management
 3. **Config** (`ConfigTab.svelte`): ConfigMaps and Secrets
-4. **Network** (`NetworkTab.svelte`): Services and networking resources
+4. **Network** (`NetworkTab.svelte`): 
+     - Services (`ServicesPanel.svelte`)
+     - Ingresses (`IngressesPanel.svelte`)
+     - IngressClasses (`IngressClassesPanel.svelte`)
+     - NetworkPolicies (`NetworkPoliciesPanel.svelte`)
 5. **Storage** (`StorageTab.svelte`): 
      - PersistentVolumes (`PersistentVolumesPanel.svelte`)
      - PersistentVolumeClaims (`PersistentVolumeClaimsPanel.svelte`)

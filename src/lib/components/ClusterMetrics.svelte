@@ -149,106 +149,108 @@
       </div>
     </div>
   {:else if clusterMetrics}
-    <div class="metrics-grid">
-      <!-- CPU Usage -->
-      <div class="metric-card">
-        <div class="metric-header">
-          <h4>CPU Usage</h4>
-          <div class="metric-status">
-            {#if clusterMetrics.metrics_available}
-              <span class="status-badge real">Real-time</span>
-            {:else}
-              <span class="status-badge estimated">Estimated</span>
-            {/if}
-          </div>
-        </div>
-        <div class="metric-content">
-          <DonutChart
-            value={clusterMetrics.cpu.usage_percent}
-            label="CPU"
-            color={getUsageColor(clusterMetrics.cpu.usage_percent)}
-            size={100}
-            strokeWidth={6}
-          />
-          <div class="metric-details">
-            <div class="detail-item">
-              <span class="detail-label">Used:</span>
-              <span class="detail-value">{formatCores(clusterMetrics.cpu.used_cores)}</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Total:</span>
-              <span class="detail-value">{formatCores(clusterMetrics.cpu.total_cores)}</span>
-            </div>
+    {#if !clusterMetrics.metrics_available}
+      <div class="no-metrics-notice">
+        <div class="notice-icon">⚠️</div>
+        <div class="notice-body">
+          <h4>No Metrics Available</h4>
+          <p>The Metrics Server is not detected on your cluster. Mock metrics are disabled.</p>
+          <div class="setup-hint">
+            <strong>To enable metrics on Minikube:</strong>
+            <code>minikube addons enable metrics-server</code>
           </div>
         </div>
       </div>
+    {:else}
+      <div class="metrics-grid">
+        <!-- CPU Usage -->
+        <div class="metric-card">
+          <div class="metric-header">
+            <h4>CPU Usage</h4>
+            <div class="metric-status">
+              <span class="status-badge real">Real-time</span>
+            </div>
+          </div>
+          <div class="metric-content">
+            <DonutChart
+              value={clusterMetrics.cpu.usage_percent}
+              label="CPU"
+              color={getUsageColor(clusterMetrics.cpu.usage_percent)}
+              size={100}
+              strokeWidth={6}
+            />
+            <div class="metric-details">
+              <div class="detail-item">
+                <span class="detail-label">Used:</span>
+                <span class="detail-value">{formatCores(clusterMetrics.cpu.used_cores)}</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Total:</span>
+                <span class="detail-value">{formatCores(clusterMetrics.cpu.total_cores)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
-      <!-- Memory Usage -->
-      <div class="metric-card">
-        <div class="metric-header">
-          <h4>Memory Usage</h4>
-          <div class="metric-status">
-            {#if clusterMetrics.metrics_available}
+        <!-- Memory Usage -->
+        <div class="metric-card">
+          <div class="metric-header">
+            <h4>Memory Usage</h4>
+            <div class="metric-status">
               <span class="status-badge real">Real-time</span>
-            {:else}
-              <span class="status-badge estimated">Estimated</span>
-            {/if}
-          </div>
-        </div>
-        <div class="metric-content">
-          <DonutChart
-            value={clusterMetrics.memory.usage_percent}
-            label="Memory"
-            color={getUsageColor(clusterMetrics.memory.usage_percent)}
-            size={100}
-            strokeWidth={6}
-          />
-          <div class="metric-details">
-            <div class="detail-item">
-              <span class="detail-label">Used:</span>
-              <span class="detail-value">{formatBytes(clusterMetrics.memory.used_bytes)}</span>
             </div>
-            <div class="detail-item">
-              <span class="detail-label">Total:</span>
-              <span class="detail-value">{formatBytes(clusterMetrics.memory.total_bytes)}</span>
+          </div>
+          <div class="metric-content">
+            <DonutChart
+              value={clusterMetrics.memory.usage_percent}
+              label="Memory"
+              color={getUsageColor(clusterMetrics.memory.usage_percent)}
+              size={100}
+              strokeWidth={6}
+            />
+            <div class="metric-details">
+              <div class="detail-item">
+                <span class="detail-label">Used:</span>
+                <span class="detail-value">{formatBytes(clusterMetrics.memory.used_bytes)}</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Total:</span>
+                <span class="detail-value">{formatBytes(clusterMetrics.memory.total_bytes)}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Disk Usage -->
-      <div class="metric-card">
-        <div class="metric-header">
-          <h4>Disk Usage</h4>
-          <div class="metric-status">
-            {#if clusterMetrics.metrics_available}
+        <!-- Disk Usage -->
+        <div class="metric-card">
+          <div class="metric-header">
+            <h4>Disk Usage</h4>
+            <div class="metric-status">
               <span class="status-badge real">Real-time</span>
-            {:else}
-              <span class="status-badge estimated">Estimated</span>
-            {/if}
-          </div>
-        </div>
-        <div class="metric-content">
-          <DonutChart
-            value={clusterMetrics.disk.usage_percent}
-            label="Disk"
-            color={getUsageColor(clusterMetrics.disk.usage_percent)}
-            size={100}
-            strokeWidth={6}
-          />
-          <div class="metric-details">
-            <div class="detail-item">
-              <span class="detail-label">Used:</span>
-              <span class="detail-value">{formatBytes(clusterMetrics.disk.used_bytes)}</span>
             </div>
-            <div class="detail-item">
-              <span class="detail-label">Total:</span>
-              <span class="detail-value">{formatBytes(clusterMetrics.disk.total_bytes)}</span>
+          </div>
+          <div class="metric-content">
+            <DonutChart
+              value={clusterMetrics.disk.usage_percent}
+              label="Disk"
+              color={getUsageColor(clusterMetrics.disk.usage_percent)}
+              size={100}
+              strokeWidth={6}
+            />
+            <div class="metric-details">
+              <div class="detail-item">
+                <span class="detail-label">Used:</span>
+                <span class="detail-value">{formatBytes(clusterMetrics.disk.used_bytes)}</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Total:</span>
+                <span class="detail-value">{formatBytes(clusterMetrics.disk.total_bytes)}</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    {/if}
 
     <!-- Cluster Summary -->
     <div class="cluster-summary">
@@ -504,6 +506,50 @@
     color: white;
     font-size: 0.9rem;
     font-weight: 600;
+  }
+
+  .no-metrics-notice {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  .notice-icon {
+    font-size: 2rem;
+  }
+
+  .notice-body h4 {
+    margin: 0 0 6px 0;
+    color: #f59e0b;
+    font-size: 1.1rem;
+  }
+
+  .notice-body p {
+    margin: 0 0 10px 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+  }
+
+  .setup-hint {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .setup-hint code {
+    background: rgba(0, 0, 0, 0.4);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    color: var(--success-color);
+    width: fit-content;
   }
 
   /* Responsive Design */

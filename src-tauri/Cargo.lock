@@ -2282,8 +2282,10 @@ name = "kuboard"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "dirs 5.0.1",
+ "flate2",
  "futures-util",
  "http",
  "k8s-openapi",
@@ -2292,6 +2294,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",

@@ -1,35 +1,39 @@
-<!-- Kuboard Pods Panel Component -->
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import ResourceTable from './ResourceTable.svelte';
-  import { createEventDispatcher } from 'svelte';
   import { formatMemory, formatCPU } from '$lib/utils/formatters';
   import MetricsGraph from './MetricsGraph.svelte';
   import LogsWindow from './LogsWindow.svelte';
   import PodDetails from './PodDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
 
-  // Props
+  const dispatch = createEventDispatcher();
+
   export let currentContext: any = null;
   export let pods: any[] = [];
+  export let initialSelectedName: string | null = null;
 
-  // State
   let selectedPod: any = null;
   let selectedPodRaw: any = null;
   let showFullDetails: boolean = false;
   let refreshTimer: any;
   let logsWindowOpen = false;
   let logsWindowRef: LogsWindow;
-  
-  // Metrics state
-  let podMetrics: any = null;
-  let metricsLoading: boolean = false;
-  let metricsError: string | null = null;
+
+  $: if (initialSelectedName && pods && pods.length > 0) {
+    const found = pods.find((p: any) => p.metadata?.name === initialSelectedName);
+    if (found) {
+      selectedPod = found;
+      showFullDetails = true;
+    } else if (!showFullDetails || selectedPod?.metadata?.name !== initialSelectedName) {
+      selectedPod = { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
+      showFullDetails = true;
+    }
+  }
+
   let selectedResourceType: 'cpu' | 'memory' = 'cpu';
-  let selectedTimeRange: number = 30; // Default to 30 minutes
-  
-  // Container metrics state
-  let selectedContainer: any = null;
+  let selectedTimeRange: number = 30;
+
   let containerMetrics: any = null;
   let containerMetricsLoading: boolean = false;
   let containerMetricsError: string | null = null;
@@ -266,9 +270,6 @@
       console.log(`📋 Initialized ${livePods.length} pods`);
     }
   }
-
-  // Event dispatcher
-  const dispatch = createEventDispatcher();
 
   // Debug logging
   console.log('🚀 PodsPanel component script loaded');
@@ -1173,7 +1174,12 @@
   <!-- Always show the basic UI structure -->
   <div class="pods-content">
     {#if showFullDetails && selectedPodRaw}
-      <PodDetails pod={selectedPodRaw} onBack={backToPodsList} onOpenLogs={() => openPodLogs(selectedPodRaw)} />
+      <PodDetails 
+        pod={selectedPodRaw} 
+        onBack={backToPodsList} 
+        onOpenLogs={() => openPodLogs(selectedPodRaw)} 
+        on:navigateToWorkload={(e) => dispatch('navigateToWorkload', e.detail)}
+      />
     {:else}
       <!-- Pods List View (always show this) -->
       <div class="pods-list-view">

@@ -8,7 +8,12 @@
 
   // State
   let customResourceDefinitions: any[] = [];
-  let customResources: any[] = [];
+  let filteredCRDs: any[] = [];
+  let selectedCRD: any = null;
+  let crdInstances: any[] = [];
+  let instancesLoading: boolean = false;
+  let instancesError: string | null = null;
+  let searchQuery: string = '';
   
   let loading: boolean = false;
   let error: string | null = null;
@@ -22,17 +27,50 @@
     error = null;
     
     try {
-      // For now, we'll show a placeholder since custom resources require more complex API calls
-      // In a real implementation, you'd call APIs to get CRDs and custom resources
-      customResourceDefinitions = [];
-      customResources = [];
-      
+      customResourceDefinitions = await invoke('kuboard_list_crds');
+      filterCRDs();
       lastUpdate = new Date().toLocaleTimeString();
     } catch (err) {
       error = err as string;
-      console.error('Failed to load custom resources:', err);
+      console.error('Failed to load CRDs:', err);
     } finally {
       loading = false;
+    }
+  }
+
+  function filterCRDs() {
+    if (!searchQuery) {
+      filteredCRDs = customResourceDefinitions;
+    } else {
+      const q = searchQuery.toLowerCase();
+      filteredCRDs = customResourceDefinitions.filter(crd => 
+        crd.metadata.name.toLowerCase().includes(q) ||
+        crd.spec.names.kind.toLowerCase().includes(q)
+      );
+    }
+  }
+
+  async function selectCRD(crd: any) {
+    selectedCRD = crd;
+    instancesLoading = true;
+    instancesError = null;
+    crdInstances = [];
+    
+    try {
+      const group = crd.spec.group;
+      const version = crd.spec.versions.find((v: any) => v.served).name;
+      const kind = crd.spec.names.kind;
+      
+      crdInstances = await invoke('kuboard_list_custom_resource_instances', {
+        group,
+        version,
+        kind
+      });
+    } catch (err) {
+      instancesError = err as string;
+      console.error('Failed to load CRD instances:', err);
+    } finally {
+      instancesLoading = false;
     }
   }
 
@@ -40,6 +78,10 @@
   onMount(() => {
     loadCustomResources();
   });
+
+  $: if (searchQuery !== undefined) {
+    filterCRDs();
+  }
 
   // Reactive updates
   $: if (currentContext) {
@@ -87,57 +129,72 @@
     </div>
   {:else}
     <div class="custom-resources-content">
-      <!-- Custom Resource Definitions Section -->
-      <div class="crd-section">
-        <div class="section-header">
-          <h5>Custom Resource Definitions (CRDs)</h5>
-        </div>
-        <div class="coming-soon">
-          <div class="coming-soon-icon">🚧</div>
-          <h6>Coming Soon</h6>
-          <p>Custom Resource Definitions will be available in a future update. This will allow you to view and manage custom resources defined in your cluster.</p>
-          <div class="feature-list">
-            <div class="feature-item">
-              <span class="feature-icon">📋</span>
-              <span>View CRD definitions and schemas</span>
-            </div>
-            <div class="feature-item">
-              <span class="feature-icon">🔍</span>
-              <span>Browse custom resource instances</span>
-            </div>
-            <div class="feature-item">
-              <span class="feature-icon">⚙️</span>
-              <span>Manage custom resource lifecycle</span>
-            </div>
+      {#if !selectedCRD}
+        <div class="crd-list-view">
+          <div class="search-bar">
+            <input 
+              type="text" 
+              placeholder="Filter CRDs by name or kind..." 
+              bind:value={searchQuery}
+            />
+          </div>
+          
+          <div class="crd-grid">
+            {#each filteredCRDs as crd}
+              <button class="crd-card" onclick={() => selectCRD(crd)}>
+                <div class="crd-icon">🔧</div>
+                <div class="crd-info">
+                  <div class="crd-kind">{crd.spec.names.kind}</div>
+                  <div class="crd-name">{crd.metadata.name}</div>
+                  <div class="crd-group">{crd.spec.group}</div>
+                </div>
+              </button>
+            {/each}
           </div>
         </div>
-      </div>
+      {:else}
+        <div class="instance-view">
+          <div class="view-header">
+            <button class="back-button" onclick={() => selectedCRD = null}>← Back to CRDs</button>
+            <div class="header-info">
+              <h5>{selectedCRD.spec.names.kind} Instances</h5>
+              <span class="crd-full-name">{selectedCRD.metadata.name}</span>
+            </div>
+          </div>
 
-      <!-- Custom Resources Section -->
-      <div class="custom-resources-section">
-        <div class="section-header">
-          <h5>Custom Resource Instances</h5>
+          {#if instancesLoading}
+            <div class="loading-state">
+              <div class="spinner"></div>
+              <p>Loading instances of {selectedCRD.spec.names.kind}...</p>
+            </div>
+          {:else if instancesError}
+            <div class="error-banner">
+              <span class="error-icon">⚠️</span>
+              <p>{instancesError}</p>
+            </div>
+          {:else if crdInstances.length === 0}
+            <div class="empty-state">
+              <div class="empty-icon">📭</div>
+              <h5>No Instances Found</h5>
+              <p>There are no instances of <strong>{selectedCRD.spec.names.kind}</strong> in this cluster.</p>
+            </div>
+          {:else}
+            <div class="instance-list">
+              {#each crdInstances as instance}
+                <div class="instance-item">
+                  <div class="instance-info">
+                    <span class="instance-name">{instance.metadata.name}</span>
+                    <span class="instance-namespace">{instance.metadata.namespace || 'Cluster-wide'}</span>
+                  </div>
+                  <div class="instance-actions">
+                    <button class="btn-action" onclick={() => console.log('View details', instance)}>View</button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
-        <div class="coming-soon">
-          <div class="coming-soon-icon">🚧</div>
-          <h6>Coming Soon</h6>
-          <p>Custom resource instances will be available in a future update. This will allow you to view and manage instances of custom resources defined by CRDs.</p>
-          <div class="feature-list">
-            <div class="feature-item">
-              <span class="feature-icon">📊</span>
-              <span>View custom resource status and details</span>
-            </div>
-            <div class="feature-item">
-              <span class="feature-icon">🏷️</span>
-              <span>Filter and search custom resources</span>
-            </div>
-            <div class="feature-item">
-              <span class="feature-icon">📝</span>
-              <span>Edit custom resource configurations</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -264,99 +321,179 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-lg);
+    min-height: 400px;
   }
 
-  .crd-section, .custom-resources-section {
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-md);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-  }
-
-  .section-header {
-    margin-bottom: var(--spacing-md);
-  }
-
-  .section-header h5 {
-    margin: 0;
-    color: white;
-    font-size: 1rem;
-    font-weight: 600;
-  }
-
-  .coming-soon {
+  .crd-list-view {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-xl);
-    color: rgba(255, 255, 255, 0.8);
-    text-align: center;
+    gap: var(--spacing-lg);
   }
 
-  .coming-soon-icon {
-    font-size: 3rem;
+  .search-bar input {
+    width: 100%;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    color: white;
+    outline: none;
+  }
+
+  .search-bar input:focus {
+    border-color: var(--primary-color);
+  }
+
+  .crd-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--spacing-md);
+  }
+
+  .crd-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    cursor: pointer;
+    text-align: left;
+    transition: var(--transition-normal);
+  }
+
+  .crd-card:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+  }
+
+  .crd-icon {
+    font-size: 1.5rem;
     opacity: 0.7;
   }
 
-  .coming-soon h6 {
-    margin: 0;
+  .crd-kind {
+    font-weight: 700;
     color: white;
-    font-size: 1.1rem;
-    font-weight: 600;
+    font-size: 0.95rem;
   }
 
-  .coming-soon p {
-    margin: 0;
-    font-size: 0.9rem;
-    line-height: 1.5;
-    max-width: 500px;
+  .crd-name {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin: 2px 0;
   }
 
-  .feature-list {
+  .crd-group {
+    font-size: 0.75rem;
+    color: var(--primary-color);
+    font-family: monospace;
+  }
+
+  .instance-view {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+  }
+
+  .view-header {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
-    margin-top: var(--spacing-md);
-    text-align: left;
   }
 
-  .feature-item {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-sm);
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: var(--radius-sm);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-  }
-
-  .feature-icon {
-    font-size: 1.2rem;
-    flex-shrink: 0;
-  }
-
-  .feature-item span:last-child {
-    color: rgba(255, 255, 255, 0.9);
+  .back-button {
+    background: transparent;
+    border: none;
+    color: var(--primary-color);
+    cursor: pointer;
+    padding: 0;
     font-size: 0.9rem;
+    width: fit-content;
   }
 
-  /* Responsive Design */
-  @media (max-width: 768px) {
-    .custom-resources-content {
-      gap: var(--spacing-md);
-    }
-    
-    .coming-soon {
-      padding: var(--spacing-lg);
-    }
-    
-    .feature-list {
-      gap: var(--spacing-xs);
-    }
-    
-    .feature-item {
-      padding: var(--spacing-xs);
-    }
+  .header-info h5 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: white;
+  }
+
+  .crd-full-name {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-family: monospace;
+  }
+
+  .instance-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .instance-item {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .instance-name {
+    font-weight: 600;
+    color: white;
+    display: block;
+  }
+
+  .instance-namespace {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  .btn-action {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: white;
+    padding: 4px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+
+  .btn-action:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .loading-state, .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xxl);
+    color: var(--text-secondary);
+    text-align: center;
+  }
+
+  .spinner {
+    width: 30px;
+    height: 30px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: var(--spacing-md);
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .empty-icon {
+    font-size: 2.5rem;
+    margin-bottom: var(--spacing-md);
+    opacity: 0.5;
   }
 </style>

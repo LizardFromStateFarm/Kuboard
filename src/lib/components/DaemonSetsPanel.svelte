@@ -2,6 +2,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import ResourceTable from './ResourceTable.svelte';
   import DaemonSetDetails from './DaemonSetDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   
@@ -10,10 +11,22 @@
   // Props
   export let currentContext: any = null;
   export let daemonsets: any[] = [];
+  export let initialSelectedName: string | null = null;
 
   // State
   let selectedDaemonSet: any = null;
   let showFullDetails: boolean = false;
+
+  $: if (initialSelectedName && daemonsets && daemonsets.length > 0) {
+    const found = daemonsets.find((ds: any) => ds.metadata?.name === initialSelectedName);
+    if (found) {
+      selectedDaemonSet = found;
+      showFullDetails = true;
+    } else if (!showFullDetails || selectedDaemonSet?.metadata?.name !== initialSelectedName) {
+      selectedDaemonSet = { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
+      showFullDetails = true;
+    }
+  }
   
   // Sorting state
   let sortColumn: string | null = null;
@@ -303,14 +316,15 @@
 </script>
 
 {#if showFullDetails && selectedDaemonSet}
-  <DaemonSetDetails daemonSet={selectedDaemonSet} onBack={backToDaemonSetsList} />
+  <DaemonSetDetails daemonSet={selectedDaemonSet} onBack={backToDaemonSetsList} on:navigateToWorkload />
 {:else}
   <div class="daemonsets-panel">
     <div class="panel-header">
       <h4>📦 DaemonSets ({filteredDaemonSets.length})</h4>
+    </div>
       <ResourceTable
-        items={getRenderDaemonSetss()}
-        filteredItems={filteredDaemonSetss}
+        items={sortedDaemonSets}
+        filteredItems={filteredDaemonSets}
         bind:searchQuery
         searchPlaceholder="Search DaemonSets..."
         noItemsMessage="No DaemonSets are currently in this cluster"

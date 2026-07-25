@@ -2,16 +2,29 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import ResourceTable from './ResourceTable.svelte';
   import CronJobDetails from './CronJobDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
 
   // Props
   export let currentContext: any = null;
   export let cronjobs: any[] = [];
+  export let initialSelectedName: string | null = null;
 
   // State
   let selectedCronJob: any = null;
   let showFullDetails: boolean = false;
+
+  $: if (initialSelectedName && cronjobs && cronjobs.length > 0) {
+    const found = cronjobs.find((cj: any) => cj.metadata?.name === initialSelectedName);
+    if (found) {
+      selectedCronJob = found;
+      showFullDetails = true;
+    } else if (!showFullDetails || selectedCronJob?.metadata?.name !== initialSelectedName) {
+      selectedCronJob = { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
+      showFullDetails = true;
+    }
+  }
   
   // Sorting state
   let sortColumn: string | null = null;
@@ -278,14 +291,15 @@
 </script>
 
 {#if showFullDetails && selectedCronJob}
-  <CronJobDetails cronJob={selectedCronJob} onBack={backToCronJobsList} />
+  <CronJobDetails cronJob={selectedCronJob} onBack={backToCronJobsList} on:navigateToWorkload />
 {:else}
   <div class="cronjobs-panel">
     <div class="panel-header">
       <h4>📦 CronJobs ({filteredCronJobs.length})</h4>
+    </div>
       <ResourceTable
-        items={getRenderCronJobss()}
-        filteredItems={filteredCronJobss}
+        items={sortedCronJobs}
+        filteredItems={filteredCronJobs}
         bind:searchQuery
         searchPlaceholder="Search CronJobs..."
         noItemsMessage="No CronJobs are currently in this cluster"

@@ -44,9 +44,7 @@
       <slot name="table">
         <table class="resource-table">
           <thead>
-            <tr>
-              <slot name="header"></slot>
-            </tr>
+            <slot name="header"></slot>
           </thead>
           <tbody>
             <slot name="rows"></slot>
@@ -204,7 +202,37 @@
   .resource-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
+    table-layout: fixed;
+  }
+
+  :global(.resource-table th) {
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 2px solid var(--border-primary);
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+    position: relative;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 50px;
+    user-select: none;
+    resize: horizontal;
+  }
+
+  :global(.resource-table th:hover) {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  :global(.resource-table td) {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border-primary);
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .no-items-message {

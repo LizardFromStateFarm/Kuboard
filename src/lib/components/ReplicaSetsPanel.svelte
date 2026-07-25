@@ -2,16 +2,29 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import ResourceTable from './ResourceTable.svelte';
   import ReplicaSetDetails from './ReplicaSetDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
 
   // Props
   export let currentContext: any = null;
   export let replicasets: any[] = [];
+  export let initialSelectedName: string | null = null;
 
   // State
   let selectedReplicaSet: any = null;
   let showFullDetails: boolean = false;
+
+  $: if (initialSelectedName && replicasets && replicasets.length > 0) {
+    const found = replicasets.find((rs: any) => rs.metadata?.name === initialSelectedName);
+    if (found) {
+      selectedReplicaSet = found;
+      showFullDetails = true;
+    } else if (!showFullDetails || selectedReplicaSet?.metadata?.name !== initialSelectedName) {
+      selectedReplicaSet = { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
+      showFullDetails = true;
+    }
+  }
   
   // Sorting state
   let sortColumn: string | null = null;
@@ -252,20 +265,18 @@
     showFullDetails = false;
     selectedReplicaSet = null;
   }
-
-  // Loading state is managed by parent WorkloadsTab
-  // This panel just displays the data it receives
 </script>
 
 {#if showFullDetails && selectedReplicaSet}
-  <ReplicaSetDetails replicaSet={selectedReplicaSet} onBack={backToReplicaSetsList} />
+  <ReplicaSetDetails replicaSet={selectedReplicaSet} onBack={backToReplicaSetsList} on:navigateToWorkload />
 {:else}
   <div class="replicasets-panel">
     <div class="panel-header">
       <h4>📦 ReplicaSets ({filteredReplicaSets.length})</h4>
+    </div>
       <ResourceTable
-        items={getRenderReplicaSetss()}
-        filteredItems={filteredReplicaSetss}
+        items={sortedReplicaSets}
+        filteredItems={filteredReplicaSets}
         bind:searchQuery
         searchPlaceholder="Search ReplicaSets..."
         noItemsMessage="No ReplicaSets are currently in this cluster"

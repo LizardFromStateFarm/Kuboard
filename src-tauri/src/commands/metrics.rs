@@ -28,7 +28,7 @@ use crate::metrics::{
     kuboard_fetch_pod_metrics_history,
     kuboard_check_metrics_server_availability,
 };
-use crate::kubernetes::{kuboard_fetch_pod_events, kuboard_fetch_pod_logs};
+use crate::kubernetes::{kuboard_fetch_pod_events, kuboard_fetch_cluster_events, kuboard_fetch_pod_logs};
 use crate::kubernetes::exec::start_exec_session;
 use crate::kubernetes::port_forward::start_port_forward_session;
 use serde_json::json;
@@ -171,10 +171,12 @@ pub async fn kuboard_get_pod_metrics(podName: String, namespace: String, state: 
             info!("Metrics server is available, fetching real metrics");
         }
         Ok(false) => {
-            warn!("Metrics server is not available, using mock data");
+            warn!("Metrics server is not available");
+            return Err("Metrics server is not available".to_string());
         }
         Err(e) => {
-            warn!("Error checking metrics server availability: {}, using mock data", e);
+            warn!("Error checking metrics server availability: {}", e);
+            return Err(format!("Error checking metrics server availability: {}", e));
         }
     }
 
@@ -259,6 +261,33 @@ pub async fn kuboard_get_pod_events(
         }
         Err(e) => {
             error!("Failed to fetch events for pod: {}/{}: {}", namespace, podName, e);
+            Err(e.to_string())
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn kuboard_get_cluster_events(
+    namespace: Option<String>,
+    state: State<'_, AppState>
+) -> Result<Vec<serde_json::Value>, String> {
+    info!("Fetching cluster events for namespace: {:?}", namespace);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    match kuboard_fetch_cluster_events(client, namespace.as_deref()).await {
+        Ok(events) => {
+            info!("✅ Successfully fetched {} cluster events", events.len());
+            let json_events: Vec<serde_json::Value> = events.into_iter()
+                .map(|event| serde_json::to_value(event).unwrap())
+                .collect();
+            Ok(json_events)
+        }
+        Err(e) => {
+            error!("Failed to fetch cluster events: {}", e);
             Err(e.to_string())
         }
     }

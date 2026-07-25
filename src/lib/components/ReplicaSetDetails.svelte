@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, createEventDispatcher } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+
+  const dispatch = createEventDispatcher();
 
   export let replicaSet: any;
   export let onBack: () => void;
@@ -15,27 +17,21 @@
   let scaleLoading = false;
   let scaleError: string | null = null;
 
-  // Scale state
   let scaleValue: number = 0;
   let showScaleInput = false;
 
-  // Quick Actions Menu state
   let actionsMenuVisible = false;
   let actionsMenuPosition = { x: 0, y: 0 };
   let yamlViewerVisible = false;
   let yamlContent = '';
-  let yamlEditorVisible = false;
-  let yamlEditorContent = '';
-  let yamlEditorLoading = false;
-  let yamlEditorError: string | null = null;
 
-  // Section collapse state
-  let sectionsCollapsed = {
-    pods: false,
-    selectors: true,
-    labels: true,
-    yaml: true
-  };
+  $: rs = replicaSetDetails || replicaSet;
+  $: status = getReplicaStatus(rs);
+  $: desired = rs?.spec?.replicas || 0;
+  $: ready = rs?.status?.readyReplicas || 0;
+  $: current = rs?.status?.replicas || 0;
+  $: available = rs?.status?.availableReplicas || 0;
+  $: owner = getOwnerReference(rs);
 
   function formatAge(creationTimestamp: string): string {
     if (!creationTimestamp) return 'Unknown';
@@ -50,36 +46,20 @@
     return `${diffMins}m`;
   }
 
-  async function copyToClipboard(text: string) {
-    try { await navigator.clipboard.writeText(text); } catch {}
-  }
-
-  function toggleSection(section: keyof typeof sectionsCollapsed) {
-    sectionsCollapsed[section] = !sectionsCollapsed[section];
-  }
-
-  function formatObject(obj: any): string {
-    if (typeof obj === 'string') return obj;
-    if (typeof obj === 'number') return obj.toString();
-    if (typeof obj === 'boolean') return obj.toString();
-    if (Array.isArray(obj)) return obj.join(', ');
-    if (obj && typeof obj === 'object') return JSON.stringify(obj, null, 2);
-    return 'N/A';
-  }
-
-  function getReplicaStatus(rs: any): string {
-    const desired = rs.spec?.replicas || 0;
-    const ready = rs.status?.readyReplicas || 0;
-    const current = rs.status?.replicas || 0;
+  function getReplicaStatus(r: any): string {
+    if (!r) return 'Unknown';
+    const des = r.spec?.replicas || 0;
+    const rdy = r.status?.readyReplicas || 0;
+    const cur = r.status?.replicas || 0;
     
-    if (ready === desired && current === desired) return 'Ready';
-    if (current < desired) return 'Scaling';
-    if (ready < desired) return 'Not Ready';
+    if (rdy === des && cur === des) return 'Ready';
+    if (cur < des) return 'Scaling';
+    if (rdy < des) return 'Not Ready';
     return 'Unknown';
   }
 
-  function getStatusClass(status: string): string {
-    switch (status?.toLowerCase()) {
+  function getStatusClass(st: string): string {
+    switch (st?.toLowerCase()) {
       case 'ready': return 'ready';
       case 'scaling': return 'pending';
       case 'not ready': return 'failed';
@@ -87,45 +67,38 @@
     }
   }
 
-  function getOwnerReference(rs: any): { type: string; name: string } | null {
-    const ownerRefs = rs.metadata?.ownerReferences || [];
+  function getOwnerReference(r: any): { type: string; name: string } | null {
+    const ownerRefs = r?.metadata?.ownerReferences || [];
     if (ownerRefs.length === 0) return null;
-    const owner = ownerRefs[0];
-    return { type: owner.kind || 'Unknown', name: owner.name || 'Unknown' };
+    const o = ownerRefs[0];
+    return { type: o.kind || 'Unknown', name: o.name || 'Unknown' };
   }
 
-  function getPodStatusClass(status: string): string {
-    switch (status?.toLowerCase()) {
+  function getPodStatusClass(st: string): string {
+    switch (st?.toLowerCase()) {
       case 'running': return 'running';
       case 'pending': return 'pending';
       case 'succeeded': return 'ready';
       case 'failed': return 'failed';
-      case 'unknown': return 'unknown';
       default: return 'unknown';
     }
   }
 
   async function loadReplicaSetDetails() {
     if (!replicaSet?.metadata?.name || !replicaSet?.metadata?.namespace) return;
-    
-    loading = true;
-    error = null;
-    
+    loading = true; error = null;
     try {
-      const rsData = await invoke('kuboard_get_replicaset', {
+      const details = await invoke('kuboard_get_replicaset_details', {
         name: replicaSet.metadata.name,
         namespace: replicaSet.metadata.namespace
-      }).catch(() => null);
-      
-      replicaSetDetails = rsData || replicaSet;
-      scaleValue = replicaSetDetails.spec?.replicas || 0;
-      
-      // Load managed pods
+      });
+      replicaSetDetails = details;
+      scaleValue = replicaSetDetails?.spec?.replicas || replicaSet?.spec?.replicas || 0;
       await loadManagedPods();
-    } catch (err) {
-      error = String(err);
-      replicaSetDetails = replicaSet; // Fallback to passed replicaSet
-      scaleValue = replicaSet.spec?.replicas || 0;
+    } catch (err: any) {
+      console.warn('Failed to load replicaset details via Tauri API:', err);
+      replicaSetDetails = replicaSet;
+      scaleValue = replicaSet?.spec?.replicas || 0;
     } finally {
       loading = false;
     }
@@ -133,18 +106,21 @@
 
   async function loadManagedPods() {
     if (!replicaSet?.metadata?.name || !replicaSet?.metadata?.namespace) return;
-    
-    podsLoading = true;
-    podsError = null;
-    
+    podsLoading = true; podsError = null;
     try {
-      const pods = await invoke('kuboard_get_replicaset_pods', {
-        name: replicaSet.metadata.name,
-        namespace: replicaSet.metadata.namespace
-      });
-      managedPods = Array.isArray(pods) ? pods : [];
-    } catch (err) {
-      podsError = String(err);
+      const selector = replicaSet.spec?.selector?.matchLabels;
+      if (selector) {
+        const labelSelector = Object.entries(selector).map(([k, v]) => `${k}=${v}`).join(',');
+        const pods = await invoke('kuboard_get_pods_by_selector', {
+          namespace: replicaSet.metadata.namespace,
+          labelSelector
+        }) as any[];
+        managedPods = pods || [];
+      } else {
+        managedPods = [];
+      }
+    } catch (err: any) {
+      console.warn('Failed to load managed pods:', err);
       managedPods = [];
     } finally {
       podsLoading = false;
@@ -153,1015 +129,289 @@
 
   async function scaleReplicaSet() {
     if (!replicaSet?.metadata?.name || !replicaSet?.metadata?.namespace) return;
-    if (scaleValue < 0) return;
-    
-    scaleLoading = true;
-    scaleError = null;
-    
+    scaleLoading = true; scaleError = null;
     try {
       await invoke('kuboard_scale_replicaset', {
         name: replicaSet.metadata.name,
         namespace: replicaSet.metadata.namespace,
         replicas: scaleValue
       });
-      
-      // Reload details
-      await loadReplicaSetDetails();
       showScaleInput = false;
-    } catch (err) {
+      await loadReplicaSetDetails();
+    } catch (err: any) {
       scaleError = String(err);
-      console.error('Failed to scale replicaset:', err);
     } finally {
       scaleLoading = false;
     }
   }
 
   function openActionsMenu(event: MouseEvent) {
-    actionsMenuPosition = { x: event.clientX, y: event.clientY };
+    event.stopPropagation();
+    const btn = event.currentTarget as HTMLElement;
+    if (btn && btn.getBoundingClientRect) {
+      const rect = btn.getBoundingClientRect();
+      actionsMenuPosition = { x: Math.max(12, rect.right - 220), y: rect.bottom + 6 };
+    } else {
+      actionsMenuPosition = { x: event.clientX, y: event.clientY };
+    }
     actionsMenuVisible = true;
   }
 
-  function handleActionMenuClose() {
-    actionsMenuVisible = false;
-  }
-
-  function handleActionDeleted(event: CustomEvent) {
-    handleActionMenuClose();
-    onBack();
-  }
-
+  function handleActionMenuClose() { actionsMenuVisible = false; }
+  function handleActionDeleted() { handleActionMenuClose(); onBack(); }
   function handleViewYaml(event: CustomEvent) {
-    console.log('handleViewYaml called', event.detail);
     yamlContent = event.detail.yaml;
     yamlViewerVisible = true;
     handleActionMenuClose();
   }
+  function closeYamlViewer() { yamlViewerVisible = false; yamlContent = ''; handleActionMenuClose(); }
 
-  function handleActionEdit(event: CustomEvent) {
-    console.log('handleActionEdit called', event.detail);
-    yamlEditorContent = event.detail.yaml;
-    yamlEditorVisible = true;
-    yamlEditorError = null;
-    handleActionMenuClose();
-  }
-
-  function handleActionCopied(event: CustomEvent) {
-    console.log('Copied:', event.detail.type, event.detail.value);
-  }
-
-  async function openYamlViewer() {
-    if (!replicaSet?.metadata?.name || !replicaSet?.metadata?.namespace) return;
-    
-    try {
-      yamlContent = JSON.stringify(replicaSetDetails || replicaSet, null, 2);
-      yamlViewerVisible = true;
-    } catch (err) {
-      console.error('Failed to load YAML:', err);
-    }
-  }
-
-  function closeYamlViewer() {
-    yamlViewerVisible = false;
-    yamlContent = '';
-    handleActionMenuClose();
-  }
-
-  function openYamlEditor() {
-    yamlEditorContent = JSON.stringify(replicaSetDetails || replicaSet, null, 2);
-    yamlEditorVisible = true;
-    yamlEditorError = null;
-  }
-
-  function closeYamlEditor() {
-    yamlEditorVisible = false;
-    yamlEditorContent = '';
-    yamlEditorError = null;
-    handleActionMenuClose();
-  }
-
-  async function saveYaml() {
-    if (!replicaSet?.metadata?.name || !replicaSet?.metadata?.namespace) return;
-    
-    yamlEditorLoading = true;
-    yamlEditorError = null;
-    
-    try {
-      // TODO: Implement replicaset update command
-      alert('ReplicaSet update not yet implemented. Please use kubectl.');
-      closeYamlEditor();
-    } catch (error: any) {
-      yamlEditorError = String(error);
-      console.error('Failed to update replicaset:', error);
-    } finally {
-      yamlEditorLoading = false;
-    }
-  }
-
-  onMount(() => {
-    loadReplicaSetDetails();
-  });
+  onMount(() => { loadReplicaSetDetails(); });
 </script>
 
-<div class="full-details-view">
-  <div class="details-header">
-    <div class="header-left">
-      <button class="back-button" onclick={onBack}>← Back to ReplicaSets</button>
-      <button class="actions-button" onclick={openActionsMenu}>⚙️ Actions</button>
+<div class="resource-details-view">
+  <!-- Sleek Top Action Bar -->
+  <div class="details-nav-bar">
+    <div class="nav-actions">
+      <button class="btn-back" onclick={onBack}>← Back to ReplicaSets</button>
+      <button class="btn-subtle" onclick={() => { showScaleInput = !showScaleInput; scaleValue = desired; }}>
+        ⚡ {showScaleInput ? 'Cancel Scale' : 'Scale'}
+      </button>
+      <button class="btn-subtle" onclick={openActionsMenu}>⚙️ Actions</button>
     </div>
-    <div class="header-right">
-      <h3>{replicaSet?.metadata?.name}</h3>
-      <span class="replicaset-namespace">({replicaSet?.metadata?.namespace})</span>
+    <div class="nav-heading">
+      <span class="status-pill status-{getStatusClass(status)}">{status}</span>
+      <h3 class="nav-title">{rs?.metadata?.name}</h3>
+      <span class="namespace-pill">{rs?.metadata?.namespace}</span>
     </div>
   </div>
 
-  {#if loading}
-    <div class="loading-message">
-      <div class="loading-spinner">⏳</div>
-      <p>Loading ReplicaSet details...</p>
-    </div>
-  {:else if error}
-    <div class="error-message">
-      <div class="error-icon">⚠️</div>
-      <div class="error-content">
-        <h5>Failed to load ReplicaSet details</h5>
-        <p>{error}</p>
-        <button class="retry-button" onclick={loadReplicaSetDetails}>Retry</button>
+  <!-- Single Cohesive Master Sheet -->
+  <div class="details-sheet">
+    <!-- Key Specs Summary Strip -->
+    <div class="sheet-section specs-strip">
+      <div class="spec-cell">
+        <span class="spec-label">Replicas (Ready / Desired)</span>
+        <span class="spec-val">{ready} / {desired}</span>
+      </div>
+      <div class="spec-cell">
+        <span class="spec-label">Current / Available</span>
+        <span class="spec-val">{current} / {available}</span>
+      </div>
+      <div class="spec-cell">
+        <span class="spec-label">Controlled By</span>
+        {#if owner}
+          <button class="controller-link-btn" onclick={() => dispatch('navigateToWorkload', { type: owner.type.toLowerCase(), name: owner.name })} title="Navigate to {owner.type} Details">
+            🔗 {owner.type} / {owner.name} ↗
+          </button>
+        {:else}
+          <span class="spec-val">None (Independent)</span>
+        {/if}
+      </div>
+      <div class="spec-cell">
+        <span class="spec-label">Age</span>
+        <span class="spec-val">{formatAge(rs?.metadata?.creationTimestamp)}</span>
       </div>
     </div>
-  {:else}
-    {@const rs = replicaSetDetails || replicaSet}
-    {@const status = getReplicaStatus(rs)}
-    {@const desired = rs.spec?.replicas || 0}
-    {@const ready = rs.status?.readyReplicas || 0}
-    {@const current = rs.status?.replicas || 0}
-    {@const available = rs.status?.availableReplicas || 0}
-    {@const owner = getOwnerReference(rs)}
-    
-    <div class="replicaset-details-content">
-      <div class="details-section">
-        <h6>Basic Information</h6>
-        <div class="info-grid">
-          <div class="info-item">
-            <span class="info-label">Status:</span>
-            <div class="info-value-container">
-              <span class="info-value status-badge status-{getStatusClass(status)}">{status}</span>
-            </div>
+
+    <!-- Scale Control Strip (if active) -->
+    {#if showScaleInput}
+      <div class="sheet-section scale-inline-box">
+        <span class="scale-lbl">Scale Replicas:</span>
+        <input type="number" min="0" bind:value={scaleValue} class="input-num" disabled={scaleLoading} />
+        <button class="btn-primary-sm" onclick={scaleReplicaSet} disabled={scaleLoading}>
+          {scaleLoading ? 'Scaling...' : 'Apply Scale'}
+        </button>
+        {#if scaleError}
+          <span class="err-txt">⚠️ {scaleError}</span>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- Managed Pods -->
+    <div class="sheet-section">
+      <h5>📦 Managed Pods ({managedPods.length})</h5>
+      {#if podsLoading}
+        <div class="muted-text">⏳ Loading managed pods...</div>
+      {:else if managedPods.length > 0}
+        <div class="pods-table">
+          <div class="p-head">
+            <div>Name</div>
+            <div>Status</div>
+            <div>Node</div>
+            <div>Pod IP</div>
+            <div>Restarts</div>
+            <div>Age</div>
           </div>
-          <div class="info-item">
-            <span class="info-label">Desired Replicas:</span>
-            <div class="info-value-container">
-              <span class="info-value">{desired}</span>
+          {#each managedPods as pod}
+            <div class="p-row">
+              <div class="bold">{pod.metadata?.name || 'Unknown'}</div>
+              <div><span class="status-pill status-{getPodStatusClass(pod.status?.phase)}">{pod.status?.phase || 'Unknown'}</span></div>
+              <div>{pod.spec?.nodeName || '-'}</div>
+              <div class="font-mono">{pod.status?.podIP || '-'}</div>
+              <div>{pod.status?.containerStatuses?.[0]?.restartCount || 0}</div>
+              <div>{formatAge(pod.metadata?.creationTimestamp)}</div>
             </div>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Ready Replicas:</span>
-            <div class="info-value-container">
-              <span class="info-value">{ready}</span>
-            </div>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Current Replicas:</span>
-            <div class="info-value-container">
-              <span class="info-value">{current}</span>
-            </div>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Available Replicas:</span>
-            <div class="info-value-container">
-              <span class="info-value">{available}</span>
-            </div>
-          </div>
-          {#if owner}
-            <div class="info-item">
-              <span class="info-label">Owner:</span>
-              <div class="info-value-container">
-                <span class="info-value">{owner.type}/{owner.name}</span>
-              </div>
-            </div>
-          {/if}
-          <div class="info-item">
-            <span class="info-label">Age:</span>
-            <div class="info-value-container">
-              <span class="info-value" title={rs.metadata?.creationTimestamp}>{formatAge(rs.metadata?.creationTimestamp)}</span>
-              <button class="copy-button" onclick={() => copyToClipboard(rs.metadata?.creationTimestamp || '')}>📋</button>
-            </div>
+          {/each}
+        </div>
+      {:else}
+        <p class="muted-text">No active pods managed by this ReplicaSet</p>
+      {/if}
+    </div>
+
+    <!-- Selectors -->
+    <div class="sheet-section">
+      <h5>⚙️ Selectors</h5>
+      <div class="kv-grid">
+        <div class="kv-block">
+          <span class="kv-title">Match Labels</span>
+          <div class="tag-wrap">
+            {#if rs?.spec?.selector?.matchLabels && Object.keys(rs.spec.selector.matchLabels).length > 0}
+              {#each Object.entries(rs.spec.selector.matchLabels) as [k, v]}
+                <span class="flat-tag"><strong class="k">{k}:</strong> {v}</span>
+              {/each}
+            {:else}
+              <span class="muted-text">-</span>
+            {/if}
           </div>
         </div>
       </div>
+    </div>
 
-      <div class="details-section">
-        <h6>Scale Controls</h6>
-        {#if showScaleInput}
-          <div class="scale-controls">
-            <div class="scale-input-group">
-              <label for="scale-input">Desired Replicas:</label>
-              <input
-                id="scale-input"
-                type="number"
-                min="0"
-                bind:value={scaleValue}
-                class="scale-input"
-                disabled={scaleLoading}
-              />
-              <button class="scale-button" onclick={scaleReplicaSet} disabled={scaleLoading}>
-                {scaleLoading ? 'Scaling...' : 'Scale'}
-              </button>
-              <button class="scale-cancel-button" onclick={() => { showScaleInput = false; scaleValue = desired; }} disabled={scaleLoading}>
-                Cancel
-              </button>
-            </div>
-            {#if scaleError}
-              <div class="scale-error">{scaleError}</div>
+    <!-- Labels & Annotations -->
+    <div class="sheet-section">
+      <h5>🏷️ Labels & Annotations</h5>
+      <div class="kv-grid">
+        <div class="kv-block">
+          <span class="kv-title">Labels</span>
+          <div class="tag-wrap">
+            {#if rs?.metadata?.labels && Object.keys(rs.metadata.labels).length > 0}
+              {#each Object.entries(rs.metadata.labels) as [k, v]}
+                <span class="flat-tag"><strong class="k">{k}:</strong> {v}</span>
+              {/each}
+            {:else}
+              <span class="muted-text">-</span>
             {/if}
           </div>
-        {:else}
-          <div class="scale-display">
-            <span class="scale-current">Current: {desired} replicas</span>
-            <button class="scale-edit-button" onclick={() => { showScaleInput = true; scaleValue = desired; }}>
-              Edit Scale
-            </button>
-          </div>
-        {/if}
-      </div>
-
-      <div class="details-section">
-        <h6 class="section-header" onclick={() => toggleSection('pods')} role="button" tabindex="0" onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleSection('pods')}>
-          <span>Managed Pods ({managedPods.length})</span>
-          <span class="collapse-icon">{sectionsCollapsed.pods ? '▶' : '▼'}</span>
-        </h6>
-        {#if !sectionsCollapsed.pods}
-          {#if podsLoading}
-            <div class="pods-loading"><div class="loading-spinner">⏳</div><p>Loading pods...</p></div>
-          {:else if podsError}
-            <div class="pods-error"><div class="error-icon">⚠️</div><p>Failed to load pods: {podsError}</p><button class="retry-button" onclick={loadManagedPods}>Retry</button></div>
-          {:else if managedPods.length > 0}
-            <div class="pods-table">
-              <div class="pods-header">
-                <div>Name</div>
-                <div>Status</div>
-                <div>Node</div>
-                <div>Pod IP</div>
-                <div>Restarts</div>
-                <div>Age</div>
-              </div>
-              {#each managedPods as pod}
-                <div class="pod-row">
-                  <div class="pod-name">{pod.metadata?.name || 'Unknown'}</div>
-                  <div class="pod-status">
-                    <span class="status-badge status-{getPodStatusClass(pod.status?.phase)}">{pod.status?.phase || 'Unknown'}</span>
-                  </div>
-                  <div class="pod-node">{pod.spec?.nodeName || '-'}</div>
-                  <div class="pod-ip">{pod.status?.podIP || '-'}</div>
-                  <div class="pod-restarts">
-                    {pod.status?.containerStatuses?.[0]?.restartCount || 0}
-                  </div>
-                  <div class="pod-age">{formatAge(pod.metadata?.creationTimestamp)}</div>
-                </div>
+        </div>
+        <div class="kv-block">
+          <span class="kv-title">Annotations</span>
+          <div class="tag-wrap">
+            {#if rs?.metadata?.annotations && Object.keys(rs.metadata.annotations).length > 0}
+              {#each Object.entries(rs.metadata.annotations) as [k, v]}
+                <span class="flat-tag annotation"><strong class="k">{k}:</strong> {v}</span>
               {/each}
-            </div>
-          {:else}
-            <div class="pods-placeholder"><p>No pods managed by this ReplicaSet</p></div>
-          {/if}
-        {/if}
-      </div>
-
-      <div class="details-section">
-        <h6 class="section-header" onclick={() => toggleSection('selectors')} role="button" tabindex="0" onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleSection('selectors')}>
-          <span>Selectors</span>
-          <span class="collapse-icon">{sectionsCollapsed.selectors ? '▶' : '▼'}</span>
-        </h6>
-        {#if !sectionsCollapsed.selectors}
-          <div class="info-grid">
-            <div class="info-item">
-              <span class="info-label">Match Labels:</span>
-              <div class="info-value-container">
-                {#if rs.spec?.selector?.matchLabels && Object.keys(rs.spec.selector.matchLabels).length > 0}
-                  <div class="kv-list">
-                    {#each Object.entries(rs.spec.selector.matchLabels) as [k, v]}
-                      <div class="kv"><span class="k">{k}</span><span class="v">{v}</span></div>
-                    {/each}
-                  </div>
-                {:else}
-                  <span class="info-value">-</span>
-                {/if}
-              </div>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Match Expressions:</span>
-              <div class="info-value-container">
-                {#if rs.spec?.selector?.matchExpressions && rs.spec.selector.matchExpressions.length > 0}
-                  <div class="match-expressions-list">
-                    {#each rs.spec.selector.matchExpressions as expr}
-                      <div class="match-expression">
-                        <span class="expr-key">{expr.key}</span>
-                        <span class="expr-operator">{expr.operator}</span>
-                        {#if expr.values}
-                          <span class="expr-values">{expr.values.join(', ')}</span>
-                        {/if}
-                      </div>
-                    {/each}
-                  </div>
-                {:else}
-                  <span class="info-value">-</span>
-                {/if}
-              </div>
-            </div>
+            {:else}
+              <span class="muted-text">-</span>
+            {/if}
           </div>
-        {/if}
-      </div>
-
-      <div class="details-section">
-        <h6 class="section-header" onclick={() => toggleSection('labels')} role="button" tabindex="0" onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleSection('labels')}>
-          <span>Labels & Annotations</span>
-          <span class="collapse-icon">{sectionsCollapsed.labels ? '▶' : '▼'}</span>
-        </h6>
-        {#if !sectionsCollapsed.labels}
-          <div class="info-grid">
-            <div class="info-item">
-              <span class="info-label">Labels:</span>
-              <div class="info-value-container">
-                <div class="kv-list">
-                  {#if rs.metadata?.labels && Object.keys(rs.metadata.labels).length > 0}
-                    {#each Object.entries(rs.metadata.labels) as [k, v]}
-                      <div class="kv"><span class="k">{k}</span><span class="v">{v}</span></div>
-                    {/each}
-                  {:else}
-                    <span class="info-value">-</span>
-                  {/if}
-                </div>
-              </div>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Annotations:</span>
-              <div class="info-value-container">
-                <div class="kv-list">
-                  {#if rs.metadata?.annotations && Object.keys(rs.metadata.annotations).length > 0}
-                    {#each Object.entries(rs.metadata.annotations) as [k, v]}
-                      <div class="kv"><span class="k">{k}</span><span class="v">{v}</span></div>
-                    {/each}
-                  {:else}
-                    <span class="info-value">-</span>
-                  {/if}
-                </div>
-              </div>
-            </div>
-          </div>
-        {/if}
-      </div>
-
-      <div class="details-section">
-        <h6 class="section-header" onclick={() => toggleSection('yaml')} role="button" tabindex="0" onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleSection('yaml')}>
-          <span>YAML</span>
-          <span class="collapse-icon">{sectionsCollapsed.yaml ? '▶' : '▼'}</span>
-        </h6>
-        {#if !sectionsCollapsed.yaml}
-          <div class="yaml-section">
-            <button class="view-yaml-button" onclick={openYamlViewer}>View YAML</button>
-            <button class="edit-yaml-button" onclick={openYamlEditor}>Edit YAML</button>
-          </div>
-        {/if}
+        </div>
       </div>
     </div>
-  {/if}
+  </div>
 </div>
 
 <QuickActionsMenu
   x={actionsMenuPosition.x}
   y={actionsMenuPosition.y}
+  position={actionsMenuPosition}
   resource={replicaSetDetails || replicaSet}
   resourceType="replicaset"
   bind:visible={actionsMenuVisible}
   on:close={handleActionMenuClose}
   on:deleted={handleActionDeleted}
   on:view-yaml={handleViewYaml}
-  on:edit={handleActionEdit}
-  on:copied={handleActionCopied}
 />
 
-<!-- YAML Viewer/Editor modals - reuse ServiceDetails styles -->
 {#if yamlViewerVisible}
-  <div class="yaml-viewer-modal" onclick={(e) => e.target === e.currentTarget && closeYamlViewer()}>
-    <div class="yaml-viewer-content" onclick={(e) => e.stopPropagation()}>
-      <div class="yaml-viewer-header">
-        <h3>ReplicaSet YAML: {replicaSet?.metadata?.name}</h3>
-        <button class="yaml-viewer-close" onclick={closeYamlViewer}>×</button>
+  <div class="modal-overlay" onclick={closeYamlViewer} role="button" tabindex="-1" onkeydown={(e) => e.key === 'Escape' && closeYamlViewer()}>
+    <div class="modal-box" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
+      <div class="modal-hdr">
+        <h4>ReplicaSet YAML: {replicaSet?.metadata?.name}</h4>
+        <button class="btn-close" onclick={closeYamlViewer}>×</button>
       </div>
-      <div class="yaml-viewer-body">
-        <pre><code>{yamlContent}</code></pre>
-      </div>
-    </div>
-  </div>
-{/if}
-
-{#if yamlEditorVisible}
-  <div class="yaml-viewer-modal" onclick={(e) => e.target === e.currentTarget && closeYamlEditor()}>
-    <div class="yaml-viewer-content yaml-editor-content" onclick={(e) => e.stopPropagation()}>
-      <div class="yaml-viewer-header">
-        <h3>Edit ReplicaSet YAML: {replicaSet?.metadata?.name}</h3>
-        <button class="yaml-viewer-close" onclick={closeYamlEditor}>×</button>
-      </div>
-      <div class="yaml-editor-body">
-        {#if yamlEditorError}
-          <div class="yaml-editor-error">
-            <span class="error-icon">⚠️</span>
-            <span class="error-text">{yamlEditorError}</span>
-          </div>
-        {/if}
-        <textarea
-          class="yaml-editor-textarea"
-          bind:value={yamlEditorContent}
-          disabled={yamlEditorLoading}
-        ></textarea>
-      </div>
-      <div class="yaml-editor-footer">
-        <button class="yaml-editor-button yaml-editor-cancel" onclick={closeYamlEditor} disabled={yamlEditorLoading}>
-          Cancel
-        </button>
-        <button class="yaml-editor-button yaml-editor-save" onclick={saveYaml} disabled={yamlEditorLoading}>
-          {yamlEditorLoading ? 'Saving...' : 'Save'}
-        </button>
+      <div class="modal-bdy">
+        <pre class="yaml-code">{yamlContent}</pre>
       </div>
     </div>
   </div>
 {/if}
 
 <style>
-  @import '../styles/variables.css';
+  .resource-details-view { display: flex; flex-direction: column; gap: 12px; }
+  .details-nav-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--background-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-md); }
+  .nav-actions { display: flex; align-items: center; gap: 8px; }
+  .btn-back { background: var(--primary-color); border: none; color: white; padding: 5px 12px; border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+  .btn-subtle { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-primary); color: var(--text-primary); padding: 5px 10px; border-radius: var(--radius-sm); font-size: 0.85rem; cursor: pointer; transition: background 0.15s; }
+  .btn-subtle:hover { background: rgba(255, 255, 255, 0.1); }
+  .nav-heading { display: flex; align-items: center; gap: 8px; }
+  .nav-title { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+  .namespace-pill { background: rgba(255, 255, 255, 0.08); color: var(--text-secondary); font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; }
+  .status-pill { padding: 2px 8px; font-size: 0.75rem; font-weight: 700; border-radius: 12px; text-transform: uppercase; }
+  .status-ready { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+  .status-pending { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+  .status-failed { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+  .status-unknown { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
 
-  /* Reuse ServiceDetails styles - same structure */
-  .full-details-view {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    background: var(--bg-primary);
+  /* Details Sheet */
+  .details-sheet { background: var(--background-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-md); display: flex; flex-direction: column; }
+  .sheet-section { padding: 16px 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+  .sheet-section:last-child { border-bottom: none; }
+  .sheet-section h5 { margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.2px; }
+  .specs-strip { display: flex; align-items: center; gap: 24px; background: rgba(255, 255, 255, 0.02); overflow-x: auto; }
+  .spec-cell { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+  .spec-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+  .spec-val {
+    font-size: 0.88rem;
     color: var(--text-primary);
-  }
-
-  .details-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-md);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .header-left {
-    display: flex;
-    gap: var(--spacing-sm);
-  }
-
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-  }
-
-  .header-right h3 {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 1.2rem;
     font-weight: 600;
   }
 
-  .replicaset-namespace {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-  }
-
-  .back-button, .actions-button {
-    padding: 8px 16px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: all 0.2s;
-  }
-
-  .back-button:hover, .actions-button:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.3);
-  }
-
-  .replicaset-details-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: var(--spacing-md);
-  }
-
-  .details-section {
-    margin-bottom: var(--spacing-lg);
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-md);
-  }
-
-  .details-section h6 {
-    margin: 0 0 var(--spacing-md) 0;
-    color: var(--text-primary);
-    font-size: 1rem;
-    font-weight: 600;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .section-header {
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .section-header:hover {
-    color: var(--primary-color);
-  }
-
-  .collapse-icon {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-  }
-
-  .info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: var(--spacing-md);
-  }
-
-  .info-item {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .info-label {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    font-weight: 500;
-  }
-
-  .info-value-container {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .info-value {
-    color: var(--text-primary);
-    font-size: 0.9rem;
-  }
-
-  .copy-button {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
-    padding: 2px 4px;
-    font-size: 0.8rem;
-    transition: color 0.2s;
-  }
-
-  .copy-button:hover {
-    color: var(--primary-color);
-  }
-
-  .status-badge {
-    padding: 4px 8px;
-    border-radius: var(--radius-sm);
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .status-ready {
-    background: rgba(16, 185, 129, 0.2);
-    color: #10b981;
-  }
-
-  .status-pending {
-    background: rgba(245, 158, 11, 0.2);
-    color: #f59e0b;
-  }
-
-  .status-failed {
-    background: rgba(239, 68, 68, 0.2);
-    color: #ef4444;
-  }
-
-  .status-running {
-    background: rgba(16, 185, 129, 0.2);
-    color: #10b981;
-  }
-
-  .status-unknown {
-    background: rgba(107, 114, 128, 0.2);
-    color: #6b7280;
-  }
-
-  /* Scale Controls */
-  .scale-controls, .scale-display {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-  }
-
-  .scale-input-group {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-  }
-
-  .scale-input-group label {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-  }
-
-  .scale-input {
-    width: 100px;
-    padding: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
-    font-size: 0.9rem;
-  }
-
-  .scale-button, .scale-edit-button, .scale-cancel-button {
-    padding: 8px 16px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-sm);
-    background: var(--primary-color);
-    color: white;
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: all 0.2s;
-  }
-
-  .scale-button:hover:not(:disabled), .scale-edit-button:hover {
-    background: var(--accent-color);
-  }
-
-  .scale-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .scale-cancel-button {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
-  }
-
-  .scale-cancel-button:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.2);
-  }
-
-  .scale-display {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--spacing-md);
-  }
-
-  .scale-current {
-    color: var(--text-primary);
-    font-weight: 500;
-  }
-
-  .scale-error {
-    color: var(--error-color);
-    font-size: 0.85rem;
-    padding: 8px;
-    background: rgba(239, 68, 68, 0.1);
-    border-radius: var(--radius-sm);
-  }
-
-  /* Pods Table */
-  .pods-table {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .pods-header, .pod-row {
-    display: grid;
-    grid-template-columns: 2fr 1fr 1.5fr 1.5fr 1fr 1fr;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-sm);
-  }
-
-  .pods-header {
-    background: rgba(255, 255, 255, 0.05);
-    font-weight: 600;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-  }
-
-  .pod-row {
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: var(--radius-sm);
-  }
-
-  .pod-name {
-    font-weight: 500;
-    color: var(--primary-color);
-  }
-
-  .pod-status, .pod-node, .pod-ip, .pod-restarts, .pod-age {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-  }
-
-  /* KV List */
-  .kv-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .kv {
-    display: flex;
-    gap: var(--spacing-sm);
-  }
-
-  .kv .k {
-    color: var(--text-secondary);
-    font-weight: 500;
-    min-width: 100px;
-  }
-
-  .kv .v {
-    color: var(--text-primary);
-  }
-
-  .match-expressions-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .match-expression {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: var(--radius-sm);
-  }
-
-  .expr-key {
-    font-weight: 500;
-    color: var(--text-primary);
-  }
-
-  .expr-operator {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-  }
-
-  .expr-values {
-    color: var(--text-primary);
-    font-size: 0.85rem;
-  }
-
-  .yaml-section {
-    display: flex;
-    gap: var(--spacing-sm);
-  }
-
-  .view-yaml-button, .edit-yaml-button {
-    padding: 8px 16px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: all 0.2s;
-  }
-
-  .view-yaml-button:hover, .edit-yaml-button:hover {
-    background: rgba(255, 255, 255, 0.2);
-  }
-
-  .loading-message, .error-message, .pods-loading, .pods-error, .pods-placeholder {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md);
-  }
-
-  .loading-message, .pods-loading {
-    flex-direction: column;
-    justify-content: center;
-  }
-
-  .error-message, .pods-error {
-    flex-direction: row;
-    align-items: flex-start;
-  }
-
-  .loading-spinner {
-    font-size: 2rem;
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  .error-icon {
-    font-size: 1.5rem;
-  }
-
-  .retry-button {
-    padding: 6px 12px;
-    background: var(--error-color);
-    color: white;
-    border: none;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: 0.85rem;
-    margin-top: var(--spacing-sm);
-  }
-
-  .retry-button:hover {
-    background: #dc2626;
-  }
-
-  .pods-placeholder {
-    justify-content: center;
-    color: var(--text-secondary);
-    font-style: italic;
-  }
-
-  /* YAML Viewer/Editor - reuse ServiceDetails styles */
-  .yaml-viewer-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 10001;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(4px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-  }
-
-  .yaml-viewer-content {
-    background: var(--bg-secondary);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    width: 90%;
-    max-width: 900px;
-    max-height: 90vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  .yaml-viewer-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .yaml-viewer-header h3 {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 1.1rem;
-    font-weight: 600;
-  }
-
-  .yaml-viewer-close {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
-    padding: 4px 8px;
+  .controller-link-btn {
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: #60a5fa;
+    padding: 3px 8px;
     border-radius: 4px;
-    font-size: 1.2rem;
-    line-height: 1;
-    transition: all 0.2s;
-  }
-
-  .yaml-viewer-close:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
-  }
-
-  .yaml-viewer-body {
-    flex: 1;
-    overflow: auto;
-    padding: 20px;
-  }
-
-  .yaml-viewer-body pre {
-    margin: 0;
-    padding: 0;
-    background: transparent;
-    color: var(--text-primary);
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 0.85rem;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-  }
-
-  .yaml-editor-content {
-    display: flex;
-    flex-direction: column;
-    height: 90vh;
-  }
-
-  .yaml-editor-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    padding: 20px;
-  }
-
-  .yaml-editor-error {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px;
-    margin-bottom: 12px;
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: 6px;
-    color: #ef4444;
-    font-size: 0.9rem;
-  }
-
-  .yaml-editor-textarea {
-    flex: 1;
-    width: 100%;
-    padding: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 0.85rem;
-    line-height: 1.6;
-    resize: none;
-    outline: none;
-    overflow-y: auto;
-    white-space: pre;
-    tab-size: 2;
-  }
-
-  .yaml-editor-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    padding: 16px 20px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .yaml-editor-button {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 6px;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.15s ease;
+    width: fit-content;
+  }
+  .controller-link-btn:hover {
+    background: rgba(59, 130, 246, 0.25);
+    color: #93c5fd;
+    border-color: rgba(59, 130, 246, 0.5);
   }
 
-  .yaml-editor-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+  .scale-inline-box { display: flex; align-items: center; gap: 10px; background: rgba(59, 130, 246, 0.08); }
+  .scale-lbl { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+  .input-num { background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-primary); color: white; padding: 4px 8px; border-radius: 4px; width: 70px; }
+  .btn-primary-sm { background: var(--primary-color); border: none; color: white; padding: 4px 12px; border-radius: 4px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+  .err-txt { color: #f87171; font-size: 0.82rem; }
 
-  .yaml-editor-cancel {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
-  }
+  .kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .kv-block { display: flex; flex-direction: column; gap: 6px; }
+  .kv-title { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
+  .tag-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+  .flat-tag { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-primary); border-radius: 4px; padding: 2px 6px; font-size: 0.78rem; color: var(--text-secondary); font-family: monospace; }
+  .flat-tag .k { color: var(--text-primary); }
+  .flat-tag.annotation { background: rgba(59, 130, 246, 0.05); border-color: rgba(59, 130, 246, 0.2); }
+  .muted-text { color: var(--text-muted); font-size: 0.85rem; }
 
-  .yaml-editor-cancel:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.2);
-  }
+  .pods-table { border: 1px solid var(--border-primary); border-radius: var(--radius-sm); overflow: hidden; }
+  .p-head { display: grid; grid-template-columns: 1fr 100px 140px 130px 80px 80px; background: rgba(255, 255, 255, 0.03); padding: 8px 12px; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border-primary); }
+  .p-row { display: grid; grid-template-columns: 1fr 100px 140px 130px 80px 80px; padding: 8px 12px; font-size: 0.85rem; border-bottom: 1px solid rgba(255, 255, 255, 0.04); align-items: center; }
+  .p-row:last-child { border-bottom: none; }
+  .bold { font-weight: 600; color: var(--text-primary); }
+  .font-mono { font-family: monospace; font-size: 0.8rem; }
 
-  .yaml-editor-save {
-    background: var(--primary-color);
-    color: white;
-  }
-
-  .yaml-editor-save:hover:not(:disabled) {
-    background: var(--accent-color);
-    transform: translateY(-1px);
-  }
+  .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); z-index: 2100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .modal-box { background: #181824; border: 1px solid var(--border-primary); border-radius: var(--radius-lg); width: 100%; max-width: 650px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; }
+  .modal-hdr { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border-primary); }
+  .modal-hdr h4 { margin: 0; color: white; font-size: 1rem; }
+  .btn-close { background: transparent; border: none; color: var(--text-secondary); font-size: 1.2rem; cursor: pointer; }
+  .modal-bdy { padding: 16px; overflow-y: auto; }
+  .yaml-code { background: #0d0d14; color: #a7f3d0; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 0.8rem; margin: 0; white-space: pre-wrap; }
 </style>
-

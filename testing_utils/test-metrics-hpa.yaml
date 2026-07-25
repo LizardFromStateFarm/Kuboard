@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-stress-test
+  labels:
+    app: cpu-stress-test
+    tier: testing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cpu-stress-test
+  template:
+    metadata:
+      labels:
+        app: cpu-stress-test
+    spec:
+      containers:
+      - name: stress-generator
+        image: busybox
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          # Generate moderate background CPU activity for metrics testing
+          while true; do
+            i=0
+            while [ $i -lt 1000000 ]; do
+              i=$((i+1))
+            done
+            sleep 0.1
+          done
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+          limits:
+            cpu: "500m"
+            memory: "128Mi"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: test-hpa
+  labels:
+    tier: testing
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cpu-stress-test
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50

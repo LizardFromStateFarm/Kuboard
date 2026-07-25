@@ -9,6 +9,7 @@ build/
 dist/
 .svelte-kit/
 .output/
+.gemini/
 
 # Tauri
 src-tauri/target/
@@ -125,6 +126,7 @@ temp/
 *.njsproj
 *.sln
 *.sw?
+.gemini/*
 
 # AI Assistant Documentation
 AI_SUMMARY.md

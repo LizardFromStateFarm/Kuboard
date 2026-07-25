@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: test-service-account
+  labels:
+    tier: testing
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: test-pod-reader-role
+  labels:
+    tier: testing
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log"]
+  verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: test-read-pods-binding
+  labels:
+    tier: testing
+subjects:
+- kind: ServiceAccount
+  name: test-service-account
+roleRef:
+  kind: Role
+  name: test-pod-reader-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: test-cluster-node-viewer
+  labels:
+    tier: testing
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "namespaces"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: test-cluster-node-viewer-binding
+  labels:
+    tier: testing
+subjects:
+- kind: ServiceAccount
+  name: test-service-account
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: test-cluster-node-viewer
+  apiGroup: rbac.authorization.k8s.io

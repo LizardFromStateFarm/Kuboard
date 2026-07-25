@@ -5,13 +5,14 @@
   import RoleBindingsPanel from './RoleBindingsPanel.svelte';
   import ClusterRoleBindingsPanel from './ClusterRoleBindingsPanel.svelte';
   import ServiceAccountsPanel from './ServiceAccountsPanel.svelte';
+  import SecretsPanel from './SecretsPanel.svelte';
 
   // Props
   export let currentContext: any = null;
   export let namespace: string = 'all';
 
   // State
-  let activeTab: 'roles' | 'clusterroles' | 'rolebindings' | 'clusterrolebindings' | 'serviceaccounts' = 'roles';
+  let activeTab: 'secrets' | 'roles' | 'clusterroles' | 'rolebindings' | 'clusterrolebindings' | 'serviceaccounts' = 'secrets';
 
   function setActiveTab(tab: any) {
     activeTab = tab;
@@ -20,6 +21,13 @@
 
 <div class="security-tab">
   <div class="tab-navigation">
+    <button 
+      class="nav-item" 
+      class:active={activeTab === 'secrets'} 
+      onclick={() => setActiveTab('secrets')}
+    >
+      🔒 Secrets
+    </button>
     <button 
       class="nav-item" 
       class:active={activeTab === 'roles'} 
@@ -58,7 +66,9 @@
   </div>
 
   <div class="tab-content">
-    {#if activeTab === 'roles'}
+    {#if activeTab === 'secrets'}
+      <SecretsPanel {currentContext} {namespace} />
+    {:else if activeTab === 'roles'}
       <RolesPanel {currentContext} {namespace} />
     {:else if activeTab === 'clusterroles'}
       <ClusterRolesPanel {currentContext} />

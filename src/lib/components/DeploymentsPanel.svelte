@@ -2,6 +2,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import ResourceTable from './ResourceTable.svelte';
   import DeploymentDetails from './DeploymentDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   
@@ -10,10 +11,22 @@
   // Props
   export let currentContext: any = null;
   export let deployments: any[] = [];
+  export let initialSelectedName: string | null = null;
 
   // State
   let selectedDeployment: any = null;
   let showFullDetails: boolean = false;
+
+  $: if (initialSelectedName && deployments && deployments.length > 0) {
+    const found = deployments.find((d: any) => d.metadata?.name === initialSelectedName);
+    if (found) {
+      selectedDeployment = found;
+      showFullDetails = true;
+    } else if (!showFullDetails || selectedDeployment?.metadata?.name !== initialSelectedName) {
+      selectedDeployment = { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
+      showFullDetails = true;
+    }
+  }
   
   // Sorting state
   let sortColumn: string | null = null;
@@ -404,19 +417,21 @@
     return timeA - timeB;
   }
 
-  // Get deployments to render (use live if available, otherwise use props)
   function getRenderDeployments(): any[] {
-    return liveDeployments !== null ? liveDeployments : deployments;
+    if (liveDeployments !== null && liveDeployments.length > 0) {
+      return liveDeployments;
+    }
+    return deployments ?? [];
   }
 
   // Reactive: Initialize deployments when props change
-  $: if (deployments && deployments.length > 0 && liveDeployments === null) {
+  $: if (deployments) {
     initializeDeployments();
   }
 
   // Reactive sorted and filtered deployments
   $: sortedDeployments = (() => {
-    const deps = getRenderDeployments();
+    const deps = (liveDeployments && liveDeployments.length > 0) ? liveDeployments : (deployments || []);
     if (!sortColumn || !sortDirection) {
       return deps;
     }
@@ -479,7 +494,7 @@
 </script>
 
 {#if showFullDetails && selectedDeployment}
-  <DeploymentDetails deployment={selectedDeployment} onBack={backToDeploymentsList} currentContext={currentContext} />
+  <DeploymentDetails deployment={selectedDeployment} onBack={backToDeploymentsList} currentContext={currentContext} on:navigateToWorkload />
 {:else}
   <div class="deployments-panel">
     <div class="panel-header">
@@ -489,6 +504,7 @@
           {watchError ? 'Watch Error' : watchActive ? '🟢 Live' : '⏸️ Paused'}
         </span>
       </div>
+    </div>
       <ResourceTable
         items={getRenderDeployments()}
         filteredItems={filteredDeployments}
