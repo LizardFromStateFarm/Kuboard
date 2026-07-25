@@ -2,6 +2,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import ResourceTable from './ResourceTable.svelte';
   import StatefulSetDetails from './StatefulSetDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   
@@ -10,10 +11,22 @@
   // Props
   export let currentContext: any = null;
   export let statefulsets: any[] = [];
+  export let initialSelectedName: string | null = null;
 
   // State
   let selectedStatefulSet: any = null;
   let showFullDetails: boolean = false;
+
+  $: if (initialSelectedName && statefulsets && statefulsets.length > 0) {
+    const found = statefulsets.find((ss: any) => ss.metadata?.name === initialSelectedName);
+    if (found) {
+      selectedStatefulSet = found;
+      showFullDetails = true;
+    } else if (!showFullDetails || selectedStatefulSet?.metadata?.name !== initialSelectedName) {
+      selectedStatefulSet = { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
+      showFullDetails = true;
+    }
+  }
   
   // Sorting state
   let sortColumn: string | null = null;
@@ -286,7 +299,6 @@
     return sortedStatefulSets.filter(ss => {
       const name = (ss.metadata?.name || '').toLowerCase();
       const namespace = (ss.metadata?.namespace || '').toLowerCase();
-      
       return name.includes(query) || namespace.includes(query);
     });
   })();
@@ -302,41 +314,24 @@
     showFullDetails = false;
     selectedStatefulSet = null;
   }
-
-  // Loading state is managed by parent WorkloadsTab
-  // This panel just displays the data it receives
 </script>
 
 {#if showFullDetails && selectedStatefulSet}
-  <StatefulSetDetails statefulSet={selectedStatefulSet} onBack={backToStatefulSetsList} />
+  <StatefulSetDetails statefulSet={selectedStatefulSet} onBack={backToStatefulSetsList} on:navigateToWorkload />
 {:else}
   <div class="statefulsets-panel">
     <div class="panel-header">
       <h4>📦 StatefulSets ({filteredStatefulSets.length})</h4>
-      <div class="header-controls">
-        <input
-          type="text"
-          class="search-input"
-          placeholder="Search StatefulSets..."
-          bind:value={searchQuery}
-        />
-      </div>
     </div>
-
-    {#if statefulsets.length === 0}
-      <div class="empty-state">
-        <div class="empty-icon">📭</div>
-        <h5>No StatefulSets Found</h5>
-        <p>No StatefulSets are currently in this cluster</p>
-      </div>
-    {:else if filteredStatefulSets.length === 0}
-      <div class="empty-state">
-        <div class="empty-icon">🔍</div>
-        <h5>No StatefulSets Match</h5>
-        <p>No StatefulSets match your search query: "{searchQuery}"</p>
-      </div>
-    {:else}
-      <div class="statefulsets-table">
+      <ResourceTable
+        items={sortedStatefulSets}
+        filteredItems={filteredStatefulSets}
+        bind:searchQuery
+        searchPlaceholder="Search StatefulSets..."
+        noItemsMessage="No StatefulSets are currently in this cluster"
+        noSearchResultsMessage="No StatefulSets match your search query:"
+      >
+        <svelte:fragment slot="table">      <div class="statefulsets-table">
         <div class="table-header">
           <div class="header-cell sortable" onclick={() => handleSort('name')} role="button" tabindex="0">
             Name
@@ -413,7 +408,8 @@
           {/each}
         </div>
       </div>
-    {/if}
+        </svelte:fragment>
+      </ResourceTable>
   </div>
 
   <!-- Quick Actions Menu -->
@@ -516,65 +512,6 @@
     color: var(--text-primary);
     font-size: 1.1rem;
     font-weight: 600;
-  }
-
-  .header-controls {
-    display: flex;
-    gap: var(--spacing-sm);
-    align-items: center;
-  }
-
-  .search-input {
-    padding: 8px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    width: 250px;
-    transition: all 0.2s;
-  }
-
-  .search-input:focus {
-    outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-  }
-
-  .loading-message, .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: var(--spacing-xl);
-    gap: var(--spacing-md);
-    color: var(--text-secondary);
-  }
-
-  .loading-spinner {
-    font-size: 2rem;
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  .empty-icon {
-    font-size: 3rem;
-    opacity: 0.7;
-  }
-
-  .empty-state h5 {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 1.1rem;
-  }
-
-  .empty-state p {
-    margin: 0;
-    font-size: 0.9rem;
   }
 
   .statefulsets-table {

@@ -2,6 +2,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import ResourceTable from './ResourceTable.svelte';
   import DaemonSetDetails from './DaemonSetDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   
@@ -10,10 +11,22 @@
   // Props
   export let currentContext: any = null;
   export let daemonsets: any[] = [];
+  export let initialSelectedName: string | null = null;
 
   // State
   let selectedDaemonSet: any = null;
   let showFullDetails: boolean = false;
+
+  $: if (initialSelectedName && daemonsets && daemonsets.length > 0) {
+    const found = daemonsets.find((ds: any) => ds.metadata?.name === initialSelectedName);
+    if (found) {
+      selectedDaemonSet = found;
+      showFullDetails = true;
+    } else if (!showFullDetails || selectedDaemonSet?.metadata?.name !== initialSelectedName) {
+      selectedDaemonSet = { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
+      showFullDetails = true;
+    }
+  }
   
   // Sorting state
   let sortColumn: string | null = null;
@@ -303,35 +316,21 @@
 </script>
 
 {#if showFullDetails && selectedDaemonSet}
-  <DaemonSetDetails daemonSet={selectedDaemonSet} onBack={backToDaemonSetsList} />
+  <DaemonSetDetails daemonSet={selectedDaemonSet} onBack={backToDaemonSetsList} on:navigateToWorkload />
 {:else}
   <div class="daemonsets-panel">
     <div class="panel-header">
       <h4>📦 DaemonSets ({filteredDaemonSets.length})</h4>
-      <div class="header-controls">
-        <input
-          type="text"
-          class="search-input"
-          placeholder="Search DaemonSets..."
-          bind:value={searchQuery}
-        />
-      </div>
     </div>
-
-    {#if daemonsets.length === 0}
-      <div class="empty-state">
-        <div class="empty-icon">📭</div>
-        <h5>No DaemonSets Found</h5>
-        <p>No DaemonSets are currently in this cluster</p>
-      </div>
-    {:else if filteredDaemonSets.length === 0}
-      <div class="empty-state">
-        <div class="empty-icon">🔍</div>
-        <h5>No DaemonSets Match</h5>
-        <p>No DaemonSets match your search query: "{searchQuery}"</p>
-      </div>
-    {:else}
-      <div class="daemonsets-table">
+      <ResourceTable
+        items={sortedDaemonSets}
+        filteredItems={filteredDaemonSets}
+        bind:searchQuery
+        searchPlaceholder="Search DaemonSets..."
+        noItemsMessage="No DaemonSets are currently in this cluster"
+        noSearchResultsMessage="No DaemonSets match your search query:"
+      >
+        <svelte:fragment slot="table">      <div class="daemonsets-table">
         <div class="table-header">
           <div class="header-cell sortable" onclick={() => handleSort('name')} role="button" tabindex="0">
             Name
@@ -408,7 +407,8 @@
           {/each}
         </div>
       </div>
-    {/if}
+        </svelte:fragment>
+      </ResourceTable>
   </div>
 
   <!-- Quick Actions Menu -->
@@ -511,65 +511,6 @@
     color: var(--text-primary);
     font-size: 1.1rem;
     font-weight: 600;
-  }
-
-  .header-controls {
-    display: flex;
-    gap: var(--spacing-sm);
-    align-items: center;
-  }
-
-  .search-input {
-    padding: 8px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    width: 250px;
-    transition: all 0.2s;
-  }
-
-  .search-input:focus {
-    outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-  }
-
-  .loading-message, .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: var(--spacing-xl);
-    gap: var(--spacing-md);
-    color: var(--text-secondary);
-  }
-
-  .loading-spinner {
-    font-size: 2rem;
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  .empty-icon {
-    font-size: 3rem;
-    opacity: 0.7;
-  }
-
-  .empty-state h5 {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 1.1rem;
-  }
-
-  .empty-state p {
-    margin: 0;
-    font-size: 0.9rem;
   }
 
   .daemonsets-table {

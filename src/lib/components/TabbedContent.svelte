@@ -7,24 +7,34 @@
   import ConfigTab from './ConfigTab.svelte';
   import NetworkTab from './NetworkTab.svelte';
   import CustomResourcesTab from './CustomResourcesTab.svelte';
+  import StorageTab from './StorageTab.svelte';
+  import SecurityTab from './SecurityTab.svelte';
+  import HelmTab from './HelmTab.svelte';
+  import LinterTab from './LinterTab.svelte';
+  import EventsPanel from './EventsPanel.svelte';
+  import ClusterMetrics from './ClusterMetrics.svelte';
+  import { navigationStore } from '../stores/nav';
 
   // Props
   export let currentContext: any = null;
   export let nodes: any[] = [];
 
   // State
-  let activeTab: string = 'workloads';
+  export let activeTab: string = 'workloads';
   let tabCounts: Record<string, number> = {};
 
   // Tab definitions
   const tabs = [
     { id: 'workloads', label: 'Workloads', icon: '⚙️', count: 0 },
+    { id: 'overview', label: 'Cluster Details', icon: '📊', count: 0 },
     { id: 'nodes', label: 'Nodes', icon: '🖥️', count: 0 },
     { id: 'config', label: 'Config', icon: '⚙️', count: 0 },
     { id: 'network', label: 'Network', icon: '🌐', count: 0 },
-    { id: 'storage', label: 'Storage', icon: '💾', count: 0, disabled: true },
+    { id: 'storage', label: 'Storage', icon: '💾', count: 0 },
     { id: 'custom', label: 'Custom Resources', icon: '🔧', count: 0 },
-    { id: 'security', label: 'Security', icon: '🔒', count: 0, disabled: true }
+    { id: 'helm', label: 'Helm', icon: '📦', count: 0 },
+    { id: 'linter', label: 'Linter', icon: '🩺', count: 0 },
+    { id: 'security', label: 'Security', icon: '🔒', count: 0 }
   ];
 
   // Tab change handler
@@ -50,19 +60,24 @@
 
     try {
       // Load counts for available tabs
-      const [pods, deployments, services, nodes, configmaps, secrets] = await Promise.all([
+      const [pods, deployments, services, nodes, configmaps, secrets, pvcs, helm] = await Promise.all([
         invoke('kuboard_get_pods').catch(() => []),
         invoke('kuboard_get_deployments').catch(() => []),
         invoke('kuboard_get_services').catch(() => []),
         invoke('kuboard_get_nodes').catch(() => []),
         invoke('kuboard_get_configmaps').catch(() => []),
-        invoke('kuboard_get_secrets').catch(() => [])
+        invoke('kuboard_get_secrets').catch(() => []),
+        invoke('kuboard_list_persistent_volume_claims').catch(() => []),
+        invoke('kuboard_list_helm_releases').catch(() => [])
       ]);
 
+      // Update tab counts
       updateTabCount('workloads', (pods as any[]).length + (deployments as any[]).length + (services as any[]).length);
       updateTabCount('nodes', (nodes as any[]).length);
       updateTabCount('config', (configmaps as any[]).length + (secrets as any[]).length);
       updateTabCount('network', (services as any[]).length);
+      updateTabCount('storage', (pvcs as any[]).length);
+      updateTabCount('helm', (helm as any[]).length);
     } catch (error) {
       console.error('Failed to load initial counts:', error);
     }
@@ -76,6 +91,18 @@
   
   // Debug: Log when component mounts
   console.log('🚀 TabbedContent component mounted');
+
+  // Watch navigation store
+  $: if ($navigationStore) {
+    const nav = $navigationStore;
+    if (nav.tab) {
+      console.log('🔄 TabbedContent: Navigating to tab:', nav.tab);
+      activeTab = nav.tab;
+    }
+    // We don't clear the store here, we let the parent handle it or just clear it if we are the only consumer.
+    // Actually, it's better to clear it here if we've consumed it.
+    navigationStore.set(null);
+  }
 </script>
 
 <div class="tabbed-content">
@@ -90,6 +117,14 @@
     <div class="tab-panel" class:active={activeTab === 'workloads'}>
       <WorkloadsTab {currentContext} />
     </div>
+    <div class="tab-panel" class:active={activeTab === 'overview'}>
+      <div class="cluster-details-tab-content">
+        <ClusterMetrics refreshInterval={10000} autoRefresh={true} />
+        <div class="cluster-events-section" style="margin-top: 24px;">
+          <EventsPanel {currentContext} />
+        </div>
+      </div>
+    </div>
     <div class="tab-panel" class:active={activeTab === 'nodes'}>
       <NodesTab {currentContext} {nodes} />
     </div>
@@ -100,25 +135,19 @@
       <NetworkTab {currentContext} />
     </div>
     <div class="tab-panel" class:active={activeTab === 'storage'}>
-      <div class="coming-soon-tab">
-        <div class="coming-soon-content">
-          <div class="coming-soon-icon">💾</div>
-          <h4>Storage Management</h4>
-          <p>Storage resources including PersistentVolumes, PersistentVolumeClaims, and StorageClasses will be available in a future update.</p>
-        </div>
-      </div>
+      <StorageTab {currentContext} />
     </div>
     <div class="tab-panel" class:active={activeTab === 'custom'}>
       <CustomResourcesTab {currentContext} />
     </div>
+    <div class="tab-panel" class:active={activeTab === 'helm'}>
+      <HelmTab {currentContext} />
+    </div>
+    <div class="tab-panel" class:active={activeTab === 'linter'}>
+      <LinterTab {currentContext} />
+    </div>
     <div class="tab-panel" class:active={activeTab === 'security'}>
-      <div class="coming-soon-tab">
-        <div class="coming-soon-content">
-          <div class="coming-soon-icon">🔒</div>
-          <h4>Security Management</h4>
-          <p>Security resources including RBAC, SecurityContexts, and PodSecurityPolicies will be available in a future update.</p>
-        </div>
-      </div>
+      <SecurityTab {currentContext} />
     </div>
   </div>
 </div>

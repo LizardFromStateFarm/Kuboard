@@ -133,24 +133,6 @@
   </div>
 {:else if clusterOverview}
   <div class="cluster-overview">
-    <div class="cluster-header">
-      <div class="cluster-header-content">
-        <h2>🏗️ Cluster Overview</h2>
-        <div class="cluster-info-inline">
-          <span class="cluster-name">{clusterOverview.cluster_info.name}</span>
-          {#if clusterOverview.kubernetes_version}
-            <span class="k8s-version">v{clusterOverview.kubernetes_version}</span>
-          {/if}
-        </div>
-      </div>
-    </div>
-
-    <!-- Cluster Metrics Section -->
-    <ClusterMetrics 
-      refreshInterval={refreshIntervalSeconds * 1000}
-      autoRefresh={autoRefreshEnabled}
-    />
-
     <!-- Resource Management Tabs -->
     <TabbedContent {currentContext} {nodes} />
   </div>

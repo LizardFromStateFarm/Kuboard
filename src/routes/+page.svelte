@@ -5,6 +5,13 @@
   import Header from '$lib/components/Header.svelte';
   import ClusterOverviewComponent from '$lib/components/ClusterOverview.svelte';
   import MetricsGraph from '$lib/components/MetricsGraph.svelte';
+  import GlobalSearch from '$lib/components/GlobalSearch.svelte';
+  import YamlEditor from '$lib/components/YamlEditor.svelte';
+  import XRayViewer from '$lib/components/XRayViewer.svelte';
+  import KeyboardManager from '$lib/components/KeyboardManager.svelte';
+  import { navigationStore } from '$lib/stores/nav';
+  import { editorStore, closeEditor } from '$lib/stores/editor';
+  import { xrayStore, closeXRay } from '$lib/stores/xray';
   
   // Import types
   import type { 
@@ -756,6 +763,29 @@
     on:refresh={handleRefresh}
   />
 
+  <GlobalSearch />
+  <KeyboardManager />
+  
+  {#if $editorStore}
+    <YamlEditor 
+      resource={$editorStore.resource} 
+      resourceType={$editorStore.resourceType} 
+      onSave={() => {
+        closeEditor();
+        handleRefresh();
+      }}
+      onCancel={() => closeEditor()}
+    />
+  {/if}
+
+  {#if $xrayStore}
+    <XRayViewer 
+      resource={$xrayStore.resource} 
+      resourceType={$xrayStore.resourceType} 
+      onClose={() => closeXRay()}
+    />
+  {/if}
+
   <!-- Error Message (shown as toast) -->
   {#if error}
     <div class="error-message toast">
@@ -899,8 +929,6 @@
   {/if}
 
   
-  <!-- Theme Switcher (Dev Mode Only) -->
-  <ThemeSwitcher />
 </main>
 
 <style>

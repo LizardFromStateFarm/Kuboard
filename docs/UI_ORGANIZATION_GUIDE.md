@@ -28,9 +28,23 @@ src/
 │   │   ├── CronJobsPanel.svelte    # CronJob management panel
 │   │   ├── CronJobDetails.svelte   # Detailed CronJob information
 │   │   ├── ServiceDetails.svelte   # Detailed service information
+│   │   ├── StorageTab.svelte       # Storage management container
+│   │   ├── PersistentVolumesPanel.svelte # PV management panel
+│   │   ├── PersistentVolumeClaimsPanel.svelte # PVC management panel
+│   │   ├── StorageClassesPanel.svelte # StorageClass management panel
+  │   │   ├── SecurityTab.svelte       # Security management container
+  │   │   ├── RolesPanel.svelte        # Role management panel
+  │   │   ├── ClusterRolesPanel.svelte # ClusterRole management panel
+  │   │   ├── RoleBindingsPanel.svelte # RoleBinding management panel
+  │   │   ├── ClusterRoleBindingsPanel.svelte # ClusterRoleBinding management panel
+│   │   ├── ServiceAccountsPanel.svelte # ServiceAccount management panel
 │   │   ├── NodesTab.svelte         # Cluster nodes management
 │   │   ├── ConfigTab.svelte        # ConfigMaps and Secrets
-│   │   ├── NetworkTab.svelte       # Services and networking
+│   │   ├── NetworkTab.svelte       # Network management container
+│   │   ├── ServicesPanel.svelte     # Service management panel
+│   │   ├── IngressesPanel.svelte    # Ingress management panel
+│   │   ├── IngressClassesPanel.svelte # IngressClass management panel
+│   │   ├── NetworkPoliciesPanel.svelte # NetworkPolicy management panel
 │   │   ├── CustomResourcesTab.svelte # CRDs and custom resources
 │   │   ├── ResourceOverview.svelte # Legacy resource panels
 │   │   ├── MetricsGraph.svelte     # Resource usage graphs
@@ -39,6 +53,7 @@ src/
 │   │   ├── PortForwardManager.svelte # Port forwarding UI
 │   │   ├── TerminalWindow.svelte   # Terminal/exec with xterm.js
 │   │   ├── ResourceDescribe.svelte # Resource describe display
+│   │   ├── YamlEditor.svelte       # Live Monaco YAML editor
 │   │   └── ThemeSwitcher.svelte    # Dev mode theme controls
 │   ├── styles/              # CSS organization
 │   │   ├── color-palette.css # Centralized color definitions
@@ -125,10 +140,23 @@ border: 1px solid var(--border-primary);
    - Services (`ServiceDetails.svelte`)
 2. **Nodes** (`NodesTab.svelte`): Cluster nodes with detailed management
 3. **Config** (`ConfigTab.svelte`): ConfigMaps and Secrets
-4. **Network** (`NetworkTab.svelte`): Services and networking resources
-5. **Storage** (`CustomResourcesTab.svelte`): PersistentVolumes, PVCs (coming soon)
+4. **Network** (`NetworkTab.svelte`): 
+     - Services (`ServicesPanel.svelte`)
+     - Ingresses (`IngressesPanel.svelte`)
+     - IngressClasses (`IngressClassesPanel.svelte`)
+     - NetworkPolicies (`NetworkPoliciesPanel.svelte`)
+5. **Storage** (`StorageTab.svelte`): 
+     - PersistentVolumes (`PersistentVolumesPanel.svelte`)
+     - PersistentVolumeClaims (`PersistentVolumeClaimsPanel.svelte`)
+     - StorageClasses (`StorageClassesPanel.svelte`)
 6. **Custom Resources** (`CustomResourcesTab.svelte`): CRDs and custom resources
-7. **Security** (`CustomResourcesTab.svelte`): RBAC, SecurityContexts (coming soon)
+7. **Security** (`SecurityTab.svelte`): 
+     - Roles (`RolesPanel.svelte`)
+     - ClusterRoles (`ClusterRolesPanel.svelte`)
+     - RoleBindings (`RoleBindingsPanel.svelte`)
+     - ClusterRoleBindings (`ClusterRoleBindingsPanel.svelte`)
+     - ServiceAccounts (`ServiceAccountsPanel.svelte`)
+     - Secrets (in ConfigTab)
 
 **Key Features:**
 - **Lazy Loading**: Resources only loaded when tab is selected

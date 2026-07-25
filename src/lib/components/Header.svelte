@@ -1,6 +1,7 @@
 <!-- Kuboard Header Component -->
 <script lang="ts">
   import type { KubeContext } from '../types/index.js';
+  import ThemeSwitcher from './ThemeSwitcher.svelte';
 
   // Props
   export let contexts: KubeContext[] = [];
@@ -12,202 +13,454 @@
   import { createEventDispatcher } from 'svelte';
   const dispatch = createEventDispatcher();
 
-  let selectedContextName = '';
-
-  // Update selectedContextName when currentContext changes
-  $: if (currentContext?.name) {
-    selectedContextName = currentContext.name;
+  interface ClusterTabItem {
+    id: string;
+    name: string;
+    contextName: string;
   }
 
-  // Handle context change from dropdown
+  let clusterTabs: ClusterTabItem[] = [];
+  let activeTabId: string = '';
+  let showNewTabModal = false;
+  let selectedContextName = '';
+
+  // New tab modal state
+  let newTabContextName = '';
+
+  // Auto-sync initial context tab
+  $: if (currentContext?.name) {
+    selectedContextName = currentContext.name;
+    if (clusterTabs.length === 0) {
+      const id = 'tab-' + Date.now();
+      clusterTabs = [{ 
+        id, 
+        name: currentContext.name, 
+        contextName: currentContext.name
+      }];
+      activeTabId = id;
+    }
+  }
+
   function handleContextChange() {
     if (selectedContextName) {
+      const activeTab = clusterTabs.find(t => t.id === activeTabId);
+      if (activeTab) {
+        activeTab.contextName = selectedContextName;
+        activeTab.name = selectedContextName;
+        clusterTabs = [...clusterTabs];
+      }
       dispatch('contextChange', selectedContextName);
     }
   }
 
-  // Handle refresh button click
   function handleRefresh() {
     dispatch('refresh');
   }
+
+  function selectTab(tabId: string) {
+    const tab = clusterTabs.find(t => t.id === tabId);
+    if (tab) {
+      activeTabId = tabId;
+      selectedContextName = tab.contextName;
+      dispatch('contextChange', tab.contextName);
+    }
+  }
+
+  function openNewTabModal() {
+    newTabContextName = currentContext?.name || (contexts[0]?.name || '');
+    showNewTabModal = true;
+  }
+
+  function createNewTab() {
+    if (!newTabContextName) return;
+
+    const id = 'tab-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
+    const sameCount = clusterTabs.filter(t => t.contextName === newTabContextName).length;
+    const tabName = sameCount > 0 ? `${newTabContextName} (${sameCount + 1})` : newTabContextName;
+
+    const newTab: ClusterTabItem = {
+      id,
+      name: tabName,
+      contextName: newTabContextName
+    };
+
+    clusterTabs = [...clusterTabs, newTab];
+    activeTabId = id;
+    selectedContextName = newTabContextName;
+    showNewTabModal = false;
+
+    dispatch('contextChange', newTabContextName);
+  }
+
+  function closeTab(tabId: string) {
+    if (clusterTabs.length <= 1) return;
+    const index = clusterTabs.findIndex(t => t.id === tabId);
+    clusterTabs = clusterTabs.filter(t => t.id !== tabId);
+    if (activeTabId === tabId) {
+      const nextTab = clusterTabs[Math.max(0, index - 1)];
+      activeTabId = nextTab.id;
+      selectedContextName = nextTab.contextName;
+      dispatch('contextChange', nextTab.contextName);
+    }
+  }
 </script>
 
-<header class="modern-header">
-  <div class="header-content">
-    <div class="header-left">
-      <h1 class="app-title">🚢 Kuboard</h1>
-      <div class="app-subtitle">Kubernetes Dashboard</div>
+<header class="flat-header">
+  <div class="header-main-row">
+    <!-- Brand Title -->
+    <div class="brand">
+      <span class="brand-logo">🚢</span>
+      <span class="brand-name">Kuboard</span>
     </div>
-    
-    <div class="header-center">
-      <div class="context-selector">
-        <label for="context-dropdown">Context:</label>
+
+    <!-- Cluster Tabs Bar (Kubeconfig contexts only) -->
+    <div class="cluster-tabs-list">
+      {#each clusterTabs as tab}
+        <div 
+          class="cluster-tab" 
+          class:active={tab.id === activeTabId}
+          onclick={() => selectTab(tab.id)}
+          role="button"
+          tabindex="0"
+          onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && selectTab(tab.id)}
+        >
+          <span class="tab-icon">☸️</span>
+          <span class="tab-name">{tab.name}</span>
+          {#if clusterTabs.length > 1}
+            <button class="tab-close" onclick={(e) => { e.stopPropagation(); closeTab(tab.id); }} title="Close tab">×</button>
+          {/if}
+        </div>
+      {/each}
+
+      <button class="add-tab-trigger" onclick={openNewTabModal} title="Open new cluster tab">+</button>
+    </div>
+
+    <!-- Header Actions -->
+    <div class="header-actions">
+      <!-- Context Selector -->
+      <div class="context-picker">
         <select 
-          id="context-dropdown" 
+          id="context-select" 
           bind:value={selectedContextName}
           onchange={handleContextChange}
-          class="context-dropdown"
+          class="context-select-input"
           disabled={contexts.length === 0}
         >
           {#if contexts.length === 0}
             <option value="">Loading contexts...</option>
           {:else}
-            <option value="">🔍 Select a context to begin</option>
+            <option value="">Select Context</option>
             {#each contexts as context}
               <option value={context.name}>{context.name}</option>
             {/each}
           {/if}
         </select>
       </div>
-    </div>
-    
-    <div class="header-right">
-      <div class="app-version">v1.0.0</div>
-      <button onclick={handleRefresh} disabled={loading} class="header-refresh-button" title="Refresh cluster data">
+
+      <button onclick={handleRefresh} disabled={loading} class="refresh-btn" title="Refresh cluster data">
         {loading ? "⏳" : "↻"}
       </button>
+      <ThemeSwitcher />
     </div>
   </div>
 </header>
 
+<!-- Modal for Opening New Tab -->
+{#if showNewTabModal}
+  <div class="tab-modal-overlay" onclick={() => showNewTabModal = false} role="button" tabindex="-1">
+    <div class="tab-modal-content" onclick={(e) => e.stopPropagation()} role="dialog">
+      <div class="modal-header">
+        <h4>➕ Open New Tab</h4>
+        <button class="close-modal-btn" onclick={() => showNewTabModal = false}>×</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="new-tab-context">Select Kubeconfig Context:</label>
+          <select id="new-tab-context" bind:value={newTabContextName} class="modal-select">
+            {#each contexts as ctx}
+              <option value={ctx.name}>{ctx.name}</option>
+            {/each}
+          </select>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick={() => showNewTabModal = false}>Cancel</button>
+        <button class="btn-primary" onclick={createNewTab}>Create Tab</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
-  /* Modern Header Styles */
-  .modern-header {
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
-    color: var(--text-color);
-    padding: 20px 0;
-    margin-bottom: 20px;
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
-    border: 1px solid var(--primary-color);
+  .flat-header {
+    background: var(--background-secondary);
+    border-bottom: 1px solid var(--border-primary);
+    padding: 6px 16px;
+    margin-bottom: 16px;
   }
 
-  .header-content {
+  .header-main-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 20px;
+    gap: 16px;
   }
 
-  .header-left {
+  .brand {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
-  .app-title {
-    font-size: 2.5em;
+  .brand-logo {
+    font-size: 1.3rem;
+  }
+
+  .brand-name {
+    font-size: 1.1rem;
     font-weight: 700;
-    margin: 0;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
   }
 
-  .app-subtitle {
-    font-size: 1em;
-    opacity: 0.9;
-    margin-top: -5px;
-    font-weight: 300;
-  }
-
-  .header-center {
+  .cluster-tabs-list {
     flex: 1;
     display: flex;
-    justify-content: center;
-    margin: 0 40px;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 2px 0;
   }
 
-  .context-selector {
+  .cluster-tabs-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .cluster-tab {
     display: flex;
     align-items: center;
-    gap: 12px;
-    background: rgba(16, 185, 129, 0.2);
-    padding: 12px 20px;
-    border-radius: var(--radius-md);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--primary-color);
-  }
-
-  .context-selector label {
-    color: var(--text-color);
-    font-weight: 600;
-    font-size: 0.95em;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    padding: 5px 10px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
     white-space: nowrap;
+    user-select: none;
   }
 
-  .context-dropdown {
-    background: rgba(30, 30, 30, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+  .cluster-tab:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+  }
+
+  .cluster-tab.active {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+    font-weight: 600;
+  }
+
+  .tab-icon {
+    font-size: 0.85rem;
+  }
+
+  .tab-close {
+    background: transparent;
+    border: none;
+    color: inherit;
+    opacity: 0.7;
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+    border-radius: 2px;
+  }
+
+  .tab-close:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .add-tab-trigger {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-primary);
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    width: 28px;
+    height: 28px;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .add-tab-trigger:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+  }
+
+  /* Modal Overlay and Window */
+  .tab-modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .tab-modal-content {
+    background: #181824;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-primary);
+  }
+
+  .modal-header h4 {
+    margin: 0;
+    color: white;
+    font-size: 1rem;
+  }
+
+  .close-modal-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    cursor: pointer;
+  }
+
+  .modal-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .form-group label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .modal-select {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    color: white;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    outline: none;
+  }
+
+  .modal-select:focus {
+    border-color: var(--primary-color);
+  }
+
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-primary);
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .btn-cancel {
+    background: transparent;
+    border: 1px solid var(--border-primary);
+    color: var(--text-secondary);
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .btn-primary {
+    background: var(--primary-color);
+    border: none;
+    color: white;
+    padding: 6px 16px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .context-select-input {
+    background: var(--background-tertiary);
+    border: 1px solid var(--border-primary);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
-    font-size: 0.95em;
-    font-weight: 600;
-    padding: 8px 16px;
-    min-width: 200px;
-    cursor: pointer;
-    transition: var(--transition-normal);
-  }
-
-  .context-dropdown:hover {
-    background: rgba(30, 30, 30, 0.9);
-    border-color: var(--accent-color);
-    transform: translateY(-1px);
-  }
-
-  .context-dropdown:focus {
-    outline: none;
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
-  }
-
-  .context-dropdown:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .app-version {
-    background: var(--card-background);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    color: var(--text-color);
-    font-size: 0.9em;
+    font-size: 0.85rem;
     font-weight: 500;
-    padding: 8px 12px;
-    opacity: 0.8;
+    padding: 5px 10px;
+    cursor: pointer;
+    max-width: 200px;
   }
 
-  .header-refresh-button {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-md);
-    color: var(--text-color);
-    font-size: 1.2em;
-    font-weight: 600;
-    padding: 8px 12px;
+  .context-select-input:hover {
+    border-color: var(--border-secondary);
+  }
+
+  .refresh-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    padding: 4px 10px;
     cursor: pointer;
-    transition: var(--transition-normal);
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
   }
 
-  .header-refresh-button:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.2);
-    transform: rotate(180deg);
+  .refresh-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.12);
   }
 
-  .header-refresh-button:disabled {
+  .refresh-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-    transform: none;
   }
 </style>

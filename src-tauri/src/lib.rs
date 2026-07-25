@@ -33,6 +33,13 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            use tauri::Manager;
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.center();
+            }
+            Ok(())
+        })
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             // Context Management
@@ -82,12 +89,13 @@ pub fn run() {
             // Metrics (Real Implementation)
             commands::kuboard_get_node_metrics,
             commands::kuboard_get_node_metrics_history,
-        commands::kuboard_get_pod_metrics,
-        commands::kuboard_get_pod_metrics_history,
-        commands::kuboard_get_pod_events,
-        commands::kuboard_get_pod_logs,
-        commands::kuboard_check_metrics_availability,
-        commands::kuboard_get_cluster_metrics,
+            commands::kuboard_get_pod_metrics,
+            commands::kuboard_get_pod_metrics_history,
+            commands::kuboard_get_pod_events,
+            commands::kuboard_get_cluster_events,
+            commands::kuboard_get_pod_logs,
+            commands::kuboard_check_metrics_availability,
+            commands::kuboard_get_cluster_metrics,
         
         // Pod Actions
         commands::kuboard_delete_pod,
@@ -141,6 +149,58 @@ pub fn run() {
         
         // Resource Describe
         commands::kuboard_describe_pod,
+        
+        // Storage Management Commands
+        commands::kuboard_list_persistent_volumes,
+        commands::kuboard_get_persistent_volume,
+        commands::kuboard_delete_persistent_volume,
+        commands::kuboard_list_persistent_volume_claims,
+        commands::kuboard_get_persistent_volume_claim,
+        commands::kuboard_delete_persistent_volume_claim,
+        commands::kuboard_list_storage_classes,
+        commands::kuboard_get_storage_class,
+        commands::kuboard_delete_storage_class,
+        
+        // Security & RBAC Commands
+        commands::kuboard_list_roles,
+        commands::kuboard_list_cluster_roles,
+        commands::kuboard_list_role_bindings,
+        commands::kuboard_list_cluster_role_bindings,
+        commands::kuboard_list_service_accounts,
+        commands::kuboard_delete_role,
+        commands::kuboard_delete_cluster_role,
+        commands::kuboard_delete_role_binding,
+        commands::kuboard_delete_cluster_role_binding,
+        commands::kuboard_delete_service_account,
+        
+        // Networking Commands
+        commands::kuboard_list_ingresses,
+        commands::kuboard_list_ingress_classes,
+        commands::kuboard_list_network_policies,
+        commands::kuboard_delete_ingress,
+        commands::kuboard_delete_ingress_class,
+        commands::kuboard_delete_network_policy,
+        
+        // Search Commands
+        commands::kuboard_search_resources,
+        
+        // YAML Commands
+        commands::kuboard_get_resource_yaml,
+        commands::kuboard_apply_resource_yaml,
+        
+        // Helm Commands
+        commands::kuboard_list_helm_releases,
+        commands::kuboard_get_helm_release_details,
+        
+        // Graph Commands
+        commands::kuboard_get_resource_graph,
+        
+        // Custom Resource Commands
+        commands::kuboard_list_crds,
+        commands::kuboard_list_custom_resource_instances,
+        
+        // Linter Commands
+        commands::kuboard_run_linter,
         
         // Pod Exec Commands
         commands::kuboard_exec_into_pod,

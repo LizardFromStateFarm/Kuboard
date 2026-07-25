@@ -1,57 +1,41 @@
 <!-- Quick Actions Menu Component -->
 <script lang="ts">
+  import { invoke } from '@tauri-apps/api/core';
   import { createEventDispatcher } from 'svelte';
+  import { openEditor } from '../stores/editor';
+  import { openXRay } from '../stores/xray';
 
   export let resource: any; // Pod, Deployment, Service, etc.
-  export let resourceType: 'pod' | 'deployment' | 'statefulset' | 'daemonset' | 'cronjob' | 'service' | 'replicaset' | 'node' | 'configmap' | 'secret' = 'pod';
+  export let resourceType: 'pod' | 'deployment' | 'statefulset' | 'daemonset' | 'cronjob' | 'service' | 'replicaset' | 'node' | 'configmap' | 'secret' | 'persistentvolumeclaim' | 'persistentvolume' | 'storageclass' | 'role' | 'clusterrole' | 'rolebinding' | 'clusterrolebinding' | 'serviceaccount' | 'ingress' | 'ingressclass' | 'networkpolicy' = 'pod';
   export let position: { x: number; y: number } | undefined = undefined;
   export let x: number | undefined = undefined;
   export let y: number | undefined = undefined;
   export let visible: boolean = false;
   
-  // Compute actual position from either position object or x/y props
-  function getActualPosition(): { x: number; y: number } {
-    if (position) {
-      return position;
+  $: actualPosition = position || (x !== undefined && y !== undefined ? { x, y } : { x: 0, y: 0 });
+
+  $: if (visible && menuElement && actualPosition) {
+    const rect = menuElement.getBoundingClientRect();
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    
+    let posX = actualPosition.x;
+    let posY = actualPosition.y;
+
+    // Adjust if menu would go off-screen right or left
+    if (posX + rect.width > windowWidth - 12) {
+      posX = windowWidth - rect.width - 12;
     }
-    if (x !== undefined && y !== undefined) {
-      return { x, y };
+    if (posX < 12) posX = 12;
+
+    // Adjust if menu would go off-screen bottom or top
+    if (posY + rect.height > windowHeight - 12) {
+      posY = Math.max(12, posY - rect.height - 10);
     }
-    return { x: 0, y: 0 };
-  }
-  
-  $: actualPosition = getActualPosition();
+    if (posY < 12) posY = 12;
 
-  const dispatch = createEventDispatcher();
-
-  let menuElement: HTMLElement;
-  let actionExecuting: string | null = null;
-  let errorMessage: string | null = null;
-  let confirmAction: { action: string; message: string } | null = null;
-
-  $: {
-    if (visible && menuElement) {
-      // Position menu near cursor
-      const rect = menuElement.getBoundingClientRect();
-      const windowWidth = window.innerWidth;
-      const windowHeight = window.innerHeight;
-      
-      let x = actualPosition.x;
-      let y = actualPosition.y;
-
-      // Adjust if menu would go off-screen
-      if (x + rect.width > windowWidth) {
-        x = windowWidth - rect.width - 10;
-      }
-      if (y + rect.height > windowHeight) {
-        y = windowHeight - rect.height - 10;
-      }
-      if (x < 0) x = 10;
-      if (y < 0) y = 10;
-
-      menuElement.style.left = `${x}px`;
-      menuElement.style.top = `${y}px`;
-    }
+    menuElement.style.left = `${posX}px`;
+    menuElement.style.top = `${posY}px`;
   }
 
   function getResourceName(): string {
@@ -103,6 +87,40 @@
     }
   }
 
+  async function handleDelete() {
+    const deleteCommands: Record<string, string> = {
+      'pod': 'kuboard_delete_pod',
+      'deployment': 'kuboard_delete_deployment',
+      'statefulset': 'kuboard_delete_statefulset',
+      'daemonset': 'kuboard_delete_daemonset',
+      'replicaset': 'kuboard_delete_replicaset',
+      'service': 'kuboard_delete_service',
+      'cronjob': 'kuboard_delete_cronjob',
+      'persistentvolumeclaim': 'kuboard_delete_persistent_volume_claim',
+      'persistentvolume': 'kuboard_delete_persistent_volume',
+      'storageclass': 'kuboard_delete_storage_class',
+      'role': 'kuboard_delete_role',
+      'clusterrole': 'kuboard_delete_cluster_role',
+      'rolebinding': 'kuboard_delete_role_binding',
+      'clusterrolebinding': 'kuboard_delete_cluster_role_binding',
+      'serviceaccount': 'kuboard_delete_service_account',
+      'ingress': 'kuboard_delete_ingress',
+      'ingressclass': 'kuboard_delete_ingress_class',
+      'networkpolicy': 'kuboard_delete_network_policy'
+    };
+    
+    const deleteCmd = deleteCommands[resourceType];
+    if (deleteCmd) {
+      const params = (resourceType === 'pod')
+        ? { podName: getResourceName(), namespace: getResourceNamespace() }
+        : (resourceType === 'persistentvolume' || resourceType === 'storageclass' || resourceType === 'clusterrole' || resourceType === 'clusterrolebinding' || resourceType === 'ingressclass')
+          ? { name: getResourceName() }
+          : { name: getResourceName(), namespace: getResourceNamespace() };
+      await invoke(deleteCmd, params);
+      dispatch('deleted', { resource, resourceType });
+    }
+  }
+
   async function executeAction(action: string) {
     console.log('executeAction called with:', action, 'resourceType:', resourceType);
     if (actionExecuting) {
@@ -114,30 +132,11 @@
     errorMessage = null;
 
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
       console.log('About to execute action:', action, 'type:', typeof action);
-      console.log('Switch statement - action value:', JSON.stringify(action));
       
       switch (action) {
         case 'delete':
-          const deleteCommands: Record<string, string> = {
-            'pod': 'kuboard_delete_pod',
-            'deployment': 'kuboard_delete_deployment',
-            'statefulset': 'kuboard_delete_statefulset',
-            'daemonset': 'kuboard_delete_daemonset',
-            'replicaset': 'kuboard_delete_replicaset',
-            'service': 'kuboard_delete_service',
-            'cronjob': 'kuboard_delete_cronjob'
-          };
-          
-          const deleteCmd = deleteCommands[resourceType];
-          if (deleteCmd) {
-            const params = resourceType === 'pod' 
-              ? { podName: getResourceName(), namespace: getResourceNamespace() }
-              : { name: getResourceName(), namespace: getResourceNamespace() };
-            await invoke(deleteCmd, params);
-            dispatch('deleted', { resource, resourceType });
-          }
+          await handleDelete();
           break;
         
         case 'restart':
@@ -243,7 +242,14 @@
             console.error('Error getting YAML:', err);
           }
           break;
-        
+        case 'edit-yaml':
+          openEditor(resource, resourceType);
+          dispatch('close');
+          break;
+        case 'x-ray':
+          openXRay(resource, resourceType);
+          dispatch('close');
+          break;
         case 'copy-name':
           await navigator.clipboard.writeText(getResourceName());
           dispatch('copied', { type: 'name', value: getResourceName() });
@@ -301,7 +307,7 @@
       
       // Close menu after successful action (except for view-yaml and edit which open modals)
       // Don't close menu for view-yaml and edit - let the handler close it
-      if (action !== 'view-yaml' && action !== 'edit') {
+      if (action !== 'view-yaml' && action !== 'edit' && action !== 'edit-yaml') {
         setTimeout(() => {
           visible = false;
           dispatch('close');
@@ -342,9 +348,11 @@
 
   // Get available actions for resource type
   function getAvailableActions(): Array<{ id: string; label: string; icon: string; disabled?: boolean }> {
-    const baseActions = [
-      { id: 'view-yaml', label: 'View YAML', icon: '📄' },
-      { id: 'edit', label: 'Edit', icon: '✏️' },
+    const baseActions: Array<{ id: string; label: string; icon: string }> = [
+    { id: 'edit-yaml', label: 'Edit YAML', icon: '📝' },
+    { id: 'x-ray', label: 'X-Ray', icon: '🔦' },
+    { id: 'view-yaml', label: 'View YAML', icon: '📄' },
+    { id: 'edit', label: 'Edit', icon: '✏️' },
     ];
 
     const commonActions = [
@@ -412,6 +420,53 @@
           { id: 'delete', label: 'Delete', icon: '🗑️' },
         ];
       
+      case 'persistentvolumeclaim':
+        return [
+          ...commonActions,
+          ...baseActions,
+          { id: 'delete', label: 'Delete', icon: '🗑️' },
+        ];
+      
+      case 'persistentvolume':
+        return [
+          { id: 'copy-name', label: 'Copy Name', icon: '📋' },
+          ...baseActions,
+          { id: 'delete', label: 'Delete', icon: '🗑️' },
+        ];
+      
+      case 'storageclass':
+        return [
+          { id: 'copy-name', label: 'Copy Name', icon: '📋' },
+          ...baseActions,
+          { id: 'delete', label: 'Delete', icon: '🗑️' },
+        ];
+      
+      case 'role':
+      case 'rolebinding':
+      case 'serviceaccount':
+        return [
+          ...commonActions,
+          ...baseActions,
+          { id: 'delete', label: 'Delete', icon: '🗑️' },
+        ];
+      
+      case 'clusterrole':
+      case 'clusterrolebinding':
+      case 'ingressclass':
+        return [
+          { id: 'copy-name', label: 'Copy Name', icon: '📋' },
+          ...baseActions,
+          { id: 'delete', label: 'Delete', icon: '🗑️' },
+        ];
+      
+      case 'ingress':
+      case 'networkpolicy':
+        return [
+          ...commonActions,
+          ...baseActions,
+          { id: 'delete', label: 'Delete', icon: '🗑️' },
+        ];
+
       default:
         return baseActions;
     }
@@ -424,6 +479,7 @@
   <div
     bind:this={menuElement}
     class="quick-actions-menu"
+    style="top: {actualPosition.y}px; left: {actualPosition.x}px;"
     role="menu"
     onclick={(e) => e.stopPropagation()}
   >
@@ -493,14 +549,14 @@
   .quick-actions-menu {
     position: fixed;
     z-index: 10000;
-    background: var(--bg-secondary);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    min-width: 200px;
-    max-width: 300px;
+    background: #181824;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
+    min-width: 220px;
+    max-width: 320px;
     overflow: hidden;
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(12px);
   }
 
   .menu-backdrop {

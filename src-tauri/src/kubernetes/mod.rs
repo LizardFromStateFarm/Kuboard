@@ -59,19 +59,13 @@ pub async fn kuboard_create_client_from_context(
 
 // Metrics Functions
 pub async fn kuboard_fetch_node_metrics(
-    _client: &Client, 
-    _node_name: &str
+    client: &Client, 
+    node_name: &str
 ) -> Result<(f64, f64, f64)> {
-    // For now, return mock data since metrics API is not available in k8s-openapi
-    // In a real implementation, you would use the metrics.k8s.io API directly
-    warn!("Metrics server integration not fully implemented - using mock data");
-    
-    // Mock realistic usage data
-    let cpu_usage = 0.15; // 15% CPU usage
-    let memory_usage = 1024.0 * 1024.0 * 1024.0; // 1GB memory usage
-    let disk_usage = 5.0 * 1024.0 * 1024.0 * 1024.0; // 5GB disk usage
-    
-    Ok((cpu_usage, memory_usage, disk_usage))
+    match crate::metrics::kuboard_fetch_node_metrics_real(client, node_name).await {
+        Ok(m) => Ok((m.cpu_usage_cores, m.memory_usage_bytes as f64, m.disk_usage_bytes as f64)),
+        Err(e) => Err(e)
+    }
 }
 
 // Cluster Metrics Calculation
@@ -315,6 +309,36 @@ pub async fn kuboard_fetch_pod_events(
     }).collect();
     
     Ok(pod_events)
+}
+
+pub async fn kuboard_fetch_cluster_events(
+    client: &Client,
+    namespace: Option<&str>,
+) -> Result<Vec<PodEvent>, Box<dyn std::error::Error + Send + Sync>> {
+    let events_api: Api<k8s_openapi::api::core::v1::Event> = match namespace {
+        Some(ns) if !ns.is_empty() && ns != "all" => Api::namespaced(client.clone(), ns),
+        _ => Api::all(client.clone()),
+    };
+    
+    let events = events_api.list(&ListParams::default()).await?;
+    
+    let cluster_events: Vec<PodEvent> = events.items.into_iter().map(|event| {
+        PodEvent {
+            type_: event.type_.unwrap_or_default(),
+            reason: event.reason.unwrap_or_default(),
+            message: event.message.unwrap_or_default(),
+            first_timestamp: event.first_timestamp.map(|ts| ts.0.to_rfc3339()),
+            last_timestamp: event.last_timestamp.map(|ts| ts.0.to_rfc3339()),
+            count: event.count,
+            involved_object: Some(InvolvedObject {
+                kind: event.involved_object.kind.unwrap_or_default(),
+                name: event.involved_object.name.unwrap_or_default(),
+                namespace: event.involved_object.namespace,
+            }),
+        }
+    }).collect();
+    
+    Ok(cluster_events)
 }
 
 // Pod Logs
