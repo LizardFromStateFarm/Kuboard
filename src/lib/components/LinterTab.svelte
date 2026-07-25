@@ -2,6 +2,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
+  import { Stethoscope } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
@@ -55,7 +56,7 @@
 <div class="linter-tab">
   <div class="tab-header">
     <div class="header-left">
-      <h4>🩺 Cluster Health (Popeye-style)</h4>
+      <h4><Stethoscope size={18} /> Cluster Health (Popeye-style)</h4>
       {#if report}
         <div class="health-gauge">
           <span class="score" style="color: {getScoreColor(report.health_score)}">{report.health_score}%</span>

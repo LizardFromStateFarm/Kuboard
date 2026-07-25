@@ -15,15 +15,13 @@
   let selectedReplicaSet: any = null;
   let showFullDetails: boolean = false;
 
-  $: if (initialSelectedName && replicasets && replicasets.length > 0) {
-    const found = replicasets.find((rs: any) => rs.metadata?.name === initialSelectedName);
-    if (found) {
-      selectedReplicaSet = found;
-      showFullDetails = true;
-    } else if (!showFullDetails || selectedReplicaSet?.metadata?.name !== initialSelectedName) {
-      selectedReplicaSet = { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
-      showFullDetails = true;
-    }
+  let lastProcessedInitialName: string | null = null;
+
+  $: if (initialSelectedName && initialSelectedName !== lastProcessedInitialName) {
+    lastProcessedInitialName = initialSelectedName;
+    const found = replicasets?.find((rs: any) => rs.metadata?.name === initialSelectedName);
+    selectedReplicaSet = found || { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
+    showFullDetails = true;
   }
   
   // Sorting state
@@ -60,12 +58,10 @@
   }
 
   function handleActionDeleted(event: CustomEvent) {
-    // Reload replicasets would be needed
     handleActionMenuClose();
   }
 
   function handleViewYaml(event: any) {
-    console.log('handleViewYaml called in ReplicaSetsPanel', event);
     yamlContent = event.detail?.yaml || '';
     yamlViewerVisible = true;
   }
@@ -77,7 +73,6 @@
   }
 
   function handleActionEdit(event: any) {
-    console.log('handleActionEdit called in ReplicaSetsPanel', event);
     yamlEditorContent = event.detail?.yaml || '';
     yamlEditorVisible = true;
     yamlEditorError = null;
@@ -91,17 +86,12 @@
   }
 
   async function saveYaml() {
-    if (!contextMenuReplicaSet?.metadata?.name || !contextMenuReplicaSet?.metadata?.namespace) return;
-    
     yamlEditorLoading = true;
     yamlEditorError = null;
     
     try {
-      const parsed = JSON.parse(yamlEditorContent);
-      await invoke('kuboard_update_replicaset', {
-        name: contextMenuReplicaSet.metadata.name,
-        namespace: contextMenuReplicaSet.metadata.namespace,
-        replicaset: parsed
+      await invoke('kuboard_apply_resource_yaml', {
+        yamlContent: yamlEditorContent
       });
       closeYamlEditor();
     } catch (err: any) {
@@ -113,11 +103,9 @@
   }
 
   function handleActionCopied(event: CustomEvent) {
-    console.log('Copied:', event.detail.type, event.detail.value);
     handleActionMenuClose();
   }
 
-  // Format age
   function formatAge(creationTimestamp: string): string {
     if (!creationTimestamp) return 'Unknown';
     const created = new Date(creationTimestamp);
@@ -132,7 +120,6 @@
     return `${diffMins}m`;
   }
 
-  // Get replica status
   function getReplicaStatus(rs: any): string {
     const desired = rs.spec?.replicas || 0;
     const ready = rs.status?.readyReplicas || 0;
@@ -153,7 +140,6 @@
     }
   }
 
-  // Get owner reference (e.g., Deployment)
   function getOwnerReference(rs: any): string {
     const ownerRefs = rs.metadata?.ownerReferences || [];
     if (ownerRefs.length === 0) return '-';
@@ -161,7 +147,6 @@
     return `${owner.kind}/${owner.name}`;
   }
 
-  // Sorting functions
   function handleSort(column: string, event?: Event) {
     if (event) {
       event.stopPropagation();
@@ -181,7 +166,6 @@
     }
   }
 
-  // Comparison functions
   function compareName(a: any, b: any): number {
     const nameA = a.metadata?.name || '';
     const nameB = b.metadata?.name || '';
@@ -262,6 +246,8 @@
 
   // Back to replicasets list
   function backToReplicaSetsList() {
+    initialSelectedName = null;
+    lastProcessedInitialName = null;
     showFullDetails = false;
     selectedReplicaSet = null;
   }
@@ -271,9 +257,6 @@
   <ReplicaSetDetails replicaSet={selectedReplicaSet} onBack={backToReplicaSetsList} on:navigateToWorkload />
 {:else}
   <div class="replicasets-panel">
-    <div class="panel-header">
-      <h4>📦 ReplicaSets ({filteredReplicaSets.length})</h4>
-    </div>
       <ResourceTable
         items={sortedReplicaSets}
         filteredItems={filteredReplicaSets}

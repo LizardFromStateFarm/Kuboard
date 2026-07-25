@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import ResourceTable from './ResourceTable.svelte';
+  import { Activity, AlertTriangle, CheckCircle2, Radio, Pause, RefreshCw } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
@@ -17,21 +18,7 @@
   let sortColumn: string = 'timestamp';
   let sortDirection: 'asc' | 'desc' = 'desc';
 
-  async function fetchEvents() {
-    if (!currentContext) return;
-    try {
-      loading = true;
-      events = await invoke('kuboard_get_cluster_events', {
-        namespace: namespace === 'all' ? null : namespace
-      });
-      error = null;
-    } catch (e: any) {
-      console.error('Failed to fetch cluster events:', e);
-      error = String(e);
-    } finally {
-      loading = false;
-    }
-  }
+
 
   function handleSort(column: string) {
     if (sortColumn === column) {
@@ -94,8 +81,54 @@
     return sortDirection === 'asc' ? comp : -comp;
   });
 
+  let liveStream: boolean = true;
+  let pollInterval: any = null;
+  let lastEventCount = 0;
+  let alertNotice: string | null = null;
+
+  async function fetchEvents() {
+    if (!currentContext) return;
+    try {
+      loading = true;
+      const data: any[] = await invoke('kuboard_get_cluster_events', {
+        namespace: namespace === 'all' ? null : namespace
+      });
+      
+      const warnings = data.filter(e => (e.type_ || '').toLowerCase() === 'warning');
+      if (lastEventCount > 0 && warnings.length > lastEventCount) {
+        alertNotice = `🚨 New Warning Event: ${warnings[0]?.reason || 'Anomaly Detected'}`;
+        setTimeout(() => alertNotice = null, 4000);
+      }
+      lastEventCount = warnings.length;
+      events = data;
+      error = null;
+    } catch (e: any) {
+      console.error('Failed to fetch cluster events:', e);
+      error = String(e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  function toggleLiveStream() {
+    liveStream = !liveStream;
+    if (liveStream) {
+      pollInterval = setInterval(fetchEvents, 4000);
+    } else if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  }
+
+
+
+  $: warningCount = events.filter(e => (e.type_ || '').toLowerCase() === 'warning').length;
+  $: normalCount = events.filter(e => (e.type_ || '').toLowerCase() === 'normal').length;
+
   onMount(() => {
     fetchEvents();
+    pollInterval = setInterval(fetchEvents, 4000);
+    return () => { if (pollInterval) clearInterval(pollInterval); };
   });
 
   $: if (currentContext || namespace) {
@@ -104,30 +137,58 @@
 </script>
 
 <div class="events-panel">
+  <!-- Top Anomaly Bar -->
+  <div class="anomaly-summary-bar">
+    <div class="stat-pill">
+      <span class="lbl"><Activity size={13} /> Total Events</span>
+      <span class="val">{events.length}</span>
+    </div>
+    <div class="stat-pill warn">
+      <span class="lbl"><AlertTriangle size={13} /> Warnings / Anomalies</span>
+      <span class="val">{warningCount}</span>
+    </div>
+    <div class="stat-pill ok">
+      <span class="lbl"><CheckCircle2 size={13} /> Normal Events</span>
+      <span class="val">{normalCount}</span>
+    </div>
+    {#if alertNotice}
+      <div class="event-toast-alert">{alertNotice}</div>
+    {/if}
+  </div>
+
   <div class="panel-header">
     <div class="header-left">
-      <h4>⚡ Cluster Events ({filteredEvents.length})</h4>
+      <h4><Activity size={17} /> Live Cluster Events Stream ({filteredEvents.length})</h4>
       <div class="type-filter-group">
         <button 
           class="filter-btn" 
           class:active={typeFilter === 'all'} 
           onclick={() => typeFilter = 'all'}
-        >All</button>
+        >All ({events.length})</button>
         <button 
           class="filter-btn warning" 
           class:active={typeFilter === 'warning'} 
           onclick={() => typeFilter = 'warning'}
-        >⚠️ Warnings</button>
+        ><AlertTriangle size={13} /> Warnings ({warningCount})</button>
         <button 
           class="filter-btn normal" 
           class:active={typeFilter === 'normal'} 
           onclick={() => typeFilter = 'normal'}
-        >ℹ️ Normal</button>
+        ><CheckCircle2 size={13} /> Normal ({normalCount})</button>
       </div>
     </div>
-    <button class="refresh-btn" onclick={fetchEvents} disabled={loading}>
-      {loading ? '🔄' : '↻ Refresh'}
-    </button>
+    <div class="header-actions">
+      <button class="stream-btn {liveStream ? 'active' : ''}" onclick={toggleLiveStream}>
+        {#if liveStream}
+          <Radio size={14} class="spin-slow" /> Live Stream (ON)
+        {:else}
+          <Pause size={14} /> Stream Paused
+        {/if}
+      </button>
+      <button class="refresh-btn" onclick={fetchEvents} disabled={loading}>
+        <RefreshCw size={14} class={loading ? 'spin' : ''} /> Refresh
+      </button>
+    </div>
   </div>
 
   <ResourceTable
@@ -184,6 +245,47 @@
 <style>
   .events-panel {
     padding: 12px;
+  }
+  .anomaly-summary-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-primary);
+  }
+  .stat-pill { display: flex; flex-direction: column; gap: 2px; }
+  .stat-pill .lbl { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
+  .stat-pill .val { font-size: 1rem; color: var(--text-primary); font-weight: 700; }
+  .stat-pill.warn .val { color: #fbbf24; }
+  .stat-pill.ok .val { color: #4ade80; }
+  .event-toast-alert {
+    margin-left: auto;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid #ef4444;
+    color: #f87171;
+    padding: 4px 12px;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
+    font-size: 0.85rem;
+    animation: fadeIn 0.2s ease-in;
+  }
+  .header-actions { display: flex; align-items: center; gap: 8px; }
+  .stream-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-primary);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+  .stream-btn.active {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.4);
   }
   .panel-header {
     display: flex;

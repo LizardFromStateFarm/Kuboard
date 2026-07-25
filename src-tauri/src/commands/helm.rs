@@ -107,22 +107,43 @@ pub async fn kuboard_list_helm_releases(
 }
 
 fn decode_helm_release(data: &[u8]) -> Result<String, String> {
-    // 1. Base64 decode
-    let b64_decoded = general_purpose::STANDARD
+    // 1. Base64 decode step 1
+    let step1 = general_purpose::STANDARD
         .decode(data)
-        .map_err(|e| e.to_string())?;
-    
-    // 2. Base64 decode again (Helm 3 storage)
-    let b64_decoded_2 = general_purpose::STANDARD
-        .decode(&b64_decoded)
-        .map_err(|e| e.to_string())?;
+        .or_else(|_| general_purpose::URL_SAFE.decode(data))
+        .map_err(|e| format!("Initial base64 decode failed: {}", e))?;
 
-    // 3. Gzip decompress
-    let mut decoder = GzDecoder::new(&b64_decoded_2[..]);
+    // Try double base64 + Gzip (Standard Helm 3 Secret Storage)
+    if let Ok(step2) = general_purpose::STANDARD.decode(&step1) {
+        let mut decoder = GzDecoder::new(&step2[..]);
+        let mut decoded = String::new();
+        if decoder.read_to_string(&mut decoded).is_ok() && !decoded.is_empty() {
+            return Ok(decoded);
+        }
+    }
+
+    // Try single base64 + Gzip
+    let mut decoder = GzDecoder::new(&step1[..]);
     let mut decoded = String::new();
-    decoder.read_to_string(&mut decoded).map_err(|e| e.to_string())?;
+    if decoder.read_to_string(&mut decoded).is_ok() && !decoded.is_empty() {
+        return Ok(decoded);
+    }
 
-    Ok(decoded)
+    // Fallback: Raw UTF-8 string from step1 (uncompressed JSON)
+    if let Ok(utf8_str) = String::from_utf8(step1.clone()) {
+        if utf8_str.trim().starts_with('{') {
+            return Ok(utf8_str);
+        }
+    }
+
+    // Fallback: Raw UTF-8 string from raw bytes
+    if let Ok(utf8_str) = String::from_utf8(data.to_vec()) {
+        if utf8_str.trim().starts_with('{') {
+            return Ok(utf8_str);
+        }
+    }
+
+    Err("Failed to decode Helm release data with any supported encoding".to_string())
 }
 
 #[tauri::command]

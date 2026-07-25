@@ -6,6 +6,7 @@
   import LogsWindow from './LogsWindow.svelte';
   import PodDetails from './PodDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import { openGlobalPodLogs } from '$lib/stores/logs';
 
   const dispatch = createEventDispatcher();
 
@@ -20,15 +21,13 @@
   let logsWindowOpen = false;
   let logsWindowRef: LogsWindow;
 
-  $: if (initialSelectedName && pods && pods.length > 0) {
-    const found = pods.find((p: any) => p.metadata?.name === initialSelectedName);
-    if (found) {
-      selectedPod = found;
-      showFullDetails = true;
-    } else if (!showFullDetails || selectedPod?.metadata?.name !== initialSelectedName) {
-      selectedPod = { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
-      showFullDetails = true;
-    }
+  let lastProcessedInitialName: string | null = null;
+
+  $: if (initialSelectedName && initialSelectedName !== lastProcessedInitialName) {
+    lastProcessedInitialName = initialSelectedName;
+    const found = pods?.find((p: any) => p.metadata?.name === initialSelectedName);
+    const targetPod = found || { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
+    showFullPodDetails(targetPod);
   }
 
   let selectedResourceType: 'cpu' | 'memory' = 'cpu';
@@ -450,6 +449,8 @@
 
   // Back to pods list
   function backToPodsList() {
+    initialSelectedName = null;
+    lastProcessedInitialName = null;
     showFullDetails = false;
     selectedPod = null;
     selectedPodRaw = null;
@@ -465,14 +466,10 @@
   }
   
   function openPodLogs(pod: any, containerName?: string) {
-    if (logsWindowRef) {
-      // Handle both raw pod objects (with metadata) and processed pod objects (with direct properties)
-      const podName = pod.metadata?.name || pod.name || 'Unknown';
-      const podNamespace = pod.metadata?.namespace || pod.namespace || 'default';
-      console.log('🔍 Pod data for logs:', { pod, podName, podNamespace, containerName });
-      logsWindowRef.openPodLogs(podName, podNamespace, containerName);
-      logsWindowOpen = true;
-    }
+    const podName = pod.metadata?.name || pod.name || 'Unknown';
+    const podNamespace = pod.metadata?.namespace || pod.namespace || 'default';
+    console.log('🔍 Pod data for logs:', { pod, podName, podNamespace, containerName });
+    openGlobalPodLogs(undefined, podName, podNamespace, containerName);
   }
   
   function openContainerLogs(container: any) {
@@ -1163,7 +1160,6 @@
 
 <div class="pods-panel">
   <div class="panel-header">
-    <h4>🟢 Pods ({getRenderPods().length})</h4>
     <div class="panel-controls">
       <span class="live-indicator {watchError ? 'error' : watchActive ? 'active' : ''}">
         {watchError ? 'Watch Error' : watchActive ? '🟢 Live' : '⏸️ Paused'}
@@ -1276,46 +1272,40 @@
                 </tr>
           </svelte:fragment>
           <svelte:fragment slot="rows">
-                {#each filteredPods as pod (getPodKey(pod))}
-                  {@const errorInfo = getPodError(pod)}
-                  <tr 
-                    class="pod-row" 
-                    onclick={() => showFullPodDetails(pod)} 
-                    role="button" 
-                    tabindex="0" 
-                    onkeydown={(e) => e.key === 'Enter' || e.key === ' ' ? showFullPodDetails(pod) : null}
-                    oncontextmenu={(e) => handleContextMenu(e, pod)}
-                  >
-                    <td class="pod-name-cell">{pod.metadata?.name || 'Unknown'}</td>
-                    <td><span class="status-badge status-{getStatusClass(getEffectivePodStatus(pod))}">{getEffectivePodStatus(pod)}</span></td>
-                    <td class="error-cell">
-                      {#if errorInfo.hasError}
-                        <span class="error-indicator" title={errorInfo.message}>⚠️</span>
-                      {:else}
-                        <span class="no-error">-</span>
-                      {/if}
-                    </td>
-                    <td>{pod.metadata?.namespace || 'default'}</td>
-                    <td>{pod.status?.containerStatuses?.[0]?.restartCount || 0}</td>
-                    <td>{formatAge(pod.metadata?.creationTimestamp)}</td>
-                    <td class="metric-cell">-</td>
-                    <td class="metric-cell">-</td>
-                    <td>{pod.spec?.nodeName || 'Unknown'}</td>
-                    <td>{getControllerName(pod)}</td>
-                  </tr>
-                {/each}
+            {#each filteredPods as pod (getPodKey(pod))}
+              {@const errorInfo = getPodError(pod)}
+              <tr 
+                class="pod-row" 
+                onclick={() => showFullPodDetails(pod)} 
+                role="button" 
+                tabindex="0" 
+                onkeydown={(e) => e.key === 'Enter' || e.key === ' ' ? showFullPodDetails(pod) : null}
+                oncontextmenu={(e) => handleContextMenu(e, pod)}
+              >
+                <td class="pod-name-cell">{pod.metadata?.name || 'Unknown'}</td>
+                <td><span class="status-badge status-{getStatusClass(getEffectivePodStatus(pod))}">{getEffectivePodStatus(pod)}</span></td>
+                <td class="error-cell">
+                  {#if errorInfo.hasError}
+                    <span class="error-indicator" title={errorInfo.message}>⚠️</span>
+                  {:else}
+                    <span class="no-error">-</span>
+                  {/if}
+                </td>
+                <td>{pod.metadata?.namespace || 'default'}</td>
+                <td>{pod.status?.containerStatuses?.[0]?.restartCount || 0}</td>
+                <td>{formatAge(pod.metadata?.creationTimestamp)}</td>
+                <td class="metric-cell">-</td>
+                <td class="metric-cell">-</td>
+                <td>{pod.spec?.nodeName || 'Unknown'}</td>
+                <td>{getControllerName(pod)}</td>
+              </tr>
+            {/each}
           </svelte:fragment>
-        </ResourceTable>      </div>
+        </ResourceTable>
+      </div>
     {/if}
   </div>
 </div>
-
-<!-- Logs Window -->
-<LogsWindow 
-  bind:this={logsWindowRef}
-  bind:isOpen={logsWindowOpen}
-  onClose={() => logsWindowOpen = false}
-/>
 
 <!-- Quick Actions Menu -->
 {#if contextMenuPod}
@@ -1433,6 +1423,7 @@
     background: rgba(34, 197, 94, 0.12);
     color: #22c55e;
   }
+
   .live-indicator.error {
     border-color: rgba(239, 68, 68, 0.3);
     background: rgba(239, 68, 68, 0.12);
@@ -1475,8 +1466,6 @@
     font-size: 0.9rem;
   }
 
-  /* No Pods Message */
-
   th {
     padding: 8px 12px;
     text-align: left;
@@ -1499,7 +1488,6 @@
     color: var(--text-primary);
   }
 
-  /* Active sorted column styling */
   .sortable-header.sorted {
     background: rgba(59, 130, 246, 0.12);
     color: var(--text-primary);
@@ -1547,9 +1535,10 @@
   }
 
   .pod-name-cell {
-    font-weight: 500;
+    font-weight: 600;
     color: var(--primary-color);
-    max-width: 250px;
+    min-width: 240px;
+    max-width: 420px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1610,6 +1599,12 @@
     border: 1px solid var(--status-ready-border);
   }
 
+  .status-unknown {
+    background: var(--status-pending-bg);
+    color: var(--status-pending-text);
+    border: 1px solid var(--status-pending-border);
+  }
+
   /* Error Indicator Column */
   .error-cell {
     text-align: center;
@@ -1642,74 +1637,6 @@
   .no-error {
     color: var(--text-muted);
     font-size: 0.8rem;
-  }
-
-  .status-unknown {
-    background: var(--status-pending-bg);
-    color: var(--status-pending-text);
-    border: 1px solid var(--status-pending-border);
-  }
-
-
-  /* Full Details View */
-  .full-details-view {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-lg);
-  }
-
-  .details-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-bottom: var(--spacing-md);
-    border-bottom: 1px solid var(--border-primary);
-  }
-  
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-  }
-  
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-  }
-
-  .back-button {
-    background: var(--background-card);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    cursor: pointer;
-    font-size: 0.9rem;
-    padding: var(--spacing-sm) var(--spacing-md);
-    transition: var(--transition-normal);
-  }
-
-  .back-button:hover {
-    background: var(--accent-color);
-    border-color: var(--accent-color);
-    color: white;
-  }
-  
-  .logs-button {
-    background: var(--primary-color);
-    border: 1px solid var(--primary-color);
-    border-radius: var(--radius-sm);
-    color: white;
-    cursor: pointer;
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    padding: var(--spacing-xs) var(--spacing-sm);
-    transition: all 0.2s ease;
-  }
-  
-  .logs-button:hover {
-    background: var(--primary-dark);
-    border-color: var(--primary-dark);
   }
 
   .details-header h3 {

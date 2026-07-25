@@ -19,6 +19,10 @@
   export let maxMemoryBytes: number = 0;
   export let maxDiskBytes: number = 0;
   export let isPodMetrics: boolean = false; // Flag to indicate if this is for pod metrics
+  export let memoryLimitBytes: number = 0;
+  export let cpuThrottlingPct: number = 0;
+  export let limitValue: number = 0;
+  export let requestValue: number = 0;
 
   // Events
   const dispatch = createEventDispatcher();
@@ -75,6 +79,54 @@
     return fullData;
   }
 
+  function buildChartDatasets(dataPoints: number) {
+    const mainDataset = {
+      label: getResourceLabel(type),
+      data: createFullTimeRangeData(),
+      borderColor: getResourceColor(type),
+      backgroundColor: getResourceColor(type, 0.1),
+      borderWidth: 2,
+      fill: true,
+      tension: 0.4,
+      pointRadius: 3,
+      pointHoverRadius: 6,
+      pointBackgroundColor: getResourceColor(type),
+      pointBorderColor: '#ffffff',
+      pointBorderWidth: 2,
+      spanGaps: true
+    };
+
+    const datasets: any[] = [mainDataset];
+
+    if (limitValue > 0) {
+      datasets.push({
+        label: 'Limit',
+        data: new Array(dataPoints + 1).fill(limitValue),
+        borderColor: 'rgba(239, 68, 68, 0.85)',
+        borderWidth: 1.5,
+        borderDash: [5, 5],
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: false
+      });
+    }
+
+    if (requestValue > 0) {
+      datasets.push({
+        label: 'Request',
+        data: new Array(dataPoints + 1).fill(requestValue),
+        borderColor: 'rgba(245, 158, 11, 0.85)',
+        borderWidth: 1.5,
+        borderDash: [4, 4],
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: false
+      });
+    }
+
+    return datasets;
+  }
+
   // Initialize Chart.js
   function initializeChart() {
     if (chartInstance) {
@@ -84,23 +136,10 @@
     const ctx = chartCanvas.getContext('2d');
     if (!ctx) return;
 
+    const labels = generateTimeRangeLabels();
     const chartData = {
-      labels: generateTimeRangeLabels(),
-      datasets: [{
-        label: getResourceLabel(type),
-        data: createFullTimeRangeData(),
-        borderColor: getResourceColor(type),
-        backgroundColor: getResourceColor(type, 0.1),
-        borderWidth: 2,
-        fill: true,
-        tension: 0.4,
-        pointRadius: 3,
-        pointHoverRadius: 6,
-        pointBackgroundColor: getResourceColor(type),
-        pointBorderColor: '#ffffff',
-        pointBorderWidth: 2,
-        spanGaps: true // This allows the line to continue across null values
-      }]
+      labels,
+      datasets: buildChartDatasets(labels.length - 1)
     };
 
     chartInstance = new Chart(ctx, {
@@ -211,16 +250,10 @@
   function updateChart() {
     if (!chartInstance) return;
 
+    const labels = generateTimeRangeLabels();
     const newData = {
-      labels: generateTimeRangeLabels(),
-      datasets: [{
-        ...chartInstance.data.datasets[0],
-        label: getResourceLabel(type),
-        data: createFullTimeRangeData(),
-        borderColor: getResourceColor(type),
-        backgroundColor: getResourceColor(type, 0.1),
-        spanGaps: true
-      }]
+      labels,
+      datasets: buildChartDatasets(labels.length - 1)
     };
 
     // Update chart data
@@ -249,7 +282,7 @@
       chartInstance.options.plugins.tooltip.callbacks.label = function(context) {
         const value = context.parsed.y;
         const numValue = typeof value === 'number' ? value : parseFloat(String(value)) || 0;
-        const label = getResourceLabel(type) || 'Usage';
+        const label = context.dataset.label || getResourceLabel(type) || 'Usage';
         if (type === 'cpu') {
           const precision = isPodMetrics ? 3 : 2;
           return `${label}: ${numValue.toFixed(precision)} cores`;
@@ -292,19 +325,15 @@
         configuredMax = 1;
     }
     
-    // Calculate the actual max value from the data
+    let actualMax = 0;
     if (data && data.length > 0) {
-      const actualMax = Math.max(...data.map(point => {
+      actualMax = Math.max(...data.map(point => {
         const value = getResourceValue(point, type);
         return isNaN(value) ? 0 : value;
       }));
-      
-      // Use the larger of configured max or actual max * 1.2 (20% padding)
-      // This ensures the graph scales to show all data even if it exceeds the configured max
-      return Math.max(configuredMax, actualMax * 1.2);
     }
-    
-    return configuredMax;
+
+    return Math.max(configuredMax, actualMax * 1.2, (limitValue || 0) * 1.15, (requestValue || 0) * 1.15);
   }
 
   function getResourceValue(point: any, type: ResourceTab): number {
@@ -382,28 +411,51 @@
       <span class="resource-icon">{getResourceIcon(type)}</span>
       {getResourceLabel(type)}
     </div>
-    <div class="graph-stats">
-      <div class="current-value">
-        {#if type === 'cpu'}
-          {#if isPodMetrics}
-            {getCurrentValue().toFixed(3)} cores
-          {:else}
-            {getCurrentValue().toFixed(2)} cores
-          {/if}
-        {:else if type === 'memory'}
-          {getCurrentValue().toFixed(2)} GB
-        {:else if type === 'disk'}
-          {getCurrentValue().toFixed(2)} GB
-        {:else}
-          {getCurrentValue().toFixed(2)}
-        {/if}
-        <div class="utilization-percentage">
-          ({((getCurrentValue() / getMaxValue()) * 100).toFixed(1)}% utilized)
-        </div>
+    <div class="graph-controls">
+      <div class="duration-picker">
+        {#each [15, 30, 60, 360, 1440] as dur}
+          <button 
+            class="duration-btn {duration === dur ? 'active' : ''}" 
+            onclick={() => { duration = dur; dispatch('historyDurationChange', dur); }}
+          >
+            {dur < 60 ? `${dur}m` : `${dur / 60}h`}
+          </button>
+        {/each}
       </div>
-      {#if loading}
-        <div class="loading-indicator">🔄</div>
-      {/if}
+      <div class="graph-stats">
+        <div class="current-value">
+          {#if type === 'cpu'}
+            {#if isPodMetrics}
+              {getCurrentValue().toFixed(3)} cores
+            {:else}
+              {getCurrentValue().toFixed(2)} cores
+            {/if}
+          {:else if type === 'memory'}
+            {getCurrentValue().toFixed(2)} GB
+          {:else if type === 'disk'}
+            {getCurrentValue().toFixed(2)} GB
+          {:else}
+            {getCurrentValue().toFixed(2)}
+          {/if}
+          <div class="utilization-percentage">
+            ({((getCurrentValue() / getMaxValue()) * 100).toFixed(1)}% utilized)
+          </div>
+        </div>
+        {#if type === 'memory' && memoryLimitBytes > 0}
+          {@const pct = (getCurrentValue() * 1024 * 1024 * 1024 / memoryLimitBytes) * 100}
+          <div class="limit-indicator {pct > 85 ? 'warning' : ''}" title="Memory usage vs limit">
+            Limit: {pct.toFixed(1)}%
+          </div>
+        {/if}
+        {#if type === 'cpu' && cpuThrottlingPct > 0}
+          <div class="throttle-badge" title="CPU Throttling Detected">
+            ⚠️ Throttle: {cpuThrottlingPct.toFixed(1)}%
+          </div>
+        {/if}
+        {#if loading}
+          <div class="loading-indicator">🔄</div>
+        {/if}
+      </div>
     </div>
   </div>
 
@@ -484,6 +536,42 @@
     font-size: 1.2em;
   }
 
+  .graph-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .duration-picker {
+    display: flex;
+    gap: 4px;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-primary);
+  }
+
+  .duration-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .duration-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .duration-btn.active {
+    background: var(--primary-color);
+    color: white;
+  }
+
   .graph-stats {
     display: flex;
     align-items: center;
@@ -505,6 +593,31 @@
     font-weight: 400;
     color: var(--text-secondary);
     opacity: 0.8;
+  }
+
+  .limit-indicator {
+    font-size: 0.75rem;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    font-weight: 600;
+  }
+  .limit-indicator.warning {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  .throttle-badge {
+    font-size: 0.75rem;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    font-weight: 600;
   }
 
   .loading-indicator {

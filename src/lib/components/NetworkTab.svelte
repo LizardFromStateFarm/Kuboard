@@ -4,16 +4,20 @@
   import IngressesPanel from './IngressesPanel.svelte';
   import IngressClassesPanel from './IngressClassesPanel.svelte';
   import NetworkPoliciesPanel from './NetworkPoliciesPanel.svelte';
+  import { Globe, ArrowRightLeft, Sliders, Shield } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
   export let namespace: string = 'all';
+  export let tabSessionId: string = 'tab-default';
 
   // State
-  let activeTab: 'services' | 'ingresses' | 'ingressclasses' | 'networkpolicies' = 'services';
+  let sessionTabMap: Record<string, 'services' | 'ingresses' | 'ingressclasses' | 'networkpolicies'> = {};
+  $: activeTab = sessionTabMap[tabSessionId] || 'services';
 
   function setActiveTab(tab: any) {
-    activeTab = tab;
+    sessionTabMap[tabSessionId] = tab;
+    sessionTabMap = { ...sessionTabMap };
   }
 </script>
 
@@ -24,28 +28,28 @@
       class:active={activeTab === 'services'} 
       onclick={() => setActiveTab('services')}
     >
-      Services
+      <Globe size={15} /> Services
     </button>
     <button 
       class="nav-item" 
       class:active={activeTab === 'ingresses'} 
       onclick={() => setActiveTab('ingresses')}
     >
-      Ingresses
+      <ArrowRightLeft size={15} /> Ingresses
     </button>
     <button 
       class="nav-item" 
       class:active={activeTab === 'ingressclasses'} 
       onclick={() => setActiveTab('ingressclasses')}
     >
-      Ingress Classes
+      <Sliders size={15} /> Ingress Classes
     </button>
     <button 
       class="nav-item" 
       class:active={activeTab === 'networkpolicies'} 
       onclick={() => setActiveTab('networkpolicies')}
     >
-      Network Policies
+      <Shield size={15} /> Network Policies
     </button>
   </div>
 

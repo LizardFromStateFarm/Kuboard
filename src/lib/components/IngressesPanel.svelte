@@ -4,6 +4,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import ResourceTable from './ResourceTable.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import IngressDetails from './IngressDetails.svelte';
 
   // Props
   export let currentContext: any = null;
@@ -17,6 +18,7 @@
   let sortColumn: string = 'name';
   let sortDirection: 'asc' | 'desc' = 'asc';
   let refreshTimer: any;
+  let selectedIngress: any = null;
 
   // Context Menu State
   let contextMenuVisible = false;
@@ -132,56 +134,57 @@
 </script>
 
 <div class="ingresses-panel">
-  <div class="panel-header">
-    <h4>🌐 Ingresses ({filteredIngresses.length})</h4>
-  </div>
-
-  {#if loading && ingresses.length === 0}
-    <div class="loading-state">
-      <div class="spinner"></div>
-      <p>Loading Ingresses...</p>
-    </div>
-  {:else if error}
-    <div class="error-state">
-      <span class="error-icon">⚠️</span>
-      <p>{error}</p>
-      <button onclick={fetchIngresses}>Retry</button>
-    </div>
+  {#if selectedIngress}
+    <IngressDetails ingress={selectedIngress} onBack={() => selectedIngress = null} />
   {:else}
-    <ResourceTable
-      items={ingresses}
-      filteredItems={filteredIngresses}
-      bind:searchQuery
-      searchPlaceholder="Search Ingresses..."
-      noItemsMessage="No Ingresses found."
-      noSearchResultsMessage="No Ingresses match your search query:"
-    >
-      <svelte:fragment slot="header">
-        <th class="sortable" onclick={() => handleSort('name')}>Name</th>
-        <th class="sortable" onclick={() => handleSort('namespace')}>Namespace</th>
-        <th>Hosts</th>
-        <th>Address</th>
-        <th>Ports</th>
-        <th class="sortable" onclick={() => handleSort('age')}>Age</th>
-        <th>Actions</th>
-      </svelte:fragment>
 
-      <svelte:fragment slot="rows">
-        {#each filteredIngresses as ing (ing.metadata.uid)}
-          <tr class="resource-row" oncontextmenu={(e) => handleContextMenu(e, ing)}>
-            <td class="name-cell">{ing.metadata.name}</td>
-            <td>{ing.metadata.namespace}</td>
-            <td class="hosts-cell" title={getHosts(ing)}>{getHosts(ing)}</td>
-            <td>{getAddress(ing)}</td>
-            <td>{getPorts(ing)}</td>
-            <td>{formatAge(ing.metadata.creationTimestamp)}</td>
-            <td class="actions-cell">
-              <button class="action-btn" onclick={(e) => handleContextMenu(e, ing)}>⚙️</button>
-            </td>
-          </tr>
-        {/each}
-      </svelte:fragment>
-    </ResourceTable>
+    {#if loading && ingresses.length === 0}
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading Ingresses...</p>
+      </div>
+    {:else if error}
+      <div class="error-state">
+        <span class="error-icon">⚠️</span>
+        <p>{error}</p>
+        <button onclick={fetchIngresses}>Retry</button>
+      </div>
+    {:else}
+      <ResourceTable
+        items={ingresses}
+        filteredItems={filteredIngresses}
+        bind:searchQuery
+        searchPlaceholder="Search Ingresses..."
+        noItemsMessage="No Ingresses found."
+        noSearchResultsMessage="No Ingresses match your search query:"
+      >
+        <svelte:fragment slot="header">
+          <th class="sortable" onclick={() => handleSort('name')}>Name</th>
+          <th class="sortable" onclick={() => handleSort('namespace')}>Namespace</th>
+          <th>Hosts</th>
+          <th>Address</th>
+          <th>Ports</th>
+          <th class="sortable" onclick={() => handleSort('age')}>Age</th>
+          <th>Actions</th>
+        </svelte:fragment>
+
+        <svelte:fragment slot="rows">
+          {#each filteredIngresses as ing (ing.metadata.uid)}
+            <tr class="resource-row clickable-row" onclick={() => selectedIngress = ing} oncontextmenu={(e) => handleContextMenu(e, ing)}>
+              <td class="name-cell">{ing.metadata.name}</td>
+              <td>{ing.metadata.namespace}</td>
+              <td class="hosts-cell" title={getHosts(ing)}>{getHosts(ing)}</td>
+              <td>{getAddress(ing)}</td>
+              <td>{getPorts(ing)}</td>
+              <td>{formatAge(ing.metadata.creationTimestamp)}</td>
+              <td class="actions-cell">
+                <button class="action-btn" onclick={(e) => { e.stopPropagation(); handleContextMenu(e, ing); }}>⚙️</button>
+              </td>
+            </tr>
+          {/each}
+        </svelte:fragment>
+      </ResourceTable>
+    {/if}
   {/if}
 </div>
 

@@ -109,9 +109,6 @@
 </script>
 
 <div class="sc-panel">
-  <div class="panel-header">
-    <h4>🏗️ Storage Classes ({filteredStorageClasses.length})</h4>
-  </div>
 
   {#if loading && storageClasses.length === 0}
     <div class="loading-state">

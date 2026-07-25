@@ -3,15 +3,74 @@
   import DonutChart from './DonutChart.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
+  import MetricsGraph from './MetricsGraph.svelte';
+  import { Activity, Layers, Server, RefreshCw, ArrowLeft } from 'lucide-svelte';
+  import { navigateTo } from '../stores/nav';
 
   export let refreshInterval: number = 10000; // 10 seconds default
   export let autoRefresh: boolean = true;
+  export let nodes: any[] = [];
 
   // Cluster metrics data
   let clusterMetrics: any = null;
   let loading: boolean = false;
   let error: string | null = null;
   let lastUpdate: string = '';
+  let selectedPoolName: string | null = null;
+
+  function getNodePoolName(node: any): string {
+    const labels = node?.metadata?.labels || {};
+    return labels['cloud.google.com/gke-nodepool'] ||
+           labels['eks.amazonaws.com/nodegroup'] ||
+           labels['agentpool'] ||
+           labels['kops.k8s.io/instancegroup'] ||
+           labels['nodepool'] ||
+           (labels['node-role.kubernetes.io/control-plane'] !== undefined || labels['node-role.kubernetes.io/master'] !== undefined ? 'control-plane' : 'worker-pool');
+  }
+
+  function groupNodePools(nodesList: any[]) {
+    if (!nodesList || nodesList.length === 0) return [];
+    const poolsMap: Record<string, any> = {};
+
+    for (const node of nodesList) {
+      const poolName = getNodePoolName(node);
+      if (!poolsMap[poolName]) {
+        poolsMap[poolName] = {
+          name: poolName,
+          nodes: [],
+          readyCount: 0,
+          totalCpuCapacity: 0,
+          totalMemCapacity: 0,
+          instanceTypes: new Set<string>()
+        };
+      }
+      const pool = poolsMap[poolName];
+      pool.nodes.push(node);
+
+      const isReady = node?.status?.conditions?.some((c: any) => c.type === 'Ready' && c.status === 'True');
+      if (isReady) pool.readyCount++;
+
+      const cpuCap = parseFloat(node?.status?.capacity?.cpu || '0');
+      const memCapKi = parseInt(node?.status?.capacity?.memory?.replace('Ki', '') || '0');
+      pool.totalCpuCapacity += cpuCap;
+      pool.totalMemCapacity += memCapKi * 1024;
+
+      const instanceType = node?.metadata?.labels?.['node.kubernetes.io/instance-type'] || node?.metadata?.labels?.['beta.kubernetes.io/instance-type'] || 'standard';
+      pool.instanceTypes.add(instanceType);
+    }
+
+    return Object.values(poolsMap).map(pool => ({
+      ...pool,
+      instanceTypesString: Array.from(pool.instanceTypes).join(', ')
+    }));
+  }
+
+  $: nodePools = groupNodePools(nodes);
+  $: activePool = selectedPoolName ? nodePools.find(p => p.name === selectedPoolName) : null;
+
+  function jumpToNode(nodeName: string) {
+    navigateTo({ tab: 'nodes', resourceName: nodeName });
+  }
 
   // Refresh interval timer
   let refreshTimer: number | null = null;
@@ -109,7 +168,7 @@
 
 <div class="cluster-metrics">
   <div class="metrics-header">
-    <h3>📊 Cluster Resource Usage</h3>
+    <h3><Activity size={18} /> Cluster Resource Usage</h3>
     <div class="metrics-controls">
       <button 
         class="refresh-button" 
@@ -259,11 +318,139 @@
         <span class="summary-value">{clusterMetrics.nodes_count}</span>
       </div>
       <div class="summary-item">
+        <span class="summary-label">Node Pools:</span>
+        <span class="summary-value">{nodePools.length}</span>
+      </div>
+      <div class="summary-item">
         <span class="summary-label">Data Source:</span>
         <span class="summary-value">
           {clusterMetrics.metrics_available ? 'Metrics Server' : 'Pod Requests'}
         </span>
       </div>
+    </div>
+
+    <!-- Node Pools Section -->
+    <div class="node-pools-section">
+      {#if activePool}
+        <!-- Node Pool Detailed View -->
+        <div class="nodepool-detail-view">
+          <div class="nodepool-header">
+            <button class="back-to-pools-btn" onclick={() => selectedPoolName = null}>
+              ← Back to Node Pools
+            </button>
+            <h4><Layers size={16} /> Node Pool: <span class="highlight-pool-name">{activePool.name}</span></h4>
+            <div class="nodepool-badges">
+              <span class="pool-badge">{activePool.readyCount} / {activePool.nodes.length} Nodes Ready</span>
+              {#if activePool.instanceTypesString}
+                <span class="pool-badge instance-type">{activePool.instanceTypesString}</span>
+              {/if}
+            </div>
+          </div>
+
+          <div class="pool-summary-cards">
+            <div class="pool-stat-card">
+              <span class="stat-label">Total CPU Capacity</span>
+              <span class="stat-value">{formatCores(activePool.totalCpuCapacity)}</span>
+            </div>
+            <div class="pool-stat-card">
+              <span class="stat-label">Total Memory Capacity</span>
+              <span class="stat-value">{formatBytes(activePool.totalMemCapacity)}</span>
+            </div>
+          </div>
+
+          <h5>Constituent Nodes in Pool</h5>
+          <div class="nodepool-nodes-table-wrapper">
+            <table class="nodepool-nodes-table">
+              <thead>
+                <tr>
+                  <th>Node Name</th>
+                  <th>Status</th>
+                  <th>Internal IP</th>
+                  <th>Kubelet Version</th>
+                  <th>OS / Arch</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each activePool.nodes as node}
+                  {@const isReady = node.status?.conditions?.some((c) => c.type === 'Ready' && c.status === 'True')}
+                  {@const internalIp = node.status?.addresses?.find((a) => a.type === 'InternalIP')?.address || 'N/A'}
+                  <tr>
+                    <td class="node-name-cell">
+                      <strong>{node.metadata?.name}</strong>
+                    </td>
+                    <td>
+                      <span class="status-badge {isReady ? 'real' : 'estimated'}">
+                        {isReady ? 'Ready' : 'NotReady'}
+                      </span>
+                    </td>
+                    <td><code>{internalIp}</code></td>
+                    <td>{node.status?.nodeInfo?.kubeletVersion || 'N/A'}</td>
+                    <td>{node.status?.nodeInfo?.operatingSystem} / {node.status?.nodeInfo?.architecture}</td>
+                    <td>
+                      <button class="btn-view-node" onclick={() => jumpToNode(node.metadata?.name)}>
+                        🖥️ View Node Details
+                      </button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {:else}
+        <!-- Node Pools Summary List -->
+        <div class="nodepools-header">
+          <h4><Layers size={16} /> Cluster Node Pools ({nodePools.length})</h4>
+          <span class="nodepools-subtitle">Click a node pool to inspect constituent nodes & capacity</span>
+        </div>
+
+        {#if nodePools.length === 0}
+          <div class="nodepools-empty">No node pools discovered or nodes loading...</div>
+        {:else}
+          <div class="nodepools-grid">
+            {#each nodePools as pool}
+              <div 
+                class="nodepool-card" 
+                role="button" 
+                tabindex="0"
+                onclick={() => selectedPoolName = pool.name}
+                onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (selectedPoolName = pool.name)}
+              >
+                <div class="nodepool-card-header">
+                  <span class="pool-name"><Layers size={14} /> {pool.name}</span>
+                  <span class="pool-status-badge {pool.readyCount === pool.nodes.length ? 'status-ok' : 'status-warn'}">
+                    {pool.readyCount} / {pool.nodes.length} Ready
+                  </span>
+                </div>
+                <div class="nodepool-card-body">
+                  <div class="pool-metric-row">
+                    <span class="metric-label">Nodes:</span>
+                    <span class="metric-val">{pool.nodes.length}</span>
+                  </div>
+                  <div class="pool-metric-row">
+                    <span class="metric-label">Total CPU:</span>
+                    <span class="metric-val">{formatCores(pool.totalCpuCapacity)}</span>
+                  </div>
+                  <div class="pool-metric-row">
+                    <span class="metric-label">Total Memory:</span>
+                    <span class="metric-val">{formatBytes(pool.totalMemCapacity)}</span>
+                  </div>
+                  {#if pool.instanceTypesString}
+                    <div class="pool-metric-row">
+                      <span class="metric-label">Instance Type:</span>
+                      <span class="metric-val code-val">{pool.instanceTypesString}</span>
+                    </div>
+                  {/if}
+                </div>
+                <div class="nodepool-card-footer">
+                  <span>View Details & Nodes →</span>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
     </div>
   {:else if loading}
     <div class="loading-message">
@@ -567,5 +754,216 @@
       flex-direction: column;
       gap: var(--spacing-sm);
     }
+  }
+
+  /* Node Pools Section Styles */
+  .node-pools-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .nodepools-header h4, .nodepool-header h4 {
+    margin: 0 0 4px 0;
+    color: white;
+    font-size: 1.1rem;
+  }
+
+  .nodepools-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+  }
+
+  .nodepools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  .nodepool-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .nodepool-card:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+  }
+
+  .nodepool-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .pool-name {
+    font-weight: 600;
+    color: white;
+    font-size: 1rem;
+  }
+
+  .pool-status-badge {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .pool-status-badge.status-ok {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+
+  .pool-status-badge.status-warn {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+
+  .pool-metric-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    padding: 3px 0;
+  }
+
+  .metric-label {
+    color: var(--text-secondary);
+  }
+
+  .metric-val {
+    color: white;
+    font-weight: 500;
+  }
+
+  .code-val {
+    font-family: monospace;
+    font-size: 0.8rem;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .nodepool-card-footer {
+    margin-top: 14px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.8rem;
+    color: var(--primary-color);
+    text-align: right;
+    font-weight: 500;
+  }
+
+  .back-to-pools-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: white;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+  }
+
+  .back-to-pools-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .highlight-pool-name {
+    color: var(--primary-color);
+  }
+
+  .nodepool-badges {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .pool-badge {
+    background: rgba(46, 145, 190, 0.15);
+    border: 1px solid rgba(46, 145, 190, 0.3);
+    color: var(--primary-color);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+  }
+
+  .pool-summary-cards {
+    display: flex;
+    gap: 16px;
+    margin: 16px 0;
+  }
+
+  .pool-stat-card {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .stat-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+  }
+
+  .stat-value {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: white;
+  }
+
+  .nodepool-nodes-table-wrapper {
+    overflow-x: auto;
+    margin-top: 12px;
+  }
+
+  .nodepool-nodes-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  .nodepool-nodes-table th, .nodepool-nodes-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .nodepool-nodes-table th {
+    color: var(--text-secondary);
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .btn-view-node {
+    background: rgba(46, 145, 190, 0.15);
+    border: 1px solid rgba(46, 145, 190, 0.3);
+    color: var(--primary-color);
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.2s ease;
+  }
+
+  .btn-view-node:hover {
+    background: var(--primary-color);
+    color: white;
   }
 </style>

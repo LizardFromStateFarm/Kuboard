@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import '@xterm/xterm/css/xterm.css';
@@ -13,12 +14,14 @@
   export let podName: string = '';
   export let namespace: string = '';
   export let containerName: string = '';
+  export let embedded: boolean = false;
   export let onClose: () => void = () => {};
 
   let terminalElement: HTMLDivElement;
   let terminal: Terminal | null = null;
   let fitAddon: FitAddon | null = null;
   let isConnected = false;
+  let isMinimized = false;
   let error: string | null = null;
   let availableContainers: string[] = [];
   let selectedContainer: string = '';
@@ -37,12 +40,25 @@
         fontFamily: 'Consolas, "Courier New", monospace',
         cursorBlink: true,
         cursorStyle: 'block',
+        convertEol: true,
       });
 
       fitAddon = new FitAddon();
       terminal.loadAddon(fitAddon);
       terminal.open(terminalElement);
       fitAddon.fit();
+
+      // Intercept Ctrl+C / Cmd+C when text is selected to copy to clipboard
+      terminal.attachCustomKeyEventHandler((arg) => {
+        if ((arg.ctrlKey || arg.metaKey) && arg.code === 'KeyC' && terminal?.hasSelection()) {
+          const selectedText = terminal.getSelection();
+          if (selectedText) {
+            navigator.clipboard.writeText(selectedText);
+          }
+          return false;
+        }
+        return true;
+      });
 
       // Handle window resize
       const resizeObserver = new ResizeObserver(() => {
@@ -72,31 +88,71 @@
     };
   });
 
+  let currentInputBuffer = '';
+
   async function startExecSession() {
     if (!terminal || !podName || !namespace) return;
 
     error = null;
-    isConnected = false;
+    isConnected = true;
 
     try {
-      // TODO: Implement exec command
-      // For now, show a message that this feature is being implemented
-      terminal.writeln('\x1b[33m⚠️  Exec functionality is being implemented...\x1b[0m');
-      terminal.writeln('\x1b[36mThis will allow you to execute commands in the pod container.\x1b[0m');
-      terminal.writeln('');
-      terminal.writeln(`Pod: ${podName}`);
-      terminal.writeln(`Namespace: ${namespace}`);
-      terminal.writeln(`Container: ${containerName || 'default'}`);
-      terminal.writeln('');
-      terminal.writeln('\x1b[31mFeature coming soon!\x1b[0m');
-      
-      // Show a prompt
-      terminal.write('\r\n$ ');
+      terminal.writeln(`\x1b[32m✅ Connected to container shell: ${containerName || 'main'}\x1b[0m`);
+      terminal.writeln(`Type commands and press Enter. (e.g. 'clear', 'ls', 'help')\r\n`);
+      terminal.write('$ ');
+
+      terminal.onData((data) => {
+        if (data === '\r') {
+          // Enter key pressed
+          terminal?.writeln('');
+          const cmd = currentInputBuffer.trim();
+          currentInputBuffer = '';
+          if (cmd) {
+            executeInteractiveCommand(cmd);
+          } else {
+            terminal?.write('$ ');
+          }
+        } else if (data === '\u007F') {
+          // Backspace
+          if (currentInputBuffer.length > 0) {
+            currentInputBuffer = currentInputBuffer.slice(0, -1);
+            terminal?.write('\b \b');
+          }
+        } else if (data >= ' ' || data === '\t') {
+          currentInputBuffer += data;
+          terminal?.write(data);
+        }
+      });
     } catch (err: any) {
       error = err.toString();
+      isConnected = false;
       if (terminal) {
         terminal.writeln(`\x1b[31mError: ${error}\x1b[0m`);
       }
+    }
+  }
+
+  async function executeInteractiveCommand(cmd: string) {
+    if (!terminal) return;
+    try {
+      if (cmd === 'clear') {
+        terminal.clear();
+        terminal.write('$ ');
+        return;
+      }
+      const output = await invoke<string>('kuboard_exec_command', {
+        podName,
+        namespace,
+        containerName: containerName || null,
+        command: cmd
+      });
+      if (output && output.trim()) {
+        terminal.writeln(output);
+      }
+    } catch (err: any) {
+      terminal.writeln(`\x1b[31mError: ${err?.message || err}\x1b[0m`);
+    } finally {
+      terminal.write('$ ');
     }
   }
 
@@ -119,36 +175,41 @@
 </script>
 
 {#if isOpen}
-  <div class="terminal-window">
-    <div class="terminal-header">
-      <div class="terminal-title">
-        <span class="terminal-icon">💻</span>
-        <span class="terminal-label">Terminal</span>
-        <span class="terminal-pod-info">{namespace}/{podName}</span>
-        {#if containerName}
-          <span class="terminal-container">({containerName})</span>
-        {/if}
+  <div class="terminal-window {embedded ? 'embedded' : ''} {isMinimized ? 'is-minimized' : ''}">
+    {#if !embedded}
+      <div class="terminal-header">
+        <div class="terminal-title">
+          <span class="terminal-icon">💻</span>
+          <span class="terminal-label">Terminal</span>
+          <span class="terminal-pod-info">{namespace}/{podName}</span>
+          {#if containerName}
+            <span class="terminal-container">({containerName})</span>
+          {/if}
+        </div>
+        <div class="terminal-controls">
+          {#if availableContainers.length > 1}
+            <select 
+              class="container-selector" 
+              bind:value={selectedContainer}
+              onchange={handleContainerChange}
+            >
+              {#each availableContainers as container}
+                <option value={container} selected={container === containerName}>
+                  {container}
+                </option>
+              {/each}
+            </select>
+          {/if}
+          <button class="minimize-button" onclick={() => isMinimized = !isMinimized} title={isMinimized ? "Expand" : "Minimize"}>
+            {isMinimized ? '▲' : '▼'}
+          </button>
+          <button class="close-button" onclick={handleClose} title="Close Terminal">
+            ✕
+          </button>
+        </div>
       </div>
-      <div class="terminal-controls">
-        {#if availableContainers.length > 1}
-          <select 
-            class="container-selector" 
-            bind:value={selectedContainer}
-            onchange={handleContainerChange}
-          >
-            {#each availableContainers as container}
-              <option value={container} selected={container === containerName}>
-                {container}
-              </option>
-            {/each}
-          </select>
-        {/if}
-        <button class="close-button" onclick={handleClose} title="Close Terminal">
-          ✕
-        </button>
-      </div>
-    </div>
-    
+    {/if}
+
     {#if error}
       <div class="terminal-error">
         <span>⚠️ {error}</span>
@@ -170,13 +231,45 @@
 
 <style>
   .terminal-window {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 9000;
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: 360px;
     background: var(--background-card, #1a1a1a);
     border: 1px solid var(--border-color, #333);
-    border-radius: 4px;
+    border-radius: 8px 8px 0 0;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
     overflow: hidden;
+  }
+
+  .terminal-window.embedded {
+    position: relative;
+    height: 100%;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    z-index: 1;
+  }
+
+  .terminal-window.is-minimized {
+    height: 42px !important;
+  }
+
+  .minimize-button {
+    padding: 4px 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary, #fff);
+    cursor: pointer;
+    font-size: 12px;
+    border-radius: 4px;
+  }
+  .minimize-button:hover {
+    background: rgba(255, 255, 255, 0.1);
   }
 
   .terminal-header {

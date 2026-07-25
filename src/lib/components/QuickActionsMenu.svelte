@@ -4,6 +4,9 @@
   import { createEventDispatcher } from 'svelte';
   import { openEditor } from '../stores/editor';
   import { openXRay } from '../stores/xray';
+  import { openGlobalPodLogs, openGlobalPodTerminal } from '../stores/logs';
+
+  const dispatch = createEventDispatcher();
 
   export let resource: any; // Pod, Deployment, Service, etc.
   export let resourceType: 'pod' | 'deployment' | 'statefulset' | 'daemonset' | 'cronjob' | 'service' | 'replicaset' | 'node' | 'configmap' | 'secret' | 'persistentvolumeclaim' | 'persistentvolume' | 'storageclass' | 'role' | 'clusterrole' | 'rolebinding' | 'clusterrolebinding' | 'serviceaccount' | 'ingress' | 'ingressclass' | 'networkpolicy' = 'pod';
@@ -11,31 +14,39 @@
   export let x: number | undefined = undefined;
   export let y: number | undefined = undefined;
   export let visible: boolean = false;
+
+  // Component state
+  let menuElement: HTMLElement | null = null;
+  let confirmAction: { action: string; message: string } | null = null;
+  let actionExecuting: string | null = null;
+  let errorMessage: string | null = null;
+  
+  let computedPos = { x: 0, y: 0 };
   
   $: actualPosition = position || (x !== undefined && y !== undefined ? { x, y } : { x: 0, y: 0 });
 
-  $: if (visible && menuElement && actualPosition) {
-    const rect = menuElement.getBoundingClientRect();
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
-    
+  $: if (visible && actualPosition) {
     let posX = actualPosition.x;
     let posY = actualPosition.y;
 
-    // Adjust if menu would go off-screen right or left
-    if (posX + rect.width > windowWidth - 12) {
-      posX = windowWidth - rect.width - 12;
-    }
-    if (posX < 12) posX = 12;
+    if (typeof window !== 'undefined') {
+      const menuWidth = menuElement?.getBoundingClientRect().width || 220;
+      const menuHeight = menuElement?.getBoundingClientRect().height || 250;
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
 
-    // Adjust if menu would go off-screen bottom or top
-    if (posY + rect.height > windowHeight - 12) {
-      posY = Math.max(12, posY - rect.height - 10);
-    }
-    if (posY < 12) posY = 12;
+      if (posX + menuWidth > windowWidth - 12) {
+        posX = Math.max(12, windowWidth - menuWidth - 12);
+      }
+      if (posX < 12) posX = 12;
 
-    menuElement.style.left = `${posX}px`;
-    menuElement.style.top = `${posY}px`;
+      if (posY + menuHeight > windowHeight - 12) {
+        posY = Math.max(12, posY - menuHeight - 10);
+      }
+      if (posY < 12) posY = 12;
+    }
+
+    computedPos = { x: posX, y: posY };
   }
 
   function getResourceName(): string {
@@ -135,6 +146,16 @@
       console.log('About to execute action:', action, 'type:', typeof action);
       
       switch (action) {
+        case 'logs':
+          openGlobalPodLogs(undefined, getResourceName(), getResourceNamespace());
+          closeMenu();
+          break;
+
+        case 'terminal':
+          openGlobalPodTerminal(undefined, getResourceName(), getResourceNamespace());
+          closeMenu();
+          break;
+
         case 'delete':
           await handleDelete();
           break;
@@ -242,6 +263,35 @@
             console.error('Error getting YAML:', err);
           }
           break;
+        case 'copy-sanitized-yaml':
+          try {
+            const yamlCommands: Record<string, string> = {
+              'pod': 'kuboard_get_pod_yaml',
+              'deployment': 'kuboard_get_deployment_yaml',
+              'statefulset': 'kuboard_get_statefulset_yaml',
+              'daemonset': 'kuboard_get_daemonset_yaml',
+              'replicaset': 'kuboard_get_replicaset_yaml',
+              'service': 'kuboard_get_service_yaml',
+              'cronjob': 'kuboard_get_cronjob_yaml'
+            };
+            const yamlCmd = yamlCommands[resourceType];
+            let rawYaml = '';
+            if (yamlCmd) {
+              const params = resourceType === 'pod'
+                ? { podName: getResourceName(), namespace: getResourceNamespace() }
+                : { name: getResourceName(), namespace: getResourceNamespace() };
+              rawYaml = (await invoke(yamlCmd, params)) as string;
+            } else {
+              rawYaml = JSON.stringify(resource, null, 2);
+            }
+            const sanitized = sanitizeYaml(rawYaml);
+            await navigator.clipboard.writeText(sanitized);
+            dispatch('copied', { type: 'sanitized-yaml', value: 'Sanitized YAML copied to clipboard' });
+            closeMenu();
+          } catch (err) {
+            errorMessage = `Failed to copy sanitized YAML: ${err}`;
+          }
+          break;
         case 'edit-yaml':
           openEditor(resource, resourceType);
           dispatch('close');
@@ -347,11 +397,17 @@
   }
 
   // Get available actions for resource type
+  function sanitizeYaml(yaml: string): string {
+    if (!yaml) return '';
+    return yaml.replace(/^(\s*(?:data|stringData|password|token|secret|authorization):\s*)(.+)$/gmi, '$1"[REDACTED]"');
+  }
+
   function getAvailableActions(): Array<{ id: string; label: string; icon: string; disabled?: boolean }> {
     const baseActions: Array<{ id: string; label: string; icon: string }> = [
     { id: 'edit-yaml', label: 'Edit YAML', icon: '📝' },
     { id: 'x-ray', label: 'X-Ray', icon: '🔦' },
     { id: 'view-yaml', label: 'View YAML', icon: '📄' },
+    { id: 'copy-sanitized-yaml', label: 'Copy Sanitized YAML', icon: '🛡️' },
     { id: 'edit', label: 'Edit', icon: '✏️' },
     ];
 
@@ -374,6 +430,7 @@
         return [
           ...commonActions,
           ...baseActions,
+          { id: 'logs', label: 'View Logs', icon: '📋' },
           { id: 'restart', label: 'Restart', icon: '🔄' },
           { id: 'delete', label: 'Delete', icon: '🗑️' },
         ];
@@ -382,6 +439,7 @@
         return [
           ...commonActions,
           ...baseActions,
+          { id: 'logs', label: 'View Logs', icon: '📋' },
           { id: 'restart', label: 'Restart', icon: '🔄' },
           { id: 'delete', label: 'Delete', icon: '🗑️' },
         ];
@@ -390,6 +448,7 @@
         return [
           ...commonActions,
           ...baseActions,
+          { id: 'logs', label: 'View Logs', icon: '📋' },
           { id: 'restart', label: 'Restart', icon: '🔄' },
           { id: 'delete', label: 'Delete', icon: '🗑️' },
         ];
@@ -410,6 +469,7 @@
         return [
           ...commonActions,
           ...baseActions,
+          { id: 'logs', label: 'View Logs', icon: '📋' },
           { id: 'delete', label: 'Delete', icon: '🗑️' },
         ];
       
@@ -479,7 +539,7 @@
   <div
     bind:this={menuElement}
     class="quick-actions-menu"
-    style="top: {actualPosition.y}px; left: {actualPosition.x}px;"
+    style="top: {computedPos.y}px; left: {computedPos.x}px;"
     role="menu"
     onclick={(e) => e.stopPropagation()}
   >

@@ -94,6 +94,7 @@ pub fn run() {
             commands::kuboard_get_pod_events,
             commands::kuboard_get_cluster_events,
             commands::kuboard_get_pod_logs,
+            commands::kuboard_get_workload_logs,
             commands::kuboard_check_metrics_availability,
             commands::kuboard_get_cluster_metrics,
         
@@ -204,6 +205,7 @@ pub fn run() {
         
         // Pod Exec Commands
         commands::kuboard_exec_into_pod,
+        commands::kuboard_exec_command,
         
         // Port Forwarding Commands
         commands::kuboard_port_forward,

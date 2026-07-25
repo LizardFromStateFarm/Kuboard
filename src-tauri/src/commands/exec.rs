@@ -36,8 +36,6 @@ use serde_json::json;
 
 
 // Pod Exec Commands
-// Note: Full exec implementation requires WebSocket support for bidirectional streaming
-// This creates a session that can be used for streaming
 #[tauri::command]
 pub async fn kuboard_exec_into_pod(
     pod_name: String,
@@ -70,17 +68,95 @@ pub async fn kuboard_exec_into_pod(
         sessions.insert(session.session_id.clone(), session.clone());
     }
 
-    // TODO: Implement WebSocket streaming
-    // For now, return session info
-    // The frontend will need to connect to a streaming endpoint
-    
     Ok(json!({
-        "sessionId": session.session_id,
-        "podName": session.pod_name,
-        "namespace": session.namespace,
-        "containerName": session.container_name,
-        "status": "connected",
-        "message": "Exec session created. Full streaming support coming soon."
+        "status": "success",
+        "sessionId": session.session_id
     }))
 }
 
+#[tauri::command]
+pub async fn kuboard_exec_command(
+    pod_name: String,
+    namespace: String,
+    container_name: Option<String>,
+    command: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Exec command in pod: {}/{} (container: {:?}): {}", namespace, pod_name, container_name, command);
+    
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &namespace);
+
+    let mut attach_params = kube::api::AttachParams::default()
+        .stdout(true)
+        .stderr(true)
+        .stdin(false);
+
+    if let Some(ref c) = container_name {
+        if !c.trim().is_empty() {
+            attach_params = attach_params.container(c);
+        }
+    }
+
+    let shell_options = vec![
+        vec!["sh", "-c", &command],
+        vec!["/bin/sh", "-c", &command],
+        vec!["/bin/bash", "-c", &command],
+        vec!["/bin/ash", "-c", &command],
+    ];
+
+    let mut last_err = String::new();
+    let mut attached_opt = None;
+
+    for cmd_vec in shell_options {
+        match pods_api.exec(&pod_name, cmd_vec, &attach_params).await {
+            Ok(attached) => {
+                attached_opt = Some(attached);
+                break;
+            }
+            Err(e) => {
+                last_err = e.to_string();
+            }
+        }
+    }
+
+    if attached_opt.is_none() {
+        let parts: Vec<&str> = command.split_whitespace().collect();
+        if !parts.is_empty() {
+            if let Ok(attached) = pods_api.exec(&pod_name, parts, &attach_params).await {
+                attached_opt = Some(attached);
+            }
+        }
+    }
+
+    let mut attached = match attached_opt {
+        Some(a) => a,
+        None => return Err(format!("Exec error: Container shell executable not found (sh/bash/ash). {}", last_err)),
+    };
+
+    let mut output = String::new();
+    if let Some(mut stdout) = attached.stdout() {
+        use tokio::io::AsyncReadExt;
+        let mut buffer = Vec::new();
+        let _ = stdout.read_to_end(&mut buffer).await;
+        output = String::from_utf8_lossy(&buffer).to_string();
+    }
+    if let Some(mut stderr) = attached.stderr() {
+        use tokio::io::AsyncReadExt;
+        let mut buffer = Vec::new();
+        let _ = stderr.read_to_end(&mut buffer).await;
+        let err_str = String::from_utf8_lossy(&buffer).to_string();
+        if !err_str.is_empty() {
+            if !output.is_empty() {
+                output.push('\n');
+            }
+            output.push_str(&err_str);
+        }
+    }
+
+    Ok(output)
+}

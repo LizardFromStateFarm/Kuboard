@@ -14,44 +14,42 @@
   import EventsPanel from './EventsPanel.svelte';
   import ClusterMetrics from './ClusterMetrics.svelte';
   import { navigationStore } from '../stores/nav';
+  import { Activity, Boxes, Server, Sliders, Globe, Database, Wrench, Stethoscope, Shield } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
   export let nodes: any[] = [];
+  export let tabSessionId: string = 'tab-default';
 
-  // State
-  export let activeTab: string = 'workloads';
+  // Per-session active tab map
+  let sessionTabMap: Record<string, string> = {};
+  $: activeTab = sessionTabMap[tabSessionId] || 'overview';
   let tabCounts: Record<string, number> = {};
 
   // Tab definitions
   const tabs = [
-    { id: 'workloads', label: 'Workloads', icon: '⚙️', count: 0 },
-    { id: 'overview', label: 'Cluster Details', icon: '📊', count: 0 },
-    { id: 'nodes', label: 'Nodes', icon: '🖥️', count: 0 },
-    { id: 'config', label: 'Config', icon: '⚙️', count: 0 },
-    { id: 'network', label: 'Network', icon: '🌐', count: 0 },
-    { id: 'storage', label: 'Storage', icon: '💾', count: 0 },
-    { id: 'custom', label: 'Custom Resources', icon: '🔧', count: 0 },
-    { id: 'helm', label: 'Helm', icon: '📦', count: 0 },
-    { id: 'linter', label: 'Linter', icon: '🩺', count: 0 },
-    { id: 'security', label: 'Security', icon: '🔒', count: 0 }
+    { id: 'overview', label: 'Cluster Details', icon: Activity, count: 0 },
+    { id: 'workloads', label: 'Workloads', icon: Boxes, count: 0 },
+    { id: 'nodes', label: 'Nodes', icon: Server, count: 0 },
+    { id: 'config', label: 'Config', icon: Sliders, count: 0 },
+    { id: 'network', label: 'Network', icon: Globe, count: 0 },
+    { id: 'storage', label: 'Storage', icon: Database, count: 0 },
+    { id: 'custom', label: 'Custom Resources', icon: Wrench, count: 0 },
+    { id: 'linter', label: 'Linter', icon: Stethoscope, count: 0 },
+    { id: 'security', label: 'Security', icon: Shield, count: 0 }
   ];
 
   // Tab change handler
   function handleTabChange(event: CustomEvent<{ tabId: string }>) {
-    console.log('🔄 TabbedContent tab change:', event.detail.tabId);
-    activeTab = event.detail.tabId;
+    const newTab = event.detail.tabId;
+    console.log(`🔄 TabbedContent tab change for session [${tabSessionId}]:`, newTab);
+    sessionTabMap[tabSessionId] = newTab;
+    sessionTabMap = { ...sessionTabMap };
   }
 
   // Update tab counts
   function updateTabCount(tabId: string, count: number) {
     tabCounts[tabId] = count;
-    // Update the tabs array to trigger reactivity
-    const updatedTabs = tabs.map(tab => ({
-      ...tab,
-      count: tabCounts[tab.id] || 0
-    }));
-    // This will trigger reactivity in ResourceTabs
   }
 
   // Load initial counts
@@ -85,22 +83,18 @@
 
   // Reactive updates
   $: if (currentContext) {
-    console.log('🔄 TabbedContent: Context changed, loading counts...');
     loadInitialCounts();
   }
-  
-  // Debug: Log when component mounts
-  console.log('🚀 TabbedContent component mounted');
 
   // Watch navigation store
   $: if ($navigationStore) {
     const nav = $navigationStore;
     if (nav.tab) {
-      console.log('🔄 TabbedContent: Navigating to tab:', nav.tab);
-      activeTab = nav.tab;
+      const targetSession = nav.tabSessionId || tabSessionId;
+      console.log(`🔄 TabbedContent: Navigating session [${targetSession}] to:`, nav.tab);
+      sessionTabMap[targetSession] = nav.tab;
+      sessionTabMap = { ...sessionTabMap };
     }
-    // We don't clear the store here, we let the parent handle it or just clear it if we are the only consumer.
-    // Actually, it's better to clear it here if we've consumed it.
     navigationStore.set(null);
   }
 </script>
@@ -115,11 +109,11 @@
   <div class="tab-content">
     <!-- Use display: none instead of conditional rendering to prevent layout shifts -->
     <div class="tab-panel" class:active={activeTab === 'workloads'}>
-      <WorkloadsTab {currentContext} />
+      <WorkloadsTab {currentContext} {tabSessionId} />
     </div>
     <div class="tab-panel" class:active={activeTab === 'overview'}>
       <div class="cluster-details-tab-content">
-        <ClusterMetrics refreshInterval={10000} autoRefresh={true} />
+        <ClusterMetrics {nodes} refreshInterval={10000} autoRefresh={true} />
         <div class="cluster-events-section" style="margin-top: 24px;">
           <EventsPanel {currentContext} />
         </div>
@@ -129,25 +123,22 @@
       <NodesTab {currentContext} {nodes} />
     </div>
     <div class="tab-panel" class:active={activeTab === 'config'}>
-      <ConfigTab {currentContext} />
+      <ConfigTab {currentContext} {tabSessionId} />
     </div>
     <div class="tab-panel" class:active={activeTab === 'network'}>
-      <NetworkTab {currentContext} />
+      <NetworkTab {currentContext} {tabSessionId} />
     </div>
     <div class="tab-panel" class:active={activeTab === 'storage'}>
-      <StorageTab {currentContext} />
+      <StorageTab {currentContext} {tabSessionId} />
     </div>
     <div class="tab-panel" class:active={activeTab === 'custom'}>
       <CustomResourcesTab {currentContext} />
-    </div>
-    <div class="tab-panel" class:active={activeTab === 'helm'}>
-      <HelmTab {currentContext} />
     </div>
     <div class="tab-panel" class:active={activeTab === 'linter'}>
       <LinterTab {currentContext} />
     </div>
     <div class="tab-panel" class:active={activeTab === 'security'}>
-      <SecurityTab {currentContext} />
+      <SecurityTab {currentContext} {tabSessionId} />
     </div>
   </div>
 </div>

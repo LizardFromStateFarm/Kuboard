@@ -15,15 +15,13 @@
   let selectedCronJob: any = null;
   let showFullDetails: boolean = false;
 
-  $: if (initialSelectedName && cronjobs && cronjobs.length > 0) {
-    const found = cronjobs.find((cj: any) => cj.metadata?.name === initialSelectedName);
-    if (found) {
-      selectedCronJob = found;
-      showFullDetails = true;
-    } else if (!showFullDetails || selectedCronJob?.metadata?.name !== initialSelectedName) {
-      selectedCronJob = { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
-      showFullDetails = true;
-    }
+  let lastProcessedInitialName: string | null = null;
+
+  $: if (initialSelectedName && initialSelectedName !== lastProcessedInitialName) {
+    lastProcessedInitialName = initialSelectedName;
+    const found = cronjobs?.find((cj: any) => cj.metadata?.name === initialSelectedName);
+    selectedCronJob = found || { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
+    showFullDetails = true;
   }
   
   // Sorting state
@@ -282,6 +280,8 @@
 
   // Back to cronjobs list
   function backToCronJobsList() {
+    initialSelectedName = null;
+    lastProcessedInitialName = null;
     showFullDetails = false;
     selectedCronJob = null;
   }
@@ -294,9 +294,6 @@
   <CronJobDetails cronJob={selectedCronJob} onBack={backToCronJobsList} on:navigateToWorkload />
 {:else}
   <div class="cronjobs-panel">
-    <div class="panel-header">
-      <h4>📦 CronJobs ({filteredCronJobs.length})</h4>
-    </div>
       <ResourceTable
         items={sortedCronJobs}
         filteredItems={filteredCronJobs}

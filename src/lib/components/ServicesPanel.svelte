@@ -21,13 +21,12 @@
   let refreshTimer: any;
   let selectedService: any = null;
 
-  $: if (initialSelectedName && services && services.length > 0) {
-    const found = services.find((s: any) => s.metadata?.name === initialSelectedName);
-    if (found) {
-      selectedService = found;
-    } else if (!selectedService || selectedService?.metadata?.name !== initialSelectedName) {
-      selectedService = { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
-    }
+  let lastProcessedInitialName: string | null = null;
+
+  $: if (initialSelectedName && initialSelectedName !== lastProcessedInitialName) {
+    lastProcessedInitialName = initialSelectedName;
+    const found = services?.find((s: any) => s.metadata?.name === initialSelectedName);
+    selectedService = found || { metadata: { name: initialSelectedName, namespace: currentContext?.namespace || 'default' } };
   }
 
   // Context Menu State
@@ -114,6 +113,8 @@
   }
 
   function handleBack() {
+    initialSelectedName = null;
+    lastProcessedInitialName = null;
     selectedService = null;
   }
 
@@ -162,9 +163,6 @@
   {#if selectedService}
     <ServiceDetails service={selectedService} onBack={handleBack} on:navigateToWorkload />
   {:else}
-    <div class="panel-header">
-      <h4>🌐 Services ({filteredServices.length})</h4>
-    </div>
 
     {#if loading && services.length === 0}
       <div class="loading-state">

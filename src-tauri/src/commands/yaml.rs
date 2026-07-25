@@ -51,11 +51,40 @@ pub async fn kuboard_get_resource_yaml(
         _ => return Err(format!("Unsupported resource kind for YAML export: {}", kind)),
     };
 
-    let gvk = kube::api::GroupVersionKind::gvk(
-        api_version.split('/').next().unwrap_or(""),
-        api_version.split('/').last().unwrap_or(api_version),
-        &kind
-    );
+    let (group, version) = if api_version.contains('/') {
+        let parts: Vec<&str> = api_version.split('/').collect();
+        (parts[0], parts[1])
+    } else {
+        ("", api_version)
+    };
+
+    let pascal_kind = match kind.to_lowercase().as_str() {
+        "pod" => "Pod",
+        "deployment" => "Deployment",
+        "service" => "Service",
+        "namespace" => "Namespace",
+        "node" => "Node",
+        "configmap" => "ConfigMap",
+        "secret" => "Secret",
+        "ingress" => "Ingress",
+        "networkpolicy" => "NetworkPolicy",
+        "persistentvolume" => "PersistentVolume",
+        "persistentvolumeclaim" => "PersistentVolumeClaim",
+        "storageclass" => "StorageClass",
+        "statefulset" => "StatefulSet",
+        "daemonset" => "DaemonSet",
+        "replicaset" => "ReplicaSet",
+        "job" => "Job",
+        "cronjob" => "CronJob",
+        "role" => "Role",
+        "clusterrole" => "ClusterRole",
+        "rolebinding" => "RoleBinding",
+        "clusterrolebinding" => "ClusterRoleBinding",
+        "serviceaccount" => "ServiceAccount",
+        _ => kind.as_str(),
+    };
+
+    let gvk = kube::api::GroupVersionKind::gvk(group, version, pascal_kind);
 
     // Dynamic API call
     let ar = kube::discovery::ApiResource::from_gvk(&gvk);

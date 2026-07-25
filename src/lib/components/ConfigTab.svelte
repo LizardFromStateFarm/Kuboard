@@ -1,410 +1,278 @@
-<!-- Kuboard Config Tab Component -->
+<!-- Kuboard Config Tab Component (Overhauled) -->
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
+  import ResourceTable from './ResourceTable.svelte';
+  import ConfigMapDetails from './ConfigMapDetails.svelte';
+  import HelmTab from './HelmTab.svelte';
+  import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import { FileText, Package } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
+  export let namespace: string = 'all';
+  export let tabSessionId: string = 'tab-default';
 
   // State
+  let sessionSubTabMap: Record<string, 'configmaps' | 'helm'> = {};
+  $: activeSubTab = sessionSubTabMap[tabSessionId] || 'configmaps';
   let configmaps: any[] = [];
-  let secrets: any[] = [];
-  let persistentvolumes: any[] = [];
-  let persistentvolumeclaims: any[] = [];
-  
   let loading: boolean = false;
   let error: string | null = null;
-  let lastUpdate: string = '';
+  let searchQuery: string = '';
+  let sortColumn: string = 'name';
+  let sortDirection: 'asc' | 'desc' = 'asc';
+  let selectedConfigMap: any = null;
 
-  // Load config data
-  async function loadConfig() {
-    if (!currentContext || loading) return;
-    
+  // Context Menu State
+  let contextMenuVisible = false;
+  let contextMenuPosition = { x: 0, y: 0 };
+  let contextMenuResource: any = null;
+
+  async function fetchConfigMaps() {
+    if (!currentContext) return;
     loading = true;
     error = null;
-    
     try {
-      // Load all config types in parallel
-      const [configmapsData, secretsData] = await Promise.all([
-        invoke('kuboard_get_configmaps').catch(() => []),
-        invoke('kuboard_get_secrets').catch(() => [])
-      ]);
-
-      configmaps = configmapsData as any[] || [];
-      secrets = secretsData as any[] || [];
-      
-      lastUpdate = new Date().toLocaleTimeString();
-    } catch (err) {
-      error = err as string;
-      console.error('Failed to load config:', err);
+      const data = await invoke('kuboard_get_configmaps');
+      configmaps = (data as any[]) || [];
+    } catch (err: any) {
+      console.error('Failed to fetch ConfigMaps:', err);
+      error = String(err);
     } finally {
       loading = false;
     }
   }
 
-  // Format age
-  function formatAge(creationTimestamp: string): string {
-    if (!creationTimestamp) return 'Unknown';
-    const created = new Date(creationTimestamp);
+  function handleSort(column: string) {
+    if (sortColumn === column) {
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortColumn = column;
+      sortDirection = 'asc';
+    }
+  }
+
+  function formatAge(timestamp: string): string {
+    if (!timestamp) return '-';
+    const created = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - created.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
-    
     if (diffDays > 0) return `${diffDays}d`;
     if (diffHours > 0) return `${diffHours}h`;
     return `${diffMins}m`;
   }
 
-  // Get configmap data count
-  function getConfigmapDataCount(configmap: any): number {
-    return Object.keys(configmap.data || {}).length;
+  function handleContextMenu(event: MouseEvent, cm: any) {
+    event.preventDefault();
+    event.stopPropagation();
+    contextMenuResource = cm;
+    contextMenuPosition = { x: event.clientX, y: event.clientY };
+    contextMenuVisible = true;
   }
 
-  // Get secret type
-  function getSecretType(secret: any): string {
-    return secret.type || 'Opaque';
-  }
-
-  // Get secret data count
-  function getSecretDataCount(secret: any): number {
-    return Object.keys(secret.data || {}).length;
-  }
-
-  // Lifecycle
-  onMount(() => {
-    loadConfig();
+  $: filteredConfigMaps = configmaps.filter(cm => {
+    const matchesNamespace = namespace === 'all' || cm.metadata?.namespace === namespace;
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = !q || 
+      (cm.metadata?.name || '').toLowerCase().includes(q) ||
+      (cm.metadata?.namespace || '').toLowerCase().includes(q);
+    return matchesNamespace && matchesSearch;
   });
 
-  // Reactive updates
-  $: if (currentContext) {
-    loadConfig();
+  $: sortedConfigMaps = [...filteredConfigMaps].sort((a, b) => {
+    let comp = 0;
+    if (sortColumn === 'name') {
+      comp = (a.metadata?.name || '').localeCompare(b.metadata?.name || '');
+    } else if (sortColumn === 'namespace') {
+      comp = (a.metadata?.namespace || '').localeCompare(b.metadata?.namespace || '');
+    } else if (sortColumn === 'keys') {
+      const keysA = Object.keys(a.data || {}).length;
+      const keysB = Object.keys(b.data || {}).length;
+      comp = keysA - keysB;
+    }
+    return sortDirection === 'asc' ? comp : -comp;
+  });
+
+  onMount(() => {
+    fetchConfigMaps();
+  });
+
+  $: if (currentContext || namespace) {
+    fetchConfigMaps();
   }
 </script>
 
-<div class="config-tab">
-  <div class="tab-header">
-    <h4>⚙️ Configuration</h4>
-    <div class="tab-controls">
+<div class="config-tab-container">
+  <!-- Config Sub-Tabs Navigation Header -->
+  <div class="config-top-nav">
+    <div class="sub-tabs">
       <button 
-        class="refresh-button" 
-        onclick={loadConfig}
-        disabled={loading}
-        title="Refresh config"
+        class="sub-tab-btn {activeSubTab === 'configmaps' ? 'active' : ''}" 
+        onclick={() => { sessionSubTabMap[tabSessionId] = 'configmaps'; sessionSubTabMap = { ...sessionSubTabMap }; }}
       >
-        {#if loading}
-          🔄
-        {:else}
-          ↻
-        {/if}
+        <FileText size={15} /> ConfigMaps ({filteredConfigMaps.length})
       </button>
-      {#if lastUpdate}
-        <span class="last-update">Last: {lastUpdate}</span>
-      {/if}
+      <button 
+        class="sub-tab-btn {activeSubTab === 'helm' ? 'active' : ''}" 
+        onclick={() => { sessionSubTabMap[tabSessionId] = 'helm'; sessionSubTabMap = { ...sessionSubTabMap }; }}
+      >
+        <Package size={15} /> Helm Releases
+      </button>
     </div>
+
+    {#if activeSubTab === 'configmaps'}
+      <button class="refresh-btn" onclick={fetchConfigMaps} disabled={loading}>
+        {loading ? '🔄' : '↻ Refresh'}
+      </button>
+    {/if}
   </div>
 
-  {#if error}
-    <div class="error-message">
-      <div class="error-icon">⚠️</div>
-      <div class="error-content">
-        <h5>Failed to load configuration</h5>
-        <p>{error}</p>
-        <button class="retry-button" onclick={loadConfig}>
-          Retry
-        </button>
-      </div>
-    </div>
-  {:else if loading}
-    <div class="loading-message">
-      <div class="loading-spinner">🔄</div>
-      <p>Loading configuration...</p>
-    </div>
-  {:else}
-    <div class="config-grid">
-      <!-- ConfigMaps Section -->
-      <div class="config-section">
-        <div class="section-header">
-          <h5>ConfigMaps ({configmaps.length})</h5>
-        </div>
-        <div class="config-list">
-          {#each configmaps.slice(0, 10) as configmap}
-            <div class="config-item">
-              <div class="config-info">
-                <span class="config-name">{configmap.metadata?.name || 'Unknown'}</span>
-                <span class="config-namespace">{configmap.metadata?.namespace || 'default'}</span>
-              </div>
-              <div class="config-details">
-                <span class="config-data-count">{getConfigmapDataCount(configmap)} keys</span>
-                <span class="config-age">{formatAge(configmap.metadata?.creationTimestamp)}</span>
-              </div>
-            </div>
-          {/each}
-          {#if configmaps.length > 10}
-            <div class="config-more">
-              <span>... and {configmaps.length - 10} more</span>
-            </div>
-          {/if}
-        </div>
-      </div>
+  <!-- Sub-Tab Content View -->
+  {#if activeSubTab === 'configmaps'}
+    {#if selectedConfigMap}
+      <ConfigMapDetails configMap={selectedConfigMap} onBack={() => selectedConfigMap = null} />
+    {:else}
+      {#if error}
+        <div class="alert-error">⚠️ {error}</div>
+      {/if}
 
-      <!-- Secrets Section -->
-      <div class="config-section">
-        <div class="section-header">
-          <h5>Secrets ({secrets.length})</h5>
-        </div>
-        <div class="config-list">
-          {#each secrets.slice(0, 10) as secret}
-            <div class="config-item">
-              <div class="config-info">
-                <span class="config-name">{secret.metadata?.name || 'Unknown'}</span>
-                <span class="config-namespace">{secret.metadata?.namespace || 'default'}</span>
-              </div>
-              <div class="config-details">
-                <span class="config-type">{getSecretType(secret)}</span>
-                <span class="config-data-count">{getSecretDataCount(secret)} keys</span>
-                <span class="config-age">{formatAge(secret.metadata?.creationTimestamp)}</span>
-              </div>
-            </div>
+      <ResourceTable
+        items={configmaps}
+        filteredItems={sortedConfigMaps}
+        bind:searchQuery
+        searchPlaceholder="Search ConfigMaps by name or namespace..."
+        noItemsMessage="No ConfigMaps found in this context."
+        noSearchResultsMessage="No ConfigMaps match your search query:"
+      >
+        <svelte:fragment slot="header">
+          <tr>
+            <th class="sortable" onclick={() => handleSort('name')}>
+              Name {sortColumn === 'name' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+            </th>
+            <th class="sortable" onclick={() => handleSort('namespace')}>
+              Namespace {sortColumn === 'namespace' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+            </th>
+            <th class="sortable" onclick={() => handleSort('keys')}>
+              Data Keys {sortColumn === 'keys' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+            </th>
+            <th>Age</th>
+          </tr>
+        </svelte:fragment>
+
+        <svelte:fragment slot="rows">
+          {#each sortedConfigMaps as cm}
+            <tr 
+              class="clickable-row" 
+              onclick={() => selectedConfigMap = cm}
+              oncontextmenu={(e) => handleContextMenu(e, cm)}
+            >
+              <td class="name-cell">📄 {cm.metadata?.name}</td>
+              <td>{cm.metadata?.namespace || 'default'}</td>
+              <td>{Object.keys(cm.data || {}).length} keys</td>
+              <td>{formatAge(cm.metadata?.creationTimestamp)}</td>
+            </tr>
           {/each}
-          {#if secrets.length > 10}
-            <div class="config-more">
-              <span>... and {secrets.length - 10} more</span>
-            </div>
-          {/if}
-        </div>
-      </div>
+        </svelte:fragment>
+      </ResourceTable>
+    {/if}
+  {:else if activeSubTab === 'helm'}
+    <div class="helm-subtab-wrapper">
+      <HelmTab {currentContext} />
     </div>
   {/if}
 </div>
 
-<style>
-  /* Import CSS variables */
-  @import '../styles/variables.css';
+{#if contextMenuResource}
+  <QuickActionsMenu
+    resource={contextMenuResource}
+    resourceType="configmap"
+    position={contextMenuPosition}
+    bind:visible={contextMenuVisible}
+    on:close={() => contextMenuResource = null}
+    on:deleted={fetchConfigMaps}
+  />
+{/if}
 
-  .config-tab {
-    padding: 0;
+<style>
+  .config-tab-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
   }
 
-  .tab-header {
+  .config-top-nav {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 5px;
-    padding-bottom: var(--spacing-sm);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .tab-header h4 {
-    margin: 0;
-    color: white;
-    font-size: 1.1rem;
-    font-weight: 600;
-  }
-
-  .tab-controls {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-  }
-
-  .refresh-button {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-sm);
-    color: white;
-    cursor: pointer;
-    font-size: 0.9rem;
-    padding: 6px 12px;
-    transition: var(--transition-normal);
-  }
-
-  .refresh-button:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.3);
-  }
-
-  .refresh-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .last-update {
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.6);
-  }
-
-  .error-message {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-md);
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: var(--background-secondary);
+    padding: 8px 12px;
     border-radius: var(--radius-md);
+    border: 1px solid var(--border-primary);
   }
 
-  .error-icon {
-    font-size: 1.2rem;
-    flex-shrink: 0;
+  .sub-tabs {
+    display: flex;
+    gap: 8px;
   }
 
-  .error-content h5 {
-    margin: 0 0 4px 0;
-    color: white;
-    font-size: 0.9rem;
+  .sub-tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
     font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
   }
 
-  .error-content p {
-    margin: 0 0 8px 0;
-    color: rgba(255, 255, 255, 0.8);
+  .sub-tab-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .sub-tab-btn.active {
+    background: var(--primary-color);
+    color: white;
+  }
+
+  .refresh-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border-primary);
+    color: white;
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
     font-size: 0.85rem;
   }
 
-  .retry-button {
-    background: var(--error-color);
-    border: none;
-    border-radius: var(--radius-sm);
-    color: white;
+  .clickable-row {
     cursor: pointer;
-    font-size: 0.8rem;
-    padding: 4px 8px;
-    transition: var(--transition-normal);
   }
 
-  .retry-button:hover {
-    background: #dc2626;
+  .clickable-row:hover {
+    background: rgba(255, 255, 255, 0.05);
   }
 
-  .loading-message {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-xl);
-    color: rgba(255, 255, 255, 0.8);
-  }
-
-  .loading-spinner {
-    font-size: 1.5rem;
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  .config-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: var(--spacing-lg);
-  }
-
-  .config-section {
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-md);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-  }
-
-  .section-header {
-    margin-bottom: var(--spacing-md);
-  }
-
-  .section-header h5 {
-    margin: 0;
-    color: white;
-    font-size: 1rem;
+  .name-cell {
+    color: var(--primary-color);
     font-weight: 600;
   }
 
-  .config-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-  }
-
-  .config-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-sm);
-    background: rgba(255, 255, 255, 0.03);
+  .alert-error {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    padding: 10px 14px;
     border-radius: var(--radius-sm);
-    border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
-  .config-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .config-name {
-    color: white;
-    font-size: 0.9rem;
-    font-weight: 600;
-  }
-
-  .config-namespace {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 0.8rem;
-  }
-
-  .config-details {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
-  }
-
-  .config-type {
-    background: rgba(59, 130, 246, 0.2);
-    color: #3b82f6;
-    padding: 2px 6px;
-    border-radius: var(--radius-sm);
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .config-data-count {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 0.8rem;
-    font-weight: 500;
-  }
-
-  .config-age {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 0.7rem;
-  }
-
-  .config-more {
-    text-align: center;
-    padding: var(--spacing-sm);
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 0.8rem;
-    font-style: italic;
-  }
-
-  /* Responsive Design */
-  @media (max-width: 768px) {
-    .config-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .config-item {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: var(--spacing-sm);
-    }
-    
-    .config-details {
-      align-items: flex-start;
-    }
+  .helm-subtab-wrapper {
+    padding-top: 4px;
   }
 </style>

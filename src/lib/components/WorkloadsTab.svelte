@@ -9,10 +9,12 @@
   import DaemonSetsPanel from './DaemonSetsPanel.svelte';
   import CronJobsPanel from './CronJobsPanel.svelte';
   import ServicesPanel from './ServicesPanel.svelte';
+  import { Box, Boxes, Layers, Cpu, Clock, Copy, Globe } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
   export let selectedNamespace: string = 'all';
+  export let tabSessionId: string = 'tab-default';
 
   // State
   let pods: any[] = [];
@@ -27,17 +29,25 @@
   let loading: boolean = false;
   let error: string | null = null;
   let lastUpdate: string = '';
-  let selectedWorkloadType: string = 'pods';
+
+  let sessionWorkloadTypeMap: Record<string, string> = {};
+  $: selectedWorkloadType = sessionWorkloadTypeMap[tabSessionId] || 'pods';
+
+  function setWorkloadType(typeId: string) {
+    sessionWorkloadTypeMap[tabSessionId] = typeId;
+    sessionWorkloadTypeMap = { ...sessionWorkloadTypeMap };
+  }
+
   let loadedTypes: Set<string> = new Set();
   
   const workloadTypes = [
-    { id: 'pods', label: 'Pods', icon: '🟢' },
-    { id: 'deployments', label: 'Deployments', icon: '📦' },
-    { id: 'statefulsets', label: 'StatefulSets', icon: '📋' },
-    { id: 'daemonsets', label: 'DaemonSets', icon: '⚙️' },
-    { id: 'cronjobs', label: 'CronJobs', icon: '⏰' },
-    { id: 'replicasets', label: 'ReplicaSets', icon: '🔄' },
-    { id: 'services', label: 'Services', icon: '🌐' }
+    { id: 'pods', label: 'Pods', icon: Box },
+    { id: 'deployments', label: 'Deployments', icon: Boxes },
+    { id: 'statefulsets', label: 'StatefulSets', icon: Layers },
+    { id: 'daemonsets', label: 'DaemonSets', icon: Cpu },
+    { id: 'cronjobs', label: 'CronJobs', icon: Clock },
+    { id: 'replicasets', label: 'ReplicaSets', icon: Copy },
+    { id: 'services', label: 'Services', icon: Globe }
   ];
 
   async function loadNamespaces() {
@@ -124,7 +134,7 @@
 
   // Switch workload type
   async function switchWorkloadType(type: string) {
-    selectedWorkloadType = type;
+    setWorkloadType(type);
     await loadWorkloadType(type, true);
   }
 
@@ -185,7 +195,6 @@
 
 <div class="workloads-tab">
   <div class="tab-header">
-    <h4>⚙️ Workloads</h4>
     <div class="tab-controls">
       <div class="namespace-selector">
         <label for="workloads-ns-select">Namespace:</label>
@@ -223,7 +232,9 @@
         class:active={selectedWorkloadType === type.id}
         onclick={() => switchWorkloadType(type.id)}
       >
-        <span class="tab-icon">{type.icon}</span>
+        <span class="tab-icon">
+          <svelte:component this={type.icon} size={15} />
+        </span>
         <span class="tab-label">{type.label}</span>
         {#if loadedTypes.has(type.id)}
           <span class="tab-badge">{getWorkloadCount(type.id)}</span>

@@ -109,9 +109,6 @@
 </script>
 
 <div class="ingress-classes-panel">
-  <div class="panel-header">
-    <h4>🏗️ Ingress Classes ({filteredClasses.length})</h4>
-  </div>
 
   {#if loading && ingressClasses.length === 0}
     <div class="loading-state">

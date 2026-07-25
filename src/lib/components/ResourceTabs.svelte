@@ -1,23 +1,28 @@
 <!-- Kuboard Resource Tabs Component -->
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { 
+    LayoutDashboard, Activity, Boxes, Server, Sliders, Globe, Database, Wrench, Stethoscope, Shield, Layers 
+  } from 'lucide-svelte';
 
   // Props
-  export let activeTab: string = 'workloads';
+  export let activeTab: string = 'overview';
   export let tabs: Array<{
     id: string;
     label: string;
-    icon: string;
+    icon: any;
     count?: number;
     disabled?: boolean;
   }> = [
-    { id: 'workloads', label: 'Workloads', icon: '⚙️', count: 0 },
-    { id: 'nodes', label: 'Nodes', icon: '🖥️', count: 0 },
-    { id: 'config', label: 'Config', icon: '⚙️', count: 0 },
-    { id: 'network', label: 'Network', icon: '🌐', count: 0 },
-    { id: 'storage', label: 'Storage', icon: '💾', count: 0 },
-    { id: 'custom', label: 'Custom Resources', icon: '🔧', count: 0 },
-    { id: 'security', label: 'Security', icon: '🔒', count: 0 }
+    { id: 'overview', label: 'Cluster Details', icon: Activity, count: 0 },
+    { id: 'workloads', label: 'Workloads', icon: Boxes, count: 0 },
+    { id: 'nodes', label: 'Nodes', icon: Server, count: 0 },
+    { id: 'config', label: 'Config', icon: Sliders, count: 0 },
+    { id: 'network', label: 'Network', icon: Globe, count: 0 },
+    { id: 'storage', label: 'Storage', icon: Database, count: 0 },
+    { id: 'custom', label: 'Custom Resources', icon: Wrench, count: 0 },
+    { id: 'linter', label: 'Linter', icon: Stethoscope, count: 0 },
+    { id: 'security', label: 'Security', icon: Shield, count: 0 }
   ];
 
   // Events
@@ -44,7 +49,10 @@
 
 <div class="resource-tabs-container">
   <div class="tabs-header">
-    <h3>📋 Resource Management</h3>
+    <div class="title-wrap">
+      <LayoutDashboard size={18} class="title-icon" />
+      <h3>Resource Management</h3>
+    </div>
     <div class="tabs-summary">
       <span class="summary-text">
         {tabs.filter(t => !t.disabled).length} categories available
@@ -61,7 +69,13 @@
         onclick={() => selectTab(tab.id)}
         title={tab.disabled ? 'Coming soon' : tab.label}
       >
-        <span class="tab-icon">{tab.icon}</span>
+        <span class="tab-icon">
+          {#if typeof tab.icon === 'string'}
+            {tab.icon}
+          {:else}
+            <svelte:component this={tab.icon} size={16} />
+          {/if}
+        </span>
         <span class="tab-label">{tab.label}</span>
         {#if tab.count !== undefined && tab.count > 0}
           <span class="tab-count">{tab.count}</span>
@@ -87,6 +101,13 @@
     margin-bottom: 5px;
     padding-bottom: var(--spacing-sm);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--primary-color);
   }
 
   .tabs-header h3 {

@@ -321,6 +321,59 @@ pub async fn kuboard_get_pod_logs(
     }
 }
 
+#[tauri::command]
+pub async fn kuboard_get_workload_logs(
+    resource_type: String,
+    resource_name: String,
+    namespace: String,
+    tail_lines: Option<u32>,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("Fetching aggregated workload logs for {} {}/{}", resource_type, namespace, resource_name);
+
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &namespace);
+    let lp = kube::api::ListParams::default();
+
+    let pod_list = pods_api.list(&lp).await.map_err(|e| e.to_string())?;
+
+    let matching_pods: Vec<Pod> = pod_list.items.into_iter().filter(|p| {
+        if let Some(ref owner_refs) = p.metadata.owner_references {
+            owner_refs.iter().any(|o| o.name.contains(&resource_name) || resource_name.contains(&o.name))
+        } else {
+            p.metadata.name.as_deref().unwrap_or("").contains(&resource_name)
+        }
+    }).take(5).collect();
+
+    if matching_pods.is_empty() {
+        return Ok(format!("No active pods found for {}/{}\n", namespace, resource_name));
+    }
+
+    let mut merged_logs = String::new();
+    let per_pod_tail = std::cmp::max(10, tail_lines.unwrap_or(50) / (matching_pods.len() as u32));
+
+    for pod in matching_pods {
+        if let Some(pod_name) = pod.metadata.name {
+            match kuboard_fetch_pod_logs(client, &pod_name, &namespace, None, Some(per_pod_tail), false).await {
+                Ok(logs) => {
+                    for line in logs.lines() {
+                        merged_logs.push_str(&format!("[{}] {}\n", pod_name, line));
+                    }
+                }
+                Err(e) => {
+                    merged_logs.push_str(&format!("[{}] Error: {}\n", pod_name, e));
+                }
+            }
+        }
+    }
+
+    Ok(merged_logs)
+}
+
 // Cluster-wide metrics command
 #[tauri::command]
 pub async fn kuboard_get_cluster_metrics(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
