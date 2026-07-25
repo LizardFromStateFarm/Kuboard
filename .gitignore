@@ -9,7 +9,7 @@ build/
 dist/
 .svelte-kit/
 .output/
-.gemini/*
+.gemini/
 
 # Tauri
 src-tauri/target/
