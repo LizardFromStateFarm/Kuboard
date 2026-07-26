@@ -2,6 +2,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { Lock, ArrowLeft, Check, AlertTriangle, Copy, Save, Eye, EyeOff, FileEdit, Trash2, Key } from 'lucide-svelte';
 
   export let secret: any;
   export let onBack: () => void = () => {};
@@ -143,24 +144,24 @@
 <div class="secret-details-container">
   <!-- Top Navigation & Action Header -->
   <div class="details-top-bar">
-    <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}>← Back</button>
+    <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}><ArrowLeft size={14} class="inline-icon" /> Back</button>
     <div class="top-title">
-      <span class="resource-icon">🔒</span>
+      <span class="resource-icon"><Lock size={18} /></span>
       <h3>{secret?.metadata?.name}</h3>
       <span class="namespace-pill">{secret?.metadata?.namespace || 'default'}</span>
       <span class="type-pill">{secret?.type || 'Opaque'}</span>
     </div>
     {#if copyFeedback}
-      <span class="copy-notice">✓ {copyFeedback}</span>
+      <span class="copy-notice"><Check size={14} class="inline-icon" /> {copyFeedback}</span>
     {/if}
   </div>
 
   {#if saveError}
-    <div class="alert-box error">⚠️ {saveError}</div>
+    <div class="alert-box error"><AlertTriangle size={15} class="inline-icon" /> {saveError}</div>
   {/if}
 
   {#if saveSuccess}
-    <div class="alert-box success">✓ {saveSuccess}</div>
+    <div class="alert-box success"><Check size={15} class="inline-icon" /> {saveSuccess}</div>
   {/if}
 
   <!-- Master Secret Specs Sheet -->
@@ -191,7 +192,7 @@
     <!-- Interactive Data Key Values Editor -->
     <div class="section-card">
       <div class="card-header-bar">
-        <h4>🔒 Secret Data Entries & Values ({Object.keys(secretData).length})</h4>
+        <h4><Key size={16} /> Secret Data Entries & Values ({Object.keys(secretData).length})</h4>
         <button class="btn-primary-sm" onclick={() => isAddingKey = !isAddingKey}>
           {isAddingKey ? 'Cancel' : '+ Add Secret Key'}
         </button>
@@ -218,7 +219,7 @@
           <div class="key-row">
             <div class="key-info">
               <span class="key-name"><code>{key}</code></span>
-              <button class="btn-icon" onclick={() => copyToClipboard(key, 'Key Name')} title="Copy Key Name">📋</button>
+              <button class="btn-icon" onclick={() => copyToClipboard(key, 'Key Name')} title="Copy Key Name"><Copy size={13} /></button>
             </div>
 
             <div class="val-container">
@@ -231,7 +232,7 @@
                   <textarea bind:value={editValue} rows="3"></textarea>
                   <div class="editor-actions">
                     <button class="btn-save" onclick={() => handleSaveEditKey(key)} disabled={isSaving}>
-                      {isSaving ? 'Saving...' : '💾 Save'}
+                      <Save size={13} class="inline-icon" /> {isSaving ? 'Saving...' : 'Save'}
                     </button>
                     <button class="btn-cancel" onclick={cancelEdit}>Cancel</button>
                   </div>
@@ -247,15 +248,19 @@
 
                 <div class="row-actions">
                   <button class="btn-sm" onclick={() => toggleDecode(key)}>
-                    {showDecoded[key] ? '👁️ Hide' : '🔓 Reveal'}
+                    {#if showDecoded[key]}
+                      <EyeOff size={13} class="inline-icon" /> Hide
+                    {:else}
+                      <Eye size={13} class="inline-icon" /> Reveal
+                    {/if}
                   </button>
                   {#if showDecoded[key]}
                     <button class="btn-sm" onclick={() => copyToClipboard(decodeBase64(val), 'Decoded Value')}>
-                      📋 Copy Plain
+                      <Copy size={13} class="inline-icon" /> Copy Plain
                     </button>
                   {/if}
-                  <button class="btn-sm" onclick={() => startEdit(key, val)}>✏️ Edit</button>
-                  <button class="btn-sm danger" onclick={() => handleDeleteKey(key)}>🗑️</button>
+                  <button class="btn-sm" onclick={() => startEdit(key, val)}><FileEdit size={13} class="inline-icon" /> Edit</button>
+                  <button class="btn-sm danger" onclick={() => handleDeleteKey(key)} title="Delete Key"><Trash2 size={13} /></button>
                 </div>
               {/if}
             </div>

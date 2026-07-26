@@ -9,6 +9,7 @@
   import { onMount, onDestroy } from 'svelte';
   import TerminalWindow from './TerminalWindow.svelte';
   import { activeLogsState } from '$lib/stores/logs';
+  import { Terminal as TerminalIcon, FileText, Box, AlertTriangle, Pause, Play, RefreshCw, Radio, Loader2 } from 'lucide-svelte';
   
   // Props
   export let isOpen = false;
@@ -630,7 +631,12 @@
                   id="log-tab-{tab.id}"
                 >
                   <span class="tab-name">
-                    {tab.type === 'terminal' ? '💻 exec: ' : '📋 '}{tab.podName}
+                    {#if tab.type === 'terminal'}
+                      <TerminalIcon size={13} class="inline-icon" /> exec: 
+                    {:else}
+                      <FileText size={13} class="inline-icon" /> 
+                    {/if}
+                    {tab.podName}
                     {#if tab.containerName}
                       <span class="container-name">/{tab.containerName}</span>
                     {/if}
@@ -655,7 +661,7 @@
             {@const activeTabObj = tabs.find(t => t.id === activeTab)}
             {#if activeTabObj}
               <div class="container-select-wrapper" title="Switch container logs">
-                <span class="container-label">📦 Container:</span>
+                <span class="container-label"><Box size={14} class="inline-icon" /> Container:</span>
                 <input
                   type="text"
                   class="container-input"
@@ -730,7 +736,7 @@
               onclick={jumpToNextError}
               title="Jump to next error/stack trace"
             >
-              🚨 Errors ({errorIndices.length})
+              <AlertTriangle size={14} class="inline-icon text-error" /> Errors ({errorIndices.length})
             </button>
           {/if}
           <button 
@@ -738,10 +744,14 @@
             onclick={toggleFollowMode}
             title={followMode ? 'Stop following logs' : 'Follow logs (auto-refresh)'}
           >
-            {followMode ? '⏸️' : '▶️'}
+            {#if followMode}
+              <Pause size={14} />
+            {:else}
+              <Play size={14} />
+            {/if}
           </button>
           <button class="control-button compact" onclick={refreshCurrentLogs} title="Refresh current logs">
-            🔄
+            <RefreshCw size={14} />
           </button>
           <button 
             class="control-button compact" 
@@ -771,12 +781,12 @@
               />
             {:else if loading[activeTab] && !(entriesByTab[activeTab] && entriesByTab[activeTab].length > 0)}
               <div class="logs-loading">
-                <div class="loading-spinner">⏳</div>
+                <div class="loading-spinner"><Loader2 size={24} class="spin" /></div>
                 <p>Loading logs...</p>
               </div>
             {:else if errors[activeTab]}
               <div class="logs-error">
-                <div class="error-icon">⚠️</div>
+                <div class="error-icon"><AlertTriangle size={24} /></div>
                 <p>{errors[activeTab]}</p>
                 <button class="retry-button" onclick={refreshCurrentLogs}>
                   Retry
@@ -801,7 +811,7 @@
                       onclick={() => entry.isExpanded = !entry.isExpanded} 
                       onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (entry.isExpanded = !entry.isExpanded)}
                     >
-                      {#if hasStackTrace}<span class="stack-trace-badge">🚨 STACK TRACE</span>{/if}
+                      {#if hasStackTrace}<span class="stack-trace-badge"><AlertTriangle size={12} class="inline-icon" /> STACK TRACE</span>{/if}
                       {@html searchQuery.trim() ? highlightText(displayMessage, searchQuery) : displayMessage}
                     </span>
                   </div>
@@ -835,9 +845,9 @@
             {#if entriesByTab[activeTab]}
               <span>{entriesByTab[activeTab].length} lines</span>
               {#if followMode}
-                <span class="follow-indicator">📡 Following</span>
+                <span class="follow-indicator"><Radio size={12} class="inline-icon spin-slow" /> Following</span>
               {:else}
-                <span class="follow-indicator paused">⏸️ Paused</span>
+                <span class="follow-indicator paused"><Pause size={12} class="inline-icon" /> Paused</span>
               {/if}
             {/if}
           </div>

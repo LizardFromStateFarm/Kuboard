@@ -2,6 +2,7 @@
 <script lang="ts">
   import type { ExpandedPanel } from '../types/index.js';
   import { createEventDispatcher } from 'svelte';
+  import { Server, Folder, Box, Layers, ClipboardList } from 'lucide-svelte';
 
   // Props
   export let clusterOverview: any = null;
@@ -38,7 +39,7 @@
 {#if !currentContext}
   <div class="no-context-message">
     <div class="message-content">
-      <h2>📋 Resource Overview</h2>
+      <h2><ClipboardList size={22} class="inline-icon" /> Resource Overview</h2>
       <p>Select a Kubernetes context above to view cluster resources.</p>
     </div>
   </div>
@@ -56,7 +57,7 @@
       onkeydown={(e) => e.key === 'Enter' || e.key === ' ' ? togglePanel('nodes') : null}
     >
       <div class="panel-content">
-        <div class="panel-icon">🖥️</div>
+        <div class="panel-icon"><Server size={24} /></div>
         <div class="panel-title">Nodes</div>
         <div class="panel-count">{nodes.length}</div>
         <div class="panel-subtitle">
@@ -109,7 +110,7 @@
       onkeydown={(e) => e.key === 'Enter' || e.key === ' ' ? togglePanel('namespaces') : null}
     >
       <div class="panel-content">
-        <div class="panel-icon">📁</div>
+        <div class="panel-icon"><Folder size={24} /></div>
         <div class="panel-title">Namespaces</div>
         <div class="panel-count">{namespaces.length}</div>
         <div class="panel-subtitle">
@@ -156,7 +157,7 @@
       onkeydown={(e) => e.key === 'Enter' || e.key === ' ' ? togglePanel('pods') : null}
     >
       <div class="panel-content">
-        <div class="panel-icon">🚀</div>
+        <div class="panel-icon"><Box size={24} /></div>
         <div class="panel-title">Pods</div>
         <div class="panel-count">{pods.length}</div>
         <div class="panel-subtitle">
@@ -209,7 +210,7 @@
       onkeydown={(e) => e.key === 'Enter' || e.key === ' ' ? togglePanel('deployments') : null}
     >
       <div class="panel-content">
-        <div class="panel-icon">⚙️</div>
+        <div class="panel-icon"><Layers size={24} /></div>
         <div class="panel-title">Deployments</div>
         <div class="panel-count">{deployments.length}</div>
         <div class="panel-subtitle">
@@ -234,8 +235,8 @@
                 >
                   <div class="resource-name">{deployment.metadata?.name || 'Unknown'}</div>
                   <div class="resource-info">
-                    <span class="status-badge status-{getStatusClass(deployment.status?.conditions?.find(c => c.type === 'Available')?.status || 'Unknown')}">
-                      {deployment.status?.conditions?.find(c => c.type === 'Available')?.status || 'Unknown'}
+                    <span class="status-badge status-{getStatusClass(deployment.status?.conditions?.find((c: any) => c.type === 'Available')?.status || 'Unknown')}">
+                      {deployment.status?.conditions?.find((c: any) => c.type === 'Available')?.status || 'Unknown'}
                     </span>
                     <span class="resource-detail">
                       Namespace: {deployment.metadata?.namespace || 'Unknown'}

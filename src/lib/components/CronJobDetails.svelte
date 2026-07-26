@@ -2,6 +2,7 @@
   import { onMount, createEventDispatcher } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import { ArrowLeft, Settings, Zap, Tag, Loader2 } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -120,8 +121,8 @@
   <!-- Top Action Bar -->
   <div class="details-nav-bar">
     <div class="nav-actions">
-      <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}>← Back to CronJobs</button>
-      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}>⚙️ Actions</button>
+      <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}><ArrowLeft size={14} class="inline-icon" /> Back to CronJobs</button>
+      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}><Settings size={14} class="inline-icon" /> Actions</button>
     </div>
     <div class="nav-heading">
       <span class="status-pill status-{getStatusClass(status)}">{status}</span>
@@ -158,9 +159,9 @@
 
     <!-- Active/Recent Jobs -->
     <div class="sheet-section">
-      <h5>⚡ Recent Jobs ({managedJobs.length})</h5>
+      <h5><Zap size={16} /> Recent Jobs ({managedJobs.length})</h5>
       {#if jobsLoading}
-        <div class="muted-text">⏳ Loading jobs...</div>
+        <div class="muted-text"><Loader2 size={14} class="spin inline-icon" /> Loading jobs...</div>
       {:else if managedJobs.length > 0}
         <div class="jobs-table">
           <div class="j-head">
@@ -185,7 +186,7 @@
 
     <!-- Labels & Annotations -->
     <div class="sheet-section">
-      <h5>🏷️ Labels & Annotations</h5>
+      <h5><Tag size={16} /> Labels & Annotations</h5>
       <div class="kv-grid">
         <div class="kv-block">
           <span class="kv-title">Labels</span>

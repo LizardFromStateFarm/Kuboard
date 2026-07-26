@@ -2,7 +2,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { FileText } from 'lucide-svelte';
+  import { FileText, ArrowLeft, Copy, FileEdit, Trash2, Save, AlertTriangle, Check } from 'lucide-svelte';
 
   export let configMap: any;
   export let onBack: () => void = () => {};
@@ -115,23 +115,23 @@
 
 <div class="cm-details-container">
   <div class="details-top-bar">
-    <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}>← Back</button>
+    <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}><ArrowLeft size={14} class="inline-icon" /> Back</button>
     <div class="top-title">
-      <span class="resource-icon">⚙️</span>
+      <span class="resource-icon"><FileText size={18} /></span>
       <h3>{configMap?.metadata?.name}</h3>
       <span class="namespace-pill">{configMap?.metadata?.namespace || 'default'}</span>
     </div>
     {#if copyFeedback}
-      <span class="copy-notice">✓ {copyFeedback}</span>
+      <span class="copy-notice"><Check size={14} class="inline-icon" /> {copyFeedback}</span>
     {/if}
   </div>
 
   {#if saveError}
-    <div class="alert-box error">⚠️ {saveError}</div>
+    <div class="alert-box error"><AlertTriangle size={15} class="inline-icon" /> {saveError}</div>
   {/if}
 
   {#if saveSuccess}
-    <div class="alert-box success">✓ {saveSuccess}</div>
+    <div class="alert-box success"><Check size={15} class="inline-icon" /> {saveSuccess}</div>
   {/if}
 
   <div class="details-sheet">
@@ -185,9 +185,9 @@
             <div class="key-header">
               <span class="key-title"><code>{key}</code></span>
               <div class="key-actions">
-                <button class="btn-sm" onclick={() => copyToClipboard(String(val), 'Value')}>📋 Copy Value</button>
-                <button class="btn-sm" onclick={() => startEdit(key, String(val))}>✏️ Edit</button>
-                <button class="btn-sm danger" onclick={() => handleDeleteKey(key)}>🗑️</button>
+                <button class="btn-sm" onclick={() => copyToClipboard(String(val), 'Value')}><Copy size={13} class="inline-icon" /> Copy Value</button>
+                <button class="btn-sm" onclick={() => startEdit(key, String(val))}><FileEdit size={13} class="inline-icon" /> Edit</button>
+                <button class="btn-sm danger" onclick={() => handleDeleteKey(key)} title="Delete Key"><Trash2 size={13} /></button>
               </div>
             </div>
 
@@ -196,7 +196,7 @@
                 <textarea bind:value={editValue} rows="6"></textarea>
                 <div class="editor-actions">
                   <button class="btn-save" onclick={() => handleSaveEditKey(key)} disabled={isSaving}>
-                    {isSaving ? 'Saving...' : '💾 Save'}
+                    <Save size={13} class="inline-icon" /> {isSaving ? 'Saving...' : 'Save'}
                   </button>
                   <button class="btn-cancel" onclick={cancelEdit}>Cancel</button>
                 </div>

@@ -10,7 +10,7 @@
   import PodConditions from './PodConditions.svelte';
   import PodEvents from './PodEvents.svelte';
   import PodVolumes from './PodVolumes.svelte';
-  import { Activity, HardDrive, Boxes, CheckCircle2, ArrowLeft, Terminal, FileText } from 'lucide-svelte';
+  import { Activity, HardDrive, Boxes, CheckCircle2, ArrowLeft, Terminal, FileText, Plug, Settings, Tag, MapPin, Zap, Search, AlertTriangle, ExternalLink, X, Loader2 } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -354,11 +354,11 @@ spec:
   <!-- Sleek Top Action Bar -->
   <div class="pod-nav-bar">
     <div class="nav-actions">
-      <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}>← Back to Pods</button>
-      <button class="btn-subtle" onclick={() => onOpenLogs(pod)}>📋 Logs</button>
-      <button class="btn-subtle" onclick={() => openGlobalPodTerminal(undefined, pod?.metadata?.name, pod?.metadata?.namespace, selectedContainer?.name)} title="Exec into Pod">💻 Exec</button>
-      <button class="btn-subtle" onclick={() => portForwardManagerOpen = true} title="Port Forward">🔌 Port Forward</button>
-      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}>⚙️ Actions</button>
+      <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}><ArrowLeft size={14} class="inline-icon" /> Back to Pods</button>
+      <button class="btn-subtle" onclick={() => onOpenLogs(pod)}><FileText size={14} class="inline-icon" /> Logs</button>
+      <button class="btn-subtle" onclick={() => openGlobalPodTerminal(undefined, pod?.metadata?.name, pod?.metadata?.namespace, selectedContainer?.name)} title="Exec into Pod"><Terminal size={14} class="inline-icon" /> Exec</button>
+      <button class="btn-subtle" onclick={() => portForwardManagerOpen = true} title="Port Forward"><Plug size={14} class="inline-icon" /> Port Forward</button>
+      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}><Settings size={14} class="inline-icon" /> Actions</button>
     </div>
   </div>
 
@@ -367,7 +367,7 @@ spec:
     <!-- Key Specs Summary Strip -->
     <div class="sheet-section specs-strip">
       <div class="spec-cell pod-name-spec-cell">
-        <span class="spec-label">Pod Name {#if copiedNotice}<span class="copy-success-badge">✓ Copied!</span>{/if}</span>
+        <span class="spec-label">Pod Name {#if copiedNotice}<span class="copy-success-badge">Copied!</span>{/if}</span>
         <div class="pod-name-wrap">
           <span class="status-pill status-{getStatusClass(pod.status?.phase)}">{pod.status?.phase}</span>
           <h3 
@@ -399,7 +399,7 @@ spec:
         <span class="spec-label">Controlled By</span>
         {#if getControllerInfo(pod).type !== 'Pod' && getControllerInfo(pod).name !== 'Unknown'}
           <button class="controller-link-btn" onclick={navigateToController} title="Navigate to {getControllerInfo(pod).type} Details">
-            🔗 {getControllerInfo(pod).type} / {getControllerInfo(pod).name} ↗
+            <ExternalLink size={13} class="inline-icon" /> {getControllerInfo(pod).type} / {getControllerInfo(pod).name}
           </button>
         {:else}
           <span class="spec-val">None (Standalone Pod)</span>
@@ -442,7 +442,7 @@ spec:
         </div>
       </div>
       {#if metricsLoading}
-        <div class="metrics-loading"><div class="spinner-sm">⏳</div><p>Loading metrics...</p></div>
+        <div class="metrics-loading"><div class="spinner-sm"><Loader2 size={16} class="spin" /></div><p>Loading metrics...</p></div>
       {:else if podMetrics}
         <MetricsGraph 
           data={podMetrics} 
@@ -463,7 +463,7 @@ spec:
 
     <!-- Labels & Annotations -->
     <div class="sheet-section">
-      <h5>🏷️ Labels & Annotations</h5>
+      <h5><Tag size={16} /> Labels & Annotations</h5>
       <div class="kv-grid">
         <div class="kv-block">
           <span class="kv-title">Labels</span>
@@ -494,7 +494,7 @@ spec:
 
     <!-- Tolerations & Scheduling -->
     <div class="sheet-section">
-      <h5>📍 Tolerations & Scheduling</h5>
+      <h5><MapPin size={16} /> Tolerations & Scheduling</h5>
       <div class="kv-grid">
         <div class="kv-block">
           <span class="kv-title">Tolerations</span>
@@ -568,8 +568,8 @@ spec:
               </div>
               <div class="c-cell">{containerStatus?.restartCount || 0}</div>
               <div class="c-cell actions">
-                <button class="icon-btn" onclick={(e) => { e.stopPropagation(); onOpenLogs(pod); }} title="Logs">📋</button>
-                <button class="icon-btn" onclick={(e) => { e.stopPropagation(); selectContainer(c); }} title="Details">🔍</button>
+                <button class="icon-btn" onclick={(e) => { e.stopPropagation(); onOpenLogs(pod); }} title="Logs"><FileText size={14} /></button>
+                <button class="icon-btn" onclick={(e) => { e.stopPropagation(); selectContainer(c); }} title="Details"><Search size={14} /></button>
               </div>
             </div>
           {/each}
@@ -602,7 +602,7 @@ spec:
 
     <!-- Pod Events -->
     <div class="sheet-section">
-      <h5>⚡ Pod Events</h5>
+      <h5><Zap size={16} /> Pod Events</h5>
       <PodEvents events={podEvents} loading={eventsLoading} error={eventsError} onRetry={loadPodEvents} />
     </div>
 
@@ -624,18 +624,18 @@ spec:
           <h4>{currentControllerInfo.name}</h4>
           <span class="ns-badge">{pod.metadata?.namespace}</span>
         </div>
-        <button class="close-modal-btn" onclick={() => controllerModalOpen = false}>×</button>
+        <button class="close-modal-btn" onclick={() => controllerModalOpen = false}><X size={14} /></button>
       </div>
 
       <div class="controller-modal-body">
         {#if controllerLoading}
-          <div class="modal-loading-spinner">⏳ Fetching {currentControllerInfo.type} controller details...</div>
+          <div class="modal-loading-spinner"><Loader2 size={16} class="spin inline-icon" /> Fetching {currentControllerInfo.type} controller details...</div>
         {:else if controllerError}
-          <div class="modal-error">⚠️ Failed to load controller details: {controllerError}</div>
+          <div class="modal-error"><AlertTriangle size={15} class="inline-icon" /> Failed to load controller details: {controllerError}</div>
         {:else}
           <div class="modal-top-actions">
             <button class="btn-navigate" onclick={() => navigateToWorkload(currentControllerInfo.type, currentControllerInfo.name)}>
-              🚀 Open {currentControllerInfo.type} Tab
+              <ExternalLink size={14} class="inline-icon" /> Open {currentControllerInfo.type} Tab
             </button>
           </div>
           <pre class="yaml-code">{controllerYaml}</pre>

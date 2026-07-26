@@ -5,11 +5,18 @@
   import ResourceTable from './ResourceTable.svelte';
   import ReplicaSetDetails from './ReplicaSetDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import { RefreshCw } from 'lucide-svelte';
+  import MultiNamespaceSelect from './MultiNamespaceSelect.svelte';
 
   // Props
   export let currentContext: any = null;
   export let replicasets: any[] = [];
   export let initialSelectedName: string | null = null;
+  export let selectedNamespace: string = 'all';
+  export let selectedNamespaces: string[] = ['all'];
+  export let namespacesList: string[] = [];
+  export let loading: boolean = false;
+  export let onRefresh: (() => void) | null = null;
 
   // State
   let selectedReplicaSet: any = null;
@@ -190,13 +197,25 @@
     return timeA - timeB;
   }
 
+  function filterByNs(list: any[], nsList: string[]) {
+    if (!nsList || nsList.length === 0 || nsList.includes('all')) {
+      return list;
+    }
+    return list.filter(item => {
+      const ns = item.metadata?.namespace || item.namespace;
+      return nsList.includes(ns);
+    });
+  }
+
+  $: nsFilteredReplicaSets = filterByNs(replicasets, selectedNamespaces);
+
   // Reactive sorted and filtered replicasets
   $: sortedReplicaSets = (() => {
     if (!sortColumn || !sortDirection) {
-      return replicasets;
+      return nsFilteredReplicaSets;
     }
     
-    const sorted = [...replicasets];
+    const sorted = [...nsFilteredReplicaSets];
     sorted.sort((a, b) => {
       let comparison = 0;
       
@@ -265,6 +284,23 @@
         noItemsMessage="No ReplicaSets are currently in this cluster"
         noSearchResultsMessage="No ReplicaSets match your search query:"
       >
+        <div slot="controls" class="table-controls-right">
+          {#if namespacesList && namespacesList.length > 0}
+            <MultiNamespaceSelect bind:selectedNamespaces={selectedNamespaces} {namespacesList} />
+          {/if}
+
+          {#if onRefresh}
+            <button 
+              class="refresh-button" 
+              onclick={onRefresh}
+              disabled={loading}
+              title="Refresh replicasets"
+            >
+              <RefreshCw size={14} class={loading ? 'spin' : ''} />
+            </button>
+          {/if}
+        </div>
+
         <svelte:fragment slot="table">      <div class="replicasets-table">
         <div class="table-header">
           <div class="header-cell sortable" onclick={() => handleSort('name')} role="button" tabindex="0">

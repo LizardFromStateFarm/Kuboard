@@ -5,10 +5,17 @@
   import ResourceTable from './ResourceTable.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   import ServiceDetails from './ServiceDetails.svelte';
+  import { RefreshCw } from 'lucide-svelte';
+  import MultiNamespaceSelect from './MultiNamespaceSelect.svelte';
 
   // Props
   export let currentContext: any = null;
   export let namespace: string = 'all';
+  export let selectedNamespace: string = 'all';
+  export let selectedNamespaces: string[] = ['all'];
+  export let namespacesList: string[] = [];
+  export let loading: boolean = false;
+  export let onRefresh: (() => void) | null = null;
   export let initialSelectedName: string | null = null;
 
   // State
@@ -118,7 +125,19 @@
     selectedService = null;
   }
 
-  $: filteredServices = services
+  function filterByNs(list: any[], nsList: string[]) {
+    if (!nsList || nsList.length === 0 || nsList.includes('all')) {
+      return list;
+    }
+    return list.filter(item => {
+      const ns = item.metadata?.namespace || item.namespace;
+      return nsList.includes(ns);
+    });
+  }
+
+  $: nsFilteredServices = filterByNs(services, selectedNamespaces);
+
+  $: filteredServices = nsFilteredServices
     .filter(s => {
       const name = s.metadata.name.toLowerCase();
       const query = searchQuery.toLowerCase();
@@ -184,6 +203,23 @@
         noItemsMessage="No Services found."
         noSearchResultsMessage="No Services match your search query:"
       >
+        <div slot="controls" class="table-controls-right">
+          {#if namespacesList && namespacesList.length > 0}
+            <MultiNamespaceSelect bind:selectedNamespaces={selectedNamespaces} {namespacesList} />
+          {/if}
+
+          {#if onRefresh || fetchServices}
+            <button 
+              class="refresh-button" 
+              onclick={onRefresh || fetchServices}
+              disabled={loading}
+              title="Refresh services"
+            >
+              <RefreshCw size={14} class={loading ? 'spin' : ''} />
+            </button>
+          {/if}
+        </div>
+
         <svelte:fragment slot="header">
           <th class="sortable" onclick={() => handleSort('name')}>Name</th>
           <th class="sortable" onclick={() => handleSort('namespace')}>Namespace</th>

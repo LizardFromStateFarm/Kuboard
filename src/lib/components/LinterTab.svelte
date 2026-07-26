@@ -2,7 +2,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
-  import { Stethoscope } from 'lucide-svelte';
+  import { Stethoscope, RefreshCw, Play, AlertTriangle, Sparkles, CheckCircle2 } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
@@ -71,9 +71,9 @@
         disabled={loading}
       >
         {#if loading}
-          🔄 Analyzing...
+          <RefreshCw size={15} class="spin" /> Analyzing...
         {:else}
-          🚀 Run Analysis
+          <Play size={15} /> Run Analysis
         {/if}
       </button>
       {#if lastRun}
@@ -84,7 +84,7 @@
 
   {#if error}
     <div class="error-banner">
-      <span class="error-icon">⚠️</span>
+      <span class="error-icon"><AlertTriangle size={18} /></span>
       <p>{error}</p>
     </div>
   {:else if loading && !report}
@@ -113,7 +113,7 @@
       <div class="findings-list">
         {#if report.findings.length === 0}
           <div class="clean-state">
-            <div class="clean-icon">✨</div>
+            <div class="clean-icon"><Sparkles size={36} /></div>
             <h5>Cluster is Healthy!</h5>
             <p>No issues found in the current namespace analysis.</p>
           </div>

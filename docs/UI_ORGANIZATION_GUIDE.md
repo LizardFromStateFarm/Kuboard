@@ -9,7 +9,7 @@ src/
 ├── app.html                      # HTML root template
 ├── routes/
 │   ├── +layout.ts                # Layout configuration (SSR disabled for Tauri desktop)
-│   ├── +page.svelte              # Main application dashboard (orchestrates layout & tabs)
+│   ├── +page.svelte              # Main application dashboard (orchestrates layout, tabs & interactive welcome context selection grid)
 │   └── page-optimized.svelte     # Experimental cached dashboard
 └── lib/
     ├── components/               # Reusable UI components (58 components)
@@ -17,16 +17,17 @@ src/
     │   ├── GlobalSearch.svelte   # Command palette / global resource search modal
     │   ├── KeyboardManager.svelte# Keyboard shortcuts listener & overlay
     │   ├── ClusterOverview.svelte# Cluster summary, nodes overview, debug console
-    │   ├── ClusterMetrics.svelte # Donut charts for cluster CPU/Memory/Disk usage
+    │   ├── ClusterMetrics.svelte # Donut charts & node pool capacity visualizers
     │   ├── DonutChart.svelte     # SVG/CSS donut chart visualizer
-    │   ├── MetricsGraph.svelte   # Chart.js time-series utilization graph
-    │   ├── ResourceTable.svelte  # Generic table with search, sort, and pagination
-    │   ├── TabbedContent.svelte  # Main tab container (Workloads, Nodes, Network, etc.)
-    │   ├── ResourceTabs.svelte   # Top-level tab navigation bar with counts
+    │   ├── MetricsGraph.svelte   # Chart.js time-series utilization graph with 15m/30m/1h/6h/24h resolution toggles
+    │   ├── ResourceTable.svelte  # Generic table with persistent search bar, multi-namespace controls slot, empty-state persistence, sort, and bulk actions
+    │   ├── MultiNamespaceSelect.svelte # Multi-select namespace dropdown filter with search popover, batch checkbox selection, and instant event dispatching
+    │   ├── TabbedContent.svelte  # Main tab container with isolated per-session navigation (tabSessionId)
+    │   ├── ResourceTabs.svelte   # Top-level tab navigation bar with single-line auto-shrinking flex layout
     │   │
-    │   ├── WorkloadsTab.svelte   # Container for workload sub-tabs
-    │   │   ├── PodsPanel.svelte           # Pod list, search, filter, sorting
-    │   │   ├── PodDetails.svelte          # Pod detail view
+    │   ├── WorkloadsTab.svelte   # Container for workload sub-tabs (Pods, Deployments, StatefulSets, DaemonSets, CronJobs, ReplicaSets, Services) with multi-select namespace filter & persistent search controls
+    │   │   ├── PodsPanel.svelte           # Pod list, search, multi-namespace auto-refresh filtering, watch stream
+    │   │   ├── PodDetails.svelte          # Pod detail view with interactive click-to-copy pod name banner
     │   │   ├── PodConditions.svelte       # Pod conditions list
     │   │   ├── PodEvents.svelte           # Pod-specific event stream
     │   │   ├── PodVolumes.svelte          # Pod volume mounts view

@@ -3,6 +3,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   import { openGlobalPodLogs } from '../stores/logs';
+  import { ArrowLeft, Sliders, RefreshCw, FileText, Settings, AlertTriangle, Boxes, Box, Tag, ExternalLink, Loader2 } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -233,17 +234,17 @@
   <!-- Top Action Bar -->
   <div class="details-nav-bar">
     <div class="nav-actions">
-      <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}>← Back to Deployments</button>
+      <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}><ArrowLeft size={14} class="inline-icon" /> Back to Deployments</button>
       <button class="btn-subtle" onclick={() => { showScaleInput = !showScaleInput; scaleValue = desired; }}>
-        ⚡ {showScaleInput ? 'Cancel Scale' : 'Scale'}
+        <Sliders size={14} class="inline-icon" /> {showScaleInput ? 'Cancel Scale' : 'Scale'}
       </button>
       <button class="btn-subtle" onclick={restartDeployment} disabled={restartLoading}>
-        🔄 {restartLoading ? 'Restarting...' : 'Restart'}
+        <RefreshCw size={14} class={restartLoading ? 'spin inline-icon' : 'inline-icon'} /> {restartLoading ? 'Restarting...' : 'Restart'}
       </button>
       <button class="btn-subtle" onclick={() => openGlobalPodLogs(undefined, dep?.metadata?.name, dep?.metadata?.namespace)}>
-        📋 Logs
+        <FileText size={14} class="inline-icon" /> Logs
       </button>
-      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}>⚙️ Actions</button>
+      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}><Settings size={14} class="inline-icon" /> Actions</button>
     </div>
     <div class="nav-heading">
       <span class="status-pill status-{getStatusClass(status)}">{status}</span>
@@ -258,31 +259,23 @@
     <div class="sheet-section specs-strip">
       <div class="spec-cell">
         <span class="spec-label">Replicas (Ready / Desired)</span>
-        <span class="spec-val">{ready} / {desired}</span>
-      </div>
-      <div class="spec-cell">
-        <span class="spec-label">Current / Available</span>
-        <span class="spec-val">{current} / {available}</span>
+        <span class="spec-value">{ready} / {desired}</span>
       </div>
       <div class="spec-cell">
         <span class="spec-label">Updated Replicas</span>
-        <span class="spec-val">{updated}</span>
+        <span class="spec-value">{updated}</span>
+      </div>
+      <div class="spec-cell">
+        <span class="spec-label">Available Replicas</span>
+        <span class="spec-value">{available}</span>
       </div>
       <div class="spec-cell">
         <span class="spec-label">Strategy</span>
-        <span class="spec-val">{dep?.spec?.strategy?.type || 'RollingUpdate'}</span>
+        <span class="spec-value">{dep?.spec?.strategy?.type || 'RollingUpdate'}</span>
       </div>
-      {#if owner}
-        <div class="spec-cell">
-          <span class="spec-label">Controlled By</span>
-          <button class="controller-link-btn" onclick={() => dispatch('navigateToWorkload', { type: owner.type.toLowerCase(), name: owner.name })} title="Navigate to {owner.type} Details">
-            🔗 {owner.type} / {owner.name} ↗
-          </button>
-        </div>
-      {/if}
       <div class="spec-cell">
         <span class="spec-label">Age</span>
-        <span class="spec-val">{formatAge(dep?.metadata?.creationTimestamp)}</span>
+        <span class="spec-value">{formatAge(dep?.metadata?.creationTimestamp)}</span>
       </div>
     </div>
 
@@ -295,16 +288,16 @@
           {scaleLoading ? 'Scaling...' : 'Apply Scale'}
         </button>
         {#if scaleError}
-          <span class="err-txt">⚠️ {scaleError}</span>
+          <span class="err-txt"><AlertTriangle size={14} class="inline-icon" /> {scaleError}</span>
         {/if}
       </div>
     {/if}
 
     <!-- Managed ReplicaSets -->
     <div class="sheet-section">
-      <h5>🔄 ReplicaSets ({managedReplicaSets.length})</h5>
+      <h5><Boxes size={16} /> ReplicaSets ({managedReplicaSets.length})</h5>
       {#if replicasetsLoading}
-        <div class="muted-text">⏳ Loading ReplicaSets...</div>
+        <div class="muted-text"><Loader2 size={14} class="spin inline-icon" /> Loading ReplicaSets...</div>
       {:else if managedReplicaSets.length > 0}
         <div class="rs-table">
           <div class="rs-head">
@@ -315,7 +308,7 @@
           {#each managedReplicaSets as rsItem}
             <div class="rs-row">
               <div class="bold resource-click-link" onclick={() => dispatch('navigateToWorkload', { type: 'replicaset', name: rsItem.metadata?.name })}>
-                🔗 {rsItem.metadata?.name || 'Unknown'} ↗
+                <ExternalLink size={13} class="inline-icon" /> {rsItem.metadata?.name || 'Unknown'}
               </div>
               <div>{rsItem.status?.readyReplicas || 0} / {rsItem.spec?.replicas || 0}</div>
               <div>{formatAge(rsItem.metadata?.creationTimestamp)}</div>
@@ -329,9 +322,9 @@
 
     <!-- Managed Pods -->
     <div class="sheet-section">
-      <h5>📦 Managed Pods ({managedPods.length})</h5>
+      <h5><Box size={16} /> Managed Pods ({managedPods.length})</h5>
       {#if podsLoading}
-        <div class="muted-text">⏳ Loading managed pods...</div>
+        <div class="muted-text"><Loader2 size={14} class="spin inline-icon" /> Loading managed pods...</div>
       {:else if managedPods.length > 0}
         <div class="pods-table">
           <div class="p-head">
@@ -345,7 +338,7 @@
           {#each managedPods as pod}
             <div class="p-row">
               <div class="bold resource-click-link" onclick={() => dispatch('navigateToWorkload', { type: 'pod', name: pod.metadata?.name })}>
-                🔗 {pod.metadata?.name || 'Unknown'} ↗
+                <ExternalLink size={13} class="inline-icon" /> {pod.metadata?.name || 'Unknown'}
               </div>
               <div><span class="status-pill status-{getPodStatusClass(pod.status?.phase)}">{pod.status?.phase || 'Unknown'}</span></div>
               <div>{pod.spec?.nodeName || '-'}</div>
@@ -362,7 +355,7 @@
 
     <!-- Selectors -->
     <div class="sheet-section">
-      <h5>⚙️ Selectors</h5>
+      <h5><Sliders size={16} /> Selectors</h5>
       <div class="kv-grid">
         <div class="kv-block">
           <span class="kv-title">Match Labels</span>
@@ -381,7 +374,7 @@
 
     <!-- Labels & Annotations -->
     <div class="sheet-section">
-      <h5>🏷️ Labels & Annotations</h5>
+      <h5><Tag size={16} /> Labels & Annotations</h5>
       <div class="kv-grid">
         <div class="kv-block">
           <span class="kv-title">Labels</span>

@@ -141,3 +141,15 @@ Below is the complete, reconciled list of registered Tauri commands exposed via 
    - `ReplicaSetsPanel.svelte` calls `kuboard_update_replicaset` (unregistered). Frontend should be standardized to use `kuboard_apply_resource_yaml`.
 3. **Helm Secret Decompression**:
    - `helm.rs` uses double base64 decoding prior to GzDecoder. Certain Helm 3 releases format storage with single base64 or protobuf encoding. Requires fallback decoder logic.
+
+---
+
+## 🎨 **Recent Frontend UI Helper Functions**
+
+| Component | Function / Feature | Description | Status |
+|-----------|--------------------|-------------|--------|
+| `PodDetails.svelte` | `copyPodName()` | Copies active pod name string to clipboard on click with animated copy confirmation feedback | ✅ Working |
+| `MetricsGraph.svelte` | `setDuration(dur)` | Switches Chart.js time-series historical data resolution (`15m`, `30m`, `1h`, `6h`, `24h`) | ✅ Working |
+| `TabbedContent.svelte` | `sessionTabMap[tabSessionId]` | Per-session reactive tab map preventing tab cross-talk when multiple tabs run in the same cluster context | ✅ Working |
+| `ConfigTab.svelte` | `switchSubTab(id)` | Searchable ConfigMaps table view with dedicated `ConfigMapDetails.svelte` payload editor & Helm Releases sub-tab | ✅ Working |
+| `SecurityTab.svelte` | `SecuritySubNav` | Integrated sub-tabs for Secrets, Roles, ClusterRoles, RoleBindings, ClusterRoleBindings, and ServiceAccounts | ✅ Working |

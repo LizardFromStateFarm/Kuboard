@@ -1,6 +1,7 @@
 <!-- Kuboard RBAC Role Details Component -->
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { Shield, ArrowLeft, Check, FileText, Tag } from 'lucide-svelte';
 
   export let role: any;
   export let onBack: () => void = () => {};
@@ -13,7 +14,7 @@
   async function copyToClipboard(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      copyNotice = '✓ Copied!';
+      copyNotice = 'Copied!';
       setTimeout(() => copyNotice = null, 1500);
     } catch (e) {
       console.error(e);
@@ -44,9 +45,9 @@
 
 <div class="role-details-container">
   <div class="details-top-bar">
-    <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}>← Back</button>
+    <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}><ArrowLeft size={14} class="inline-icon" /> Back</button>
     <div class="top-title">
-      <span class="resource-icon">🛡️</span>
+      <span class="resource-icon"><Shield size={18} /></span>
       <h3>{role?.metadata?.name}</h3>
       <span class="kind-pill">{role?.kind || 'Role'}</span>
       {#if role?.metadata?.namespace}
@@ -54,7 +55,7 @@
       {/if}
     </div>
     {#if copyNotice}
-      <span class="copy-notice">{copyNotice}</span>
+      <span class="copy-notice"><Check size={14} class="inline-icon" /> {copyNotice}</span>
     {/if}
   </div>
 
@@ -80,7 +81,7 @@
 
     <!-- Rules Table -->
     <div class="section-card">
-      <h4>🛡️ RBAC Permissions & Policy Rules ({rules.length})</h4>
+      <h4><Shield size={16} /> RBAC Permissions & Policy Rules ({rules.length})</h4>
       <div class="rules-list">
         {#each rules as r, i}
           <div class="rule-box">
@@ -99,14 +100,14 @@
                 <span class="sub-label">Resources:</span>
                 <div class="badge-wrap">
                   {#each (r.resources || ['*']) as res}
-                    <span class="res-badge">📄 {res}</span>
+                    <span class="res-badge"><FileText size={12} class="inline-icon" /> {res}</span>
                   {/each}
                 </div>
                 {#if r.resourceNames && r.resourceNames.length > 0}
                   <span class="sub-label">Resource Names:</span>
                   <div class="badge-wrap">
                     {#each r.resourceNames as name}
-                      <span class="res-name-badge">🏷️ {name}</span>
+                      <span class="res-name-badge"><Tag size={12} class="inline-icon" /> {name}</span>
                     {/each}
                   </div>
                 {/if}

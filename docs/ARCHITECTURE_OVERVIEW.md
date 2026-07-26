@@ -39,7 +39,7 @@ Kuboard is designed as a high-performance desktop application to monitor, inspec
 ```
 
 ### **Core Stack:**
-- **Frontend**: SvelteKit 2 + Svelte 5 + TypeScript + Vite + Chart.js + xterm.js + Monaco Editor.
+- **Frontend**: SvelteKit 2 + Svelte 5 + TypeScript + Vite + Chart.js + xterm.js + Monaco Editor + Lucide-Svelte SVG Icons.
 - **Backend**: Rust (Edition 2021) + Tauri 2.0 + Tokio async runtime + `kube-rs` + `k8s-openapi`.
 - **Target Desktop**: Cross-Platform Windows, macOS, Linux natively packaged binaries.
 

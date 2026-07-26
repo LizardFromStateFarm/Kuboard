@@ -8,6 +8,7 @@
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import '@xterm/xterm/css/xterm.css';
+  import { Terminal as TerminalIcon, AlertTriangle } from 'lucide-svelte';
 
   // Props
   export let isOpen = false;
@@ -179,7 +180,7 @@
     {#if !embedded}
       <div class="terminal-header">
         <div class="terminal-title">
-          <span class="terminal-icon">💻</span>
+          <span class="terminal-icon"><TerminalIcon size={16} /></span>
           <span class="terminal-label">Terminal</span>
           <span class="terminal-pod-info">{namespace}/{podName}</span>
           {#if containerName}
@@ -212,7 +213,7 @@
 
     {#if error}
       <div class="terminal-error">
-        <span>⚠️ {error}</span>
+        <span><AlertTriangle size={15} class="inline-icon" /> {error}</span>
       </div>
     {/if}
 

@@ -6,7 +6,7 @@
   import ConfigMapDetails from './ConfigMapDetails.svelte';
   import HelmTab from './HelmTab.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
-  import { FileText, Package } from 'lucide-svelte';
+  import { FileText, Package, RefreshCw, AlertTriangle } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
@@ -126,7 +126,7 @@
 
     {#if activeSubTab === 'configmaps'}
       <button class="refresh-btn" onclick={fetchConfigMaps} disabled={loading}>
-        {loading ? '🔄' : '↻ Refresh'}
+        <RefreshCw size={14} class={loading ? 'spin' : ''} /> Refresh
       </button>
     {/if}
   </div>
@@ -137,7 +137,7 @@
       <ConfigMapDetails configMap={selectedConfigMap} onBack={() => selectedConfigMap = null} />
     {:else}
       {#if error}
-        <div class="alert-error">⚠️ {error}</div>
+        <div class="alert-error"><AlertTriangle size={15} class="inline-icon" /> {error}</div>
       {/if}
 
       <ResourceTable
@@ -170,7 +170,7 @@
               onclick={() => selectedConfigMap = cm}
               oncontextmenu={(e) => handleContextMenu(e, cm)}
             >
-              <td class="name-cell">📄 {cm.metadata?.name}</td>
+              <td class="name-cell"><FileText size={15} class="inline-icon text-primary" /> {cm.metadata?.name}</td>
               <td>{cm.metadata?.namespace || 'default'}</td>
               <td>{Object.keys(cm.data || {}).length} keys</td>
               <td>{formatAge(cm.metadata?.creationTimestamp)}</td>

@@ -107,16 +107,16 @@
       dispatch('contextChange', { contextName: nextTab.contextName, tabId: nextTab.id });
     }
   }
-  function getEnvironmentType(contextName: string): { label: string; tag: 'prod' | 'staging' | 'dev'; emoji: string } {
-    if (!contextName) return { label: 'DEV', tag: 'dev', emoji: '🟢' };
+  function getEnvironmentType(contextName: string): { label: string; tag: 'prod' | 'staging' | 'dev' } {
+    if (!contextName) return { label: 'DEV', tag: 'dev' };
     const lower = contextName.toLowerCase();
     if (lower.includes('prod') || lower.includes('prd')) {
-      return { label: 'PROD', tag: 'prod', emoji: '🔴' };
+      return { label: 'PROD', tag: 'prod' };
     }
     if (lower.includes('stage') || lower.includes('stg') || lower.includes('qa')) {
-      return { label: 'STAGING', tag: 'staging', emoji: '🟡' };
+      return { label: 'STAGING', tag: 'staging' };
     }
-    return { label: 'DEV', tag: 'dev', emoji: '🟢' };
+    return { label: 'DEV', tag: 'dev' };
   }
 </script>
 
@@ -140,7 +140,7 @@
           tabindex="0"
           onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && selectTab(tab.id)}
         >
-          <span class="env-badge env-badge-{env.tag}">{env.emoji} {env.label}</span>
+          <span class="env-badge env-badge-{env.tag}"><span class="env-dot"></span> {env.label}</span>
           <span class="tab-name">{tab.name}</span>
           {#if clusterTabs.length > 1}
             <button class="tab-close" onclick={(e) => { e.stopPropagation(); closeTab(tab.id); }} title="Close tab">✕</button>
@@ -192,7 +192,7 @@
   <div class="tab-modal-overlay" onclick={() => showNewTabModal = false} role="button" tabindex="-1">
     <div class="tab-modal-content" onclick={(e) => e.stopPropagation()} role="dialog">
       <div class="modal-header">
-        <h4>➕ Open New Tab</h4>
+        <h4><Plus size={16} class="inline-icon" /> Open New Tab</h4>
         <button class="close-modal-btn" onclick={() => showNewTabModal = false}>×</button>
       </div>
 

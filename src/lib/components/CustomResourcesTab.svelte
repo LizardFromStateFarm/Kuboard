@@ -2,6 +2,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
+  import { RefreshCw, AlertTriangle, Wrench, Inbox, Loader2 } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
@@ -98,11 +99,7 @@
         disabled={loading}
         title="Refresh custom resources"
       >
-        {#if loading}
-          🔄
-        {:else}
-          ↻
-        {/if}
+        <RefreshCw size={14} class={loading ? 'spin' : ''} />
       </button>
       {#if lastUpdate}
         <span class="last-update">Last: {lastUpdate}</span>
@@ -112,7 +109,7 @@
 
   {#if error}
     <div class="error-message">
-      <div class="error-icon">⚠️</div>
+      <div class="error-icon"><AlertTriangle size={24} /></div>
       <div class="error-content">
         <h5>Failed to load custom resources</h5>
         <p>{error}</p>
@@ -123,7 +120,7 @@
     </div>
   {:else if loading}
     <div class="loading-message">
-      <div class="loading-spinner">🔄</div>
+      <div class="loading-spinner"><Loader2 size={24} class="spin" /></div>
       <p>Loading custom resources...</p>
     </div>
   {:else}
@@ -141,7 +138,7 @@
           <div class="crd-grid">
             {#each filteredCRDs as crd}
               <button class="crd-card" onclick={() => selectCRD(crd)}>
-                <div class="crd-icon">🔧</div>
+                <div class="crd-icon"><Wrench size={20} /></div>
                 <div class="crd-info">
                   <div class="crd-kind">{crd.spec.names.kind}</div>
                   <div class="crd-name">{crd.metadata.name}</div>
@@ -168,12 +165,12 @@
             </div>
           {:else if instancesError}
             <div class="error-banner">
-              <span class="error-icon">⚠️</span>
+              <span class="error-icon"><AlertTriangle size={18} /></span>
               <p>{instancesError}</p>
             </div>
           {:else if crdInstances.length === 0}
             <div class="empty-state">
-              <div class="empty-icon">📭</div>
+              <div class="empty-icon"><Inbox size={32} /></div>
               <h5>No Instances Found</h5>
               <p>There are no instances of <strong>{selectedCRD.spec.names.kind}</strong> in this cluster.</p>
             </div>

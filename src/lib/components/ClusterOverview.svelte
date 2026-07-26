@@ -5,6 +5,7 @@
   import MetricsGraph from './MetricsGraph.svelte';
   import ClusterMetrics from './ClusterMetrics.svelte';
   import TabbedContent from './TabbedContent.svelte';
+  import { Search, Lightbulb } from 'lucide-svelte';
 
   // Props
   export let clusterOverview: ClusterOverview | null = null;
@@ -125,10 +126,10 @@
 {#if !currentContext}
   <div class="no-context-message">
     <div class="message-content">
-      <h2>🔍 Select a Kubernetes Context</h2>
+      <h2><Search size={22} class="inline-icon" /> Select a Kubernetes Context</h2>
       <p>Choose a context from the dropdown above to view your cluster information.</p>
       <div class="context-hint">
-        <p>💡 <strong>Tip:</strong> Make sure your kubeconfig is properly configured and accessible.</p>
+        <p><Lightbulb size={16} class="inline-icon text-warning" /> <strong>Tip:</strong> Make sure your kubeconfig is properly configured and accessible.</p>
       </div>
     </div>
   </div>

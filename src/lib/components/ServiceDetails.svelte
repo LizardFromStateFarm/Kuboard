@@ -3,6 +3,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   import PortForwardManager from './PortForwardManager.svelte';
+  import { ArrowLeft, Plug, Settings, Sliders, Tag } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -106,9 +107,9 @@
   <!-- Top Action Bar -->
   <div class="details-nav-bar">
     <div class="nav-actions">
-      <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}>← Back to Services</button>
-      <button class="btn-subtle" onclick={() => portForwardManagerOpen = true}>🔌 Port Forward</button>
-      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}>⚙️ Actions</button>
+      <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}><ArrowLeft size={14} class="inline-icon" /> Back to Services</button>
+      <button class="btn-subtle" onclick={() => portForwardManagerOpen = true}><Plug size={14} class="inline-icon" /> Port Forward</button>
+      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}><Settings size={14} class="inline-icon" /> Actions</button>
     </div>
     <div class="nav-heading">
       <span class="status-pill status-ready">{type}</span>
@@ -145,7 +146,7 @@
 
     <!-- Ports -->
     <div class="sheet-section">
-      <h5>🔌 Service Ports ({svc?.spec?.ports?.length || 0})</h5>
+      <h5><Plug size={16} /> Service Ports ({svc?.spec?.ports?.length || 0})</h5>
       {#if svc?.spec?.ports && svc.spec.ports.length > 0}
         <div class="ports-table">
           <div class="pt-head">
@@ -172,7 +173,7 @@
 
     <!-- Selectors -->
     <div class="sheet-section">
-      <h5>⚙️ Selectors</h5>
+      <h5><Sliders size={16} /> Selectors</h5>
       <div class="kv-grid">
         <div class="kv-block">
           <span class="kv-title">Selector Labels</span>
@@ -191,7 +192,7 @@
 
     <!-- Labels & Annotations -->
     <div class="sheet-section">
-      <h5>🏷️ Labels & Annotations</h5>
+      <h5><Tag size={16} /> Labels & Annotations</h5>
       <div class="kv-grid">
         <div class="kv-block">
           <span class="kv-title">Labels</span>

@@ -1,6 +1,7 @@
 <!-- Kuboard Settings & Theme Switcher Component -->
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { Settings } from 'lucide-svelte';
 
   // Theme state
   let currentTheme: string = 'dark';
@@ -38,14 +39,14 @@
     onclick={toggleVisibility}
     title="Settings & Appearance"
   >
-    ⚙️
+    <Settings size={16} />
   </button>
   
   {#if isVisible}
     <div class="settings-backdrop" onclick={toggleVisibility} role="button" tabindex="-1"></div>
     <div class="theme-panel">
       <div class="panel-header">
-        <h4>⚙️ Settings & Theme</h4>
+        <h4><Settings size={16} class="inline-icon" /> Settings & Theme</h4>
         <button class="close-btn" onclick={toggleVisibility}>✕</button>
       </div>
       <p class="panel-sub">Select color theme:</p>

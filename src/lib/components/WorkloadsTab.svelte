@@ -9,12 +9,22 @@
   import DaemonSetsPanel from './DaemonSetsPanel.svelte';
   import CronJobsPanel from './CronJobsPanel.svelte';
   import ServicesPanel from './ServicesPanel.svelte';
-  import { Box, Boxes, Layers, Cpu, Clock, Copy, Globe } from 'lucide-svelte';
+  import { Box, Boxes, Layers, Cpu, Clock, Copy, Globe, RefreshCw, AlertTriangle, Inbox } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
   export let selectedNamespace: string = 'all';
   export let tabSessionId: string = 'tab-default';
+
+  // Multi-namespace selection state
+  let selectedNamespaces: string[] = ['all'];
+
+  // Keep single namespace prop in sync if passed
+  $: if (selectedNamespace && selectedNamespaces.includes('all')) {
+    if (selectedNamespace !== 'all') {
+      selectedNamespaces = [selectedNamespace];
+    }
+  }
 
   // State
   let pods: any[] = [];
@@ -62,19 +72,24 @@
     }
   }
 
-  // Filter helper for selected namespace
-  function filterByNs(list: any[]) {
-    if (!selectedNamespace || selectedNamespace === 'all') return list;
-    return list.filter(item => (item.metadata?.namespace || item.namespace) === selectedNamespace);
+  // Multi-namespace filter helper
+  function filterByNs(list: any[], nsList: string[]) {
+    if (!nsList || nsList.length === 0 || nsList.includes('all')) {
+      return list;
+    }
+    return list.filter(item => {
+      const ns = item.metadata?.namespace || item.namespace;
+      return nsList.includes(ns);
+    });
   }
 
-  $: filteredPods = filterByNs(pods);
-  $: filteredDeployments = filterByNs(deployments);
-  $: filteredStatefulsets = filterByNs(statefulsets);
-  $: filteredDaemonsets = filterByNs(daemonsets);
-  $: filteredCronjobs = filterByNs(cronjobs);
-  $: filteredReplicasets = filterByNs(replicasets);
-  $: filteredServices = filterByNs(services);
+  $: filteredPods = filterByNs(pods, selectedNamespaces);
+  $: filteredDeployments = filterByNs(deployments, selectedNamespaces);
+  $: filteredStatefulsets = filterByNs(statefulsets, selectedNamespaces);
+  $: filteredDaemonsets = filterByNs(daemonsets, selectedNamespaces);
+  $: filteredCronjobs = filterByNs(cronjobs, selectedNamespaces);
+  $: filteredReplicasets = filterByNs(replicasets, selectedNamespaces);
+  $: filteredServices = filterByNs(services, selectedNamespaces);
 
   // Load specific workload type
   async function loadWorkloadType(type: string, forceReload: boolean = false) {
@@ -194,37 +209,7 @@
 </script>
 
 <div class="workloads-tab">
-  <div class="tab-header">
-    <div class="tab-controls">
-      <div class="namespace-selector">
-        <label for="workloads-ns-select">Namespace:</label>
-        <select 
-          id="workloads-ns-select" 
-          bind:value={selectedNamespace}
-          class="namespace-dropdown"
-        >
-          <option value="all">All Namespaces</option>
-          {#each namespacesList as ns}
-            <option value={ns}>{ns}</option>
-          {/each}
-        </select>
-      </div>
-
-      <button 
-        class="refresh-button" 
-        onclick={() => loadWorkloadType(selectedWorkloadType, true)}
-        disabled={loading}
-        title="Refresh current workload type"
-      >
-        {#if loading}🔄{:else}↻{/if}
-      </button>
-      {#if lastUpdate}
-        <span class="last-update">Last: {lastUpdate}</span>
-      {/if}
-    </div>
-  </div>
-
-  <!-- Sleek Sub-nav Tabs -->
+  <!-- Sleek Top Sub-nav Tabs Bar -->
   <div class="sub-nav-tabs">
     {#each workloadTypes as type}
       <button 
@@ -245,7 +230,7 @@
 
   {#if error}
     <div class="error-message">
-      <div class="error-icon">⚠️</div>
+      <div class="error-icon"><AlertTriangle size={24} /></div>
       <div class="error-content">
         <h5>Failed to load {selectedWorkloadType}</h5>
         <p>{error}</p>
@@ -256,132 +241,94 @@
     </div>
   {:else if loading}
     <div class="loading-message">
-      <div class="loading-spinner">🔄</div>
+      <div class="loading-spinner"><RefreshCw size={24} class="spin" /></div>
       <p>Loading {selectedWorkloadType}...</p>
     </div>
   {:else if loadedTypes.has(selectedWorkloadType)}
     <div class="workload-content">
       {#if selectedWorkloadType === 'pods'}
-        {#if filteredPods.length === 0}
-          <div class="no-resources">
-            <div class="no-resources-icon">📭</div>
-            <h5>No Pods Detected</h5>
-            <p>No pods found in namespace "{selectedNamespace}"</p>
-            <button class="retry-button" onclick={() => loadWorkloadType('pods', true)}>
-              Refresh
-            </button>
-          </div>
-        {:else}
-          <PodsPanel 
-            currentContext={currentContext} 
-            pods={filteredPods}
-            initialSelectedName={selectedTargetResourceName['pods']}
-            on:podSelect={(e) => console.log('Pod selected:', e.detail)}
-            on:navigateToWorkload={handleNavigateToWorkload}
-          />
-        {/if}
+        <PodsPanel 
+          currentContext={currentContext} 
+          pods={filteredPods}
+          bind:selectedNamespaces={selectedNamespaces}
+          namespacesList={namespacesList}
+          loading={loading}
+          onRefresh={() => loadWorkloadType('pods', true)}
+          initialSelectedName={selectedTargetResourceName['pods']}
+          on:podSelect={(e) => console.log('Pod selected:', e.detail)}
+          on:navigateToWorkload={handleNavigateToWorkload}
+        />
 
       {:else if selectedWorkloadType === 'deployments'}
-        {#if filteredDeployments.length === 0}
-          <div class="no-resources">
-            <div class="no-resources-icon">📦</div>
-            <h5>No Deployments Detected</h5>
-            <p>No deployments found in namespace "{selectedNamespace}"</p>
-            <button class="retry-button" onclick={() => loadWorkloadType('deployments', true)}>
-              Refresh
-            </button>
-          </div>
-        {:else}
-          <DeploymentsPanel 
-            currentContext={currentContext} 
-            deployments={filteredDeployments}
-            initialSelectedName={selectedTargetResourceName['deployments']}
-            on:reload={() => loadWorkloadType('deployments', true)}
-            on:navigateToWorkload={handleNavigateToWorkload}
-          />
-        {/if}
+        <DeploymentsPanel 
+          currentContext={currentContext} 
+          deployments={filteredDeployments}
+          bind:selectedNamespaces={selectedNamespaces}
+          namespacesList={namespacesList}
+          loading={loading}
+          onRefresh={() => loadWorkloadType('deployments', true)}
+          initialSelectedName={selectedTargetResourceName['deployments']}
+          on:reload={() => loadWorkloadType('deployments', true)}
+          on:navigateToWorkload={handleNavigateToWorkload}
+        />
 
       {:else if selectedWorkloadType === 'statefulsets'}
-        {#if filteredStatefulsets.length === 0}
-          <div class="no-resources">
-            <div class="no-resources-icon">📋</div>
-            <h5>No StatefulSets Detected</h5>
-            <p>No statefulsets found in namespace "{selectedNamespace}"</p>
-            <button class="retry-button" onclick={() => loadWorkloadType('statefulsets', true)}>
-              Refresh
-            </button>
-          </div>
-        {:else}
-          <StatefulSetsPanel 
-            currentContext={currentContext} 
-            statefulsets={filteredStatefulsets}
-            initialSelectedName={selectedTargetResourceName['statefulsets']}
-            on:reload={() => loadWorkloadType('statefulsets', true)}
-            on:navigateToWorkload={handleNavigateToWorkload}
-          />
-        {/if}
+        <StatefulSetsPanel 
+          currentContext={currentContext} 
+          statefulsets={filteredStatefulsets}
+          bind:selectedNamespaces={selectedNamespaces}
+          namespacesList={namespacesList}
+          loading={loading}
+          onRefresh={() => loadWorkloadType('statefulsets', true)}
+          initialSelectedName={selectedTargetResourceName['statefulsets']}
+          on:reload={() => loadWorkloadType('statefulsets', true)}
+          on:navigateToWorkload={handleNavigateToWorkload}
+        />
 
       {:else if selectedWorkloadType === 'daemonsets'}
-        {#if filteredDaemonsets.length === 0}
-          <div class="no-resources">
-            <div class="no-resources-icon">⚙️</div>
-            <h5>No DaemonSets Detected</h5>
-            <p>No daemonsets found in namespace "{selectedNamespace}"</p>
-            <button class="retry-button" onclick={() => loadWorkloadType('daemonsets', true)}>
-              Refresh
-            </button>
-          </div>
-        {:else}
-          <DaemonSetsPanel 
-            currentContext={currentContext} 
-            daemonsets={filteredDaemonsets}
-            initialSelectedName={selectedTargetResourceName['daemonsets']}
-            on:reload={() => loadWorkloadType('daemonsets', true)}
-            on:navigateToWorkload={handleNavigateToWorkload}
-          />
-        {/if}
+        <DaemonSetsPanel 
+          currentContext={currentContext} 
+          daemonsets={filteredDaemonsets}
+          bind:selectedNamespaces={selectedNamespaces}
+          namespacesList={namespacesList}
+          loading={loading}
+          onRefresh={() => loadWorkloadType('daemonsets', true)}
+          initialSelectedName={selectedTargetResourceName['daemonsets']}
+          on:reload={() => loadWorkloadType('daemonsets', true)}
+          on:navigateToWorkload={handleNavigateToWorkload}
+        />
 
       {:else if selectedWorkloadType === 'cronjobs'}
-        {#if filteredCronjobs.length === 0}
-          <div class="no-resources">
-            <div class="no-resources-icon">⏰</div>
-            <h5>No CronJobs Detected</h5>
-            <p>No cronjobs found in namespace "{selectedNamespace}"</p>
-            <button class="retry-button" onclick={() => loadWorkloadType('cronjobs', true)}>
-              Refresh
-            </button>
-          </div>
-        {:else}
-          <CronJobsPanel 
-            currentContext={currentContext} 
-            cronjobs={filteredCronjobs}
-            initialSelectedName={selectedTargetResourceName['cronjobs']}
-            on:navigateToWorkload={handleNavigateToWorkload}
-          />
-        {/if}
+        <CronJobsPanel 
+          currentContext={currentContext} 
+          cronjobs={filteredCronjobs}
+          bind:selectedNamespaces={selectedNamespaces}
+          namespacesList={namespacesList}
+          loading={loading}
+          onRefresh={() => loadWorkloadType('cronjobs', true)}
+          initialSelectedName={selectedTargetResourceName['cronjobs']}
+          on:navigateToWorkload={handleNavigateToWorkload}
+        />
 
       {:else if selectedWorkloadType === 'replicasets'}
-        {#if filteredReplicasets.length === 0}
-          <div class="no-resources">
-            <div class="no-resources-icon">🔄</div>
-            <h5>No ReplicaSets Detected</h5>
-            <p>No replicasets found in namespace "{selectedNamespace}"</p>
-            <button class="retry-button" onclick={() => loadWorkloadType('replicasets', true)}>
-              Refresh
-            </button>
-          </div>
-        {:else}
-          <ReplicaSetsPanel 
-            currentContext={currentContext} 
-            replicasets={filteredReplicasets}
-            initialSelectedName={selectedTargetResourceName['replicasets']}
-            on:navigateToWorkload={handleNavigateToWorkload}
-          />
-        {/if}
+        <ReplicaSetsPanel 
+          currentContext={currentContext} 
+          replicasets={filteredReplicasets}
+          bind:selectedNamespaces={selectedNamespaces}
+          namespacesList={namespacesList}
+          loading={loading}
+          onRefresh={() => loadWorkloadType('replicasets', true)}
+          initialSelectedName={selectedTargetResourceName['replicasets']}
+          on:navigateToWorkload={handleNavigateToWorkload}
+        />
 
       {:else if selectedWorkloadType === 'services'}
         <ServicesPanel 
           {currentContext} 
+          bind:selectedNamespaces={selectedNamespaces}
+          namespacesList={namespacesList}
+          loading={loading}
+          onRefresh={() => loadWorkloadType('services', true)}
           namespace={selectedNamespace} 
           initialSelectedName={selectedTargetResourceName['services']}
           on:navigateToWorkload={handleNavigateToWorkload}
@@ -390,7 +337,7 @@
     </div>
   {:else}
     <div class="loading-message">
-      <div class="loading-spinner">🔄</div>
+      <div class="loading-spinner"><RefreshCw size={24} class="spin" /></div>
       <p>Loading {selectedWorkloadType}...</p>
     </div>
   {/if}
@@ -471,26 +418,46 @@
     color: rgba(255, 255, 255, 0.6);
   }
 
-  .sub-nav-tabs {
+  .sub-nav-bar-row {
     display: flex;
-    gap: 6px;
-    padding: 6px;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    padding: 4px 6px;
     background: rgba(255, 255, 255, 0.03);
     border-bottom: 1px solid var(--border-primary);
-    overflow-x: auto;
     margin-bottom: 12px;
   }
 
-  .sub-nav-item {
+  .sub-nav-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sub-nav-controls-right {
     display: flex;
     align-items: center;
+    gap: var(--spacing-sm);
+    flex-shrink: 0;
+  }
+
+  .sub-nav-item {
+    flex: 1 1 0px;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     gap: 6px;
     background: transparent;
     border: none;
     color: var(--text-secondary);
-    padding: 6px 12px;
+    padding: 6px 8px;
     border-radius: var(--radius-sm);
-    font-size: 0.88rem;
+    font-size: 0.85rem;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;

@@ -7,12 +7,19 @@
   import PodDetails from './PodDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   import { openGlobalPodLogs } from '$lib/stores/logs';
+  import { RefreshCw } from 'lucide-svelte';
+  import MultiNamespaceSelect from './MultiNamespaceSelect.svelte';
 
   const dispatch = createEventDispatcher();
 
   export let currentContext: any = null;
   export let pods: any[] = [];
   export let initialSelectedName: string | null = null;
+  export let selectedNamespace: string = 'all';
+  export let selectedNamespaces: string[] = ['all'];
+  export let namespacesList: string[] = [];
+  export let loading: boolean = false;
+  export let onRefresh: (() => void) | null = null;
 
   let selectedPod: any = null;
   let selectedPodRaw: any = null;
@@ -37,7 +44,7 @@
   let containerMetricsLoading: boolean = false;
   let containerMetricsError: string | null = null;
   let selectedContainerResourceType: 'cpu' | 'memory' = 'cpu';
-  
+
   // Events state
   let podEvents: any[] = [];
   let eventsLoading: boolean = false;
@@ -47,7 +54,7 @@
   let livePods: any[] | null = null;
   let watchError: string | null = null;
   let watchActive = false;
-  let podsMap = new Map<string, any>(); // Track pods by key for efficient updates
+  let podsMap = new Map<string, any>();
 
   // Sorting state
   let sortColumn: string | null = null;
@@ -67,6 +74,11 @@
   let yamlEditorLoading = false;
   let yamlEditorError: string | null = null;
 
+  // Pod metrics state
+  let podMetrics: any = null;
+  let metricsLoading: boolean = false;
+  let metricsError: string | null = null;
+
   function handleContextMenu(event: MouseEvent, pod: any) {
     event.preventDefault();
     event.stopPropagation();
@@ -81,22 +93,20 @@
   }
 
   function handleActionDeleted(event: CustomEvent) {
-    // Watch will handle the update automatically, but we can optimistically remove
     if (contextMenuPod) {
       const keyToRemove = getPodKey(contextMenuPod);
       podsMap.delete(keyToRemove);
-      livePods = [...Array.from(podsMap.values())]; // Force new array reference
+      livePods = [...Array.from(podsMap.values())];
       console.log(`🗑️ Optimistically deleted pod: ${keyToRemove}, total: ${livePods.length}`);
     }
     handleActionMenuClose();
   }
 
   function handleActionRestarted(event: CustomEvent) {
-    // Optimistically remove (controller will recreate, watch will detect)
     if (contextMenuPod) {
       const keyToRemove = getPodKey(contextMenuPod);
       podsMap.delete(keyToRemove);
-      livePods = [...Array.from(podsMap.values())]; // Force new array reference
+      livePods = [...Array.from(podsMap.values())];
       console.log(`🔄 Optimistically removed pod for restart: ${keyToRemove}, total: ${livePods.length}`);
     }
     handleActionMenuClose();
@@ -105,7 +115,6 @@
   function handleViewYaml(event: CustomEvent) {
     yamlContent = event.detail.yaml;
     yamlViewerVisible = true;
-    // Don't close menu for view-yaml, it opens a modal
   }
 
   function closeYamlViewer() {
@@ -115,7 +124,6 @@
   }
 
   function handleActionCopied(event: CustomEvent) {
-    // Show a brief notification (could enhance later)
     console.log(`Copied ${event.detail.type}: ${event.detail.value}`);
     handleActionMenuClose();
   }
@@ -135,10 +143,8 @@
 
   async function saveYaml() {
     if (!contextMenuPod?.metadata?.name || !contextMenuPod?.metadata?.namespace) return;
-    
     yamlEditorLoading = true;
     yamlEditorError = null;
-    
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('kuboard_update_pod_from_yaml', {
@@ -146,11 +152,7 @@
         namespace: contextMenuPod.metadata.namespace,
         yamlContent: yamlEditorContent
       });
-      
-      // Close editor
       closeYamlEditor();
-      
-      // Show success message
       alert('Pod updated successfully! The view will refresh automatically.');
     } catch (error: any) {
       yamlEditorError = String(error);
@@ -160,123 +162,17 @@
     }
   }
 
-  function getRenderPods(): any[] {
-    return livePods ?? pods ?? [];
-  }
-
-  function getPodKey(pod: any): string {
-    return pod?.metadata?.uid || `${pod?.metadata?.namespace || 'default'}/${pod?.metadata?.name || ''}`;
-  }
-
-  // Handle watch events
-  function handleWatchEvent(event: any) {
-    console.log('📡 Raw watch event received:', event);
-    const { event_type, pod } = event;
-    
-    if (!pod || !pod.metadata) {
-      console.error('⚠️ Invalid watch event: missing pod or metadata', event);
-      return;
-    }
-    
-    const key = getPodKey(pod);
-    const eventTypeStr = String(event_type); // Ensure it's a string
-    
-    console.log(`📡 Watch event: ${eventTypeStr} for pod ${key}`);
-    console.log(`📊 Current podsMap size: ${podsMap.size}, livePods length: ${livePods?.length ?? 0}`);
-    
-    switch (eventTypeStr) {
-      case 'Added':
-        // Add new pod
-        if (!podsMap.has(key)) {
-          podsMap.set(key, pod);
-          livePods = [...Array.from(podsMap.values())]; // Force new array reference
-          console.log(`✅ Added pod: ${key}, total: ${livePods.length}`);
-        } else {
-          console.log(`ℹ️ Pod ${key} already exists, skipping add`);
-        }
-        break;
-        
-      case 'Modified':
-        // Update existing pod - this includes pods being terminated (have deletionTimestamp)
-        const isTerminating = pod.metadata?.deletionTimestamp ? 'Terminating' : pod.status?.phase;
-        podsMap.set(key, pod);
-        livePods = [...Array.from(podsMap.values())]; // Force new array reference
-        console.log(`🔄 Modified pod: ${key}, status: ${isTerminating}, total: ${livePods.length}`);
-        break;
-        
-      case 'Deleted':
-        // Remove pod
-        if (podsMap.has(key)) {
-          podsMap.delete(key);
-          livePods = [...Array.from(podsMap.values())]; // Force new array reference
-          console.log(`🗑️ Deleted pod: ${key}, total: ${livePods.length}`);
-        } else {
-          console.log(`ℹ️ Pod ${key} not in map, skipping delete`);
-        }
-        break;
-        
-      default:
-        console.warn(`⚠️ Unknown event type: ${eventTypeStr}`, event);
-    }
-    
-    console.log(`📊 After update - podsMap size: ${podsMap.size}, livePods length: ${livePods?.length ?? 0}`);
-    watchError = null;
-  }
-
-  function handleWatchError(error: any) {
-    console.error('Watch error:', error);
-    watchError = error?.error || String(error) || 'Watch connection error';
-  }
-
-  // Start watch stream
-  async function startWatch() {
-    if (!currentContext) return;
-    
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('kuboard_stop_pod_watch'); // Stop any existing watch
-      await invoke('kuboard_start_pod_watch');
-      watchActive = true;
-      watchError = null;
-      console.log('✅ Watch started');
-    } catch (e: any) {
-      console.error('Failed to start watch:', e);
-      watchError = String(e);
-      watchActive = false;
-    }
-  }
-
-  // Stop watch stream
-  async function stopWatch() {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('kuboard_stop_pod_watch');
-      watchActive = false;
-      console.log('🛑 Watch stopped');
-    } catch (e: any) {
-      console.error('Failed to stop watch:', e);
-    }
-  }
-
-  // Initialize pods from initial list
   function initializePods() {
     if (pods && pods.length > 0) {
       podsMap.clear();
       for (const pod of pods) {
         podsMap.set(getPodKey(pod), pod);
       }
-      livePods = [...Array.from(podsMap.values())]; // Force new array reference
+      livePods = [...Array.from(podsMap.values())];
       console.log(`📋 Initialized ${livePods.length} pods`);
     }
   }
 
-  // Debug logging
-  console.log('🚀 PodsPanel component script loaded');
-  
-  // Loading state is managed by parent WorkloadsTab
-  // This panel just displays the data it receives
-
-  // Select pod (for dispatching to other components if needed)
   function selectPod(pod: any) {
     selectedPod = {
       name: pod.metadata?.name || 'Unknown',
@@ -300,10 +196,8 @@
   // Load metrics for a specific pod
   async function loadPodMetrics(pod: any) {
     if (!pod?.metadata?.name || !pod?.metadata?.namespace) return;
-    
     metricsLoading = true;
     metricsError = null;
-    
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       const metrics = await invoke('kuboard_get_pod_metrics_history', {
@@ -318,6 +212,21 @@
     } finally {
       metricsLoading = false;
     }
+  }
+
+  // Get controller information (Deployment, StatefulSet, etc.)
+  function getControllerInfo(pod: any) {
+    const ownerReferences = pod.metadata?.ownerReferences || [];
+    if (ownerReferences.length === 0) {
+      return { type: 'Pod', name: pod.metadata?.name || 'Unknown' };
+    }
+    
+    const owner = ownerReferences[0];
+    return {
+      type: owner.kind || 'Unknown',
+      name: owner.name || 'Unknown',
+      uid: owner.uid || 'Unknown'
+    };
   }
 
   // Show full details view
@@ -338,7 +247,6 @@
       annotations: pod.metadata?.annotations || {},
       containers: pod.spec?.containers || [],
       containerStatuses: pod.status?.containerStatuses || [],
-      // Additional detailed information
       serviceAccount: pod.spec?.serviceAccountName || 'default',
       qosClass: pod.status?.qosClass || 'Unknown',
       conditions: pod.status?.conditions || [],
@@ -351,21 +259,6 @@
       generation: pod.metadata?.generation || 'Unknown'
     };
     showFullDetails = true;
-  }
-
-  // Get controller information (Deployment, StatefulSet, etc.)
-  function getControllerInfo(pod: any) {
-    const ownerReferences = pod.metadata?.ownerReferences || [];
-    if (ownerReferences.length === 0) {
-      return { type: 'Pod', name: pod.metadata?.name || 'Unknown' };
-    }
-    
-    const owner = ownerReferences[0];
-    return {
-      type: owner.kind || 'Unknown',
-      name: owner.name || 'Unknown',
-      uid: owner.uid || 'Unknown'
-    };
   }
 
   // Load metrics for a specific container
@@ -386,7 +279,6 @@
       // Filter metrics for this specific container
       if (metrics && Array.isArray(metrics)) {
         containerMetrics = metrics.map((point: any) => ({
-          ...point,
           // For now, we'll use the pod metrics and scale them down
           // In a real implementation, you'd want container-specific metrics
           cpu: (point.cpu || 0) * 0.1, // Simulate container using 10% of pod resources
@@ -666,10 +558,30 @@
     }
   }
 
+  function filterByNs(list: any[], nsList: string[]) {
+    if (!nsList || nsList.length === 0 || nsList.includes('all')) {
+      return list;
+    }
+    return list.filter(item => {
+      const ns = item.metadata?.namespace || item.namespace;
+      return nsList.includes(ns);
+    });
+  }
+
+  $: nsFilteredPods = filterByNs(livePods ?? pods ?? [], selectedNamespaces);
+
+  function getRenderPods(): any[] {
+    return nsFilteredPods;
+  }
+
+  function getPodKey(pod: any): string {
+    return pod?.metadata?.uid || `${pod?.metadata?.namespace || 'default'}/${pod?.metadata?.name || ''}`;
+  }
+
   // Reactive sorted pods - automatically updates when sortColumn or sortDirection changes
   // Directly reference livePods and pods so Svelte tracks changes
   $: sortedPods = (() => {
-    const podsToSort = livePods ?? pods ?? [];
+    const podsToSort = nsFilteredPods;
     
     if (!sortColumn || !sortDirection) {
       return podsToSort;
@@ -1188,6 +1100,23 @@
           noItemsMessage="No pods are currently available in this cluster context."
           noSearchResultsMessage="No pods match your search query:"
         >
+          <div slot="controls" class="table-controls-right">
+            {#if namespacesList && namespacesList.length > 0}
+              <MultiNamespaceSelect bind:selectedNamespaces={selectedNamespaces} {namespacesList} />
+            {/if}
+
+            {#if onRefresh}
+              <button 
+                class="refresh-button" 
+                onclick={onRefresh}
+                disabled={loading}
+                title="Refresh pods"
+              >
+                <RefreshCw size={14} class={loading ? 'spin' : ''} />
+              </button>
+            {/if}
+          </div>
+
           <svelte:fragment slot="header">
                 <tr>
                   <th 

@@ -33,32 +33,32 @@
         return ph !== 'running' && ph !== 'succeeded';
       });
 
-      let md = `# 🛡️ Kuboard Cluster Diagnostic & Health Report\n`;
+      let md = `# Kuboard Cluster Diagnostic & Health Report\n`;
       md += `**Generated At:** ${nowStr}\n`;
       md += `**Target Context:** \`${ctxName}\`\n\n`;
       md += `---\n\n`;
 
-      md += `### 📊 1. Executive Summary\n`;
+      md += `### 1. Executive Summary\n`;
       md += `- **Nodes Count:** ${nodes.length}\n`;
       md += `- **Total Pods:** ${pods.length}\n`;
       md += `- **Unhealthy / Crashing Pods:** ${failingPods.length}\n`;
       md += `- **Active Warning Events:** ${warningEvents.length}\n`;
       md += `- **Persistent Volume Claims:** ${pvcs.length}\n\n`;
 
-      md += `### 🖥️ 2. Node Status Breakdown (${nodes.length})\n`;
+      md += `### 2. Node Status Breakdown (${nodes.length})\n`;
       md += `| Node Name | Status | OS / Kernel | Kubelet Version |\n`;
       md += `|---|---|---|---|\n`;
       nodes.forEach((n: any) => {
         const name = n.metadata?.name || '-';
         const readyCond = n.status?.conditions?.find((c: any) => c.type === 'Ready')?.status;
-        const status = readyCond === 'True' ? '🟢 Ready' : '🔴 NotReady';
+        const status = readyCond === 'True' ? 'Ready' : 'NotReady';
         const os = n.status?.nodeInfo?.operatingSystem || '-';
         const ver = n.status?.nodeInfo?.kubeletVersion || '-';
         md += `| \`${name}\` | ${status} | ${os} | ${ver} |\n`;
       });
       md += `\n`;
 
-      md += `### 🚨 3. Unhealthy / Non-Running Pods (${failingPods.length})\n`;
+      md += `### 3. Unhealthy / Non-Running Pods (${failingPods.length})\n`;
       if (failingPods.length === 0) {
         md += `*All pods are currently in Running or Succeeded state. No anomalies detected.*\n\n`;
       } else {
@@ -70,7 +70,7 @@
         md += `\n`;
       }
 
-      md += `### ⚡ 4. Recent Cluster Warning Events (${warningEvents.length})\n`;
+      md += `### 4. Recent Cluster Warning Events (${warningEvents.length})\n`;
       if (warningEvents.length === 0) {
         md += `*No warning events found in cluster audit log.*\n\n`;
       } else {
@@ -82,7 +82,7 @@
         md += `\n`;
       }
 
-      md += `### 💾 5. Persistent Volume Claims (${pvcs.length})\n`;
+      md += `### 5. Persistent Volume Claims (${pvcs.length})\n`;
       if (pvcs.length === 0) {
         md += `*No Persistent Volume Claims bound in context.*\n\n`;
       } else {
@@ -110,7 +110,7 @@
   async function copyReport() {
     try {
       await navigator.clipboard.writeText(reportMarkdown);
-      copyNotice = '✓ Report Copied!';
+      copyNotice = 'Report Copied!';
       setTimeout(() => copyNotice = null, 2000);
     } catch (e) {
       console.error(e);

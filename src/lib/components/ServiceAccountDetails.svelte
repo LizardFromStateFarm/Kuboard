@@ -1,6 +1,7 @@
 <!-- Kuboard ServiceAccount Details Component -->
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { UserCheck, ArrowLeft, Check, Key, Lock, Copy, Package, Shield } from 'lucide-svelte';
 
   export let sa: any;
   export let onBack: () => void = () => {};
@@ -14,7 +15,7 @@
   async function copyToClipboard(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      copyNotice = '✓ Copied!';
+      copyNotice = 'Copied!';
       setTimeout(() => copyNotice = null, 1500);
     } catch (e) {
       console.error(e);
@@ -37,14 +38,14 @@
 
 <div class="sa-details-container">
   <div class="details-top-bar">
-    <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}>← Back</button>
+    <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}><ArrowLeft size={14} class="inline-icon" /> Back</button>
     <div class="top-title">
-      <span class="resource-icon">👤</span>
+      <span class="resource-icon"><UserCheck size={18} /></span>
       <h3>{sa?.metadata?.name}</h3>
       <span class="namespace-pill">{sa?.metadata?.namespace || 'default'}</span>
     </div>
     {#if copyNotice}
-      <span class="copy-notice">{copyNotice}</span>
+      <span class="copy-notice"><Check size={14} class="inline-icon" /> {copyNotice}</span>
     {/if}
   </div>
 
@@ -74,13 +75,13 @@
 
     <!-- Bound Secrets & Tokens Section -->
     <div class="section-card">
-      <h4>🔑 Bound Tokens & Secrets ({secrets.length})</h4>
+      <h4><Key size={16} /> Bound Tokens & Secrets ({secrets.length})</h4>
       <div class="item-list">
         {#each secrets as sec}
           <div class="item-box">
-            <span class="item-icon">🔒</span>
+            <span class="item-icon"><Lock size={14} /></span>
             <span class="item-name"><code>{sec.name}</code></span>
-            <button class="btn-sm" onclick={() => copyToClipboard(sec.name)}>📋 Copy Secret Name</button>
+            <button class="btn-sm" onclick={() => copyToClipboard(sec.name)}><Copy size={13} class="inline-icon" /> Copy Secret Name</button>
           </div>
         {/each}
 
@@ -92,13 +93,13 @@
 
     <!-- Image Pull Secrets Section -->
     <div class="section-card">
-      <h4>📦 Image Pull Secrets ({imagePullSecrets.length})</h4>
+      <h4><Package size={16} /> Image Pull Secrets ({imagePullSecrets.length})</h4>
       <div class="item-list">
         {#each imagePullSecrets as ips}
           <div class="item-box">
-            <span class="item-icon">🐳</span>
+            <span class="item-icon"><Shield size={14} /></span>
             <span class="item-name"><code>{ips.name}</code></span>
-            <button class="btn-sm" onclick={() => copyToClipboard(ips.name)}>📋 Copy Secret Name</button>
+            <button class="btn-sm" onclick={() => copyToClipboard(ips.name)}><Copy size={13} class="inline-icon" /> Copy Secret Name</button>
           </div>
         {/each}
 

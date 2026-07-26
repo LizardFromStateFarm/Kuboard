@@ -5,6 +5,8 @@
   import ResourceTable from './ResourceTable.svelte';
   import DaemonSetDetails from './DaemonSetDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import { RefreshCw } from 'lucide-svelte';
+  import MultiNamespaceSelect from './MultiNamespaceSelect.svelte';
   
   const dispatch = createEventDispatcher();
 
@@ -12,6 +14,11 @@
   export let currentContext: any = null;
   export let daemonsets: any[] = [];
   export let initialSelectedName: string | null = null;
+  export let selectedNamespace: string = 'all';
+  export let selectedNamespaces: string[] = ['all'];
+  export let namespacesList: string[] = [];
+  export let loading: boolean = false;
+  export let onRefresh: (() => void) | null = null;
 
   // State
   let selectedDaemonSet: any = null;
@@ -250,13 +257,25 @@
     return timeA - timeB;
   }
 
+  function filterByNs(list: any[], nsList: string[]) {
+    if (!nsList || nsList.length === 0 || nsList.includes('all')) {
+      return list;
+    }
+    return list.filter(item => {
+      const ns = item.metadata?.namespace || item.namespace;
+      return nsList.includes(ns);
+    });
+  }
+
+  $: nsFilteredDaemonSets = filterByNs(daemonsets, selectedNamespaces);
+
   // Reactive sorted and filtered daemonsets
   $: sortedDaemonSets = (() => {
     if (!sortColumn || !sortDirection) {
-      return daemonsets;
+      return nsFilteredDaemonSets;
     }
     
-    const sorted = [...daemonsets];
+    const sorted = [...nsFilteredDaemonSets];
     sorted.sort((a, b) => {
       let comparison = 0;
       
@@ -324,6 +343,23 @@
         noItemsMessage="No DaemonSets are currently in this cluster"
         noSearchResultsMessage="No DaemonSets match your search query:"
       >
+        <div slot="controls" class="table-controls-right">
+          {#if namespacesList && namespacesList.length > 0}
+            <MultiNamespaceSelect bind:selectedNamespaces={selectedNamespaces} {namespacesList} />
+          {/if}
+
+          {#if onRefresh}
+            <button 
+              class="refresh-button" 
+              onclick={onRefresh}
+              disabled={loading}
+              title="Refresh daemonsets"
+            >
+              <RefreshCw size={14} class={loading ? 'spin' : ''} />
+            </button>
+          {/if}
+        </div>
+
         <svelte:fragment slot="table">      <div class="daemonsets-table">
         <div class="table-header">
           <div class="header-cell sortable" onclick={() => handleSort('name')} role="button" tabindex="0">

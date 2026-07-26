@@ -1,7 +1,7 @@
 <!-- Kuboard Ingress Details Component -->
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { Lock, Globe } from 'lucide-svelte';
+  import { Lock, Globe, ArrowLeft, Check, Plug } from 'lucide-svelte';
 
   export let ingress: any;
   export let onBack: () => void = () => {};
@@ -17,7 +17,7 @@
   async function copyToClipboard(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      copyNotice = '✓ Copied!';
+      copyNotice = 'Copied!';
       setTimeout(() => copyNotice = null, 1500);
     } catch (e) {
       console.error(e);
@@ -40,15 +40,15 @@
 
 <div class="ingress-details-container">
   <div class="details-top-bar">
-    <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}>← Back</button>
+    <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}><ArrowLeft size={14} class="inline-icon" /> Back</button>
     <div class="top-title">
-      <span class="resource-icon">🌐</span>
+      <span class="resource-icon"><Globe size={18} /></span>
       <h3>{ingress?.metadata?.name}</h3>
       <span class="namespace-pill">{ingress?.metadata?.namespace || 'default'}</span>
       <span class="class-pill">Class: {ingressClass}</span>
     </div>
     {#if copyNotice}
-      <span class="copy-notice">{copyNotice}</span>
+      <span class="copy-notice"><Check size={14} class="inline-icon" /> {copyNotice}</span>
     {/if}
   </div>
 
@@ -110,7 +110,7 @@
         {#each rules as r}
           <div class="rule-box">
             <div class="rule-header">
-              <span class="host-name">🌐 <strong>Host:</strong> <code>{r.host || '*'}</code></span>
+              <span class="host-name"><Globe size={14} class="inline-icon" /> <strong>Host:</strong> <code>{r.host || '*'}</code></span>
             </div>
 
             <div class="paths-table">
@@ -123,7 +123,7 @@
                   </div>
                   <div class="backend-info">
                     <span class="label">Backend Service:</span>
-                    <span class="svc-badge">🔌 {p.backend?.service?.name || p.backend?.serviceName || '-'}</span>
+                    <span class="svc-badge"><Plug size={12} class="inline-icon" /> {p.backend?.service?.name || p.backend?.serviceName || '-'}</span>
                     <span class="port-badge">Port {p.backend?.service?.port?.number || p.backend?.servicePort || '-'}</span>
                   </div>
                 </div>

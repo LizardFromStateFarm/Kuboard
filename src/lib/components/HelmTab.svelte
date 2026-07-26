@@ -2,6 +2,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
+  import { RefreshCw, AlertTriangle, Package, FileText, Sliders, RotateCcw, Loader2 } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
@@ -92,7 +93,12 @@
         disabled={loading}
         title="Refresh releases"
       >
-        {loading ? '🔄' : '↻ Refresh'}
+        class="refresh-button" 
+        onclick={loadReleases}
+        disabled={loading}
+        title="Refresh releases"
+      >
+        <RefreshCw size={14} class={loading ? 'spin' : ''} /> Refresh
       </button>
       {#if lastUpdate}
         <span class="last-update">Last: {lastUpdate}</span>
@@ -106,7 +112,7 @@
 
   {#if error}
     <div class="error-banner">
-      <span class="error-icon">⚠️</span>
+      <span class="error-icon"><AlertTriangle size={18} /></span>
       <p>{error}</p>
       <button class="retry-button" onclick={loadReleases}>Retry</button>
     </div>
@@ -117,7 +123,7 @@
     </div>
   {:else if releases.length === 0}
     <div class="empty-state">
-      <div class="empty-icon">📦</div>
+      <div class="empty-icon"><Package size={32} /></div>
       <h5>No Helm Releases Found</h5>
       <p>We couldn't find any Helm 3 releases (secrets with owner=helm) in this cluster.</p>
     </div>
@@ -155,7 +161,7 @@
                 onclick={() => rollbackRelease(release)}
                 title="Rollback to previous revision"
               >
-                ↩ Rollback
+                <RotateCcw size={13} class="inline-icon" /> Rollback
               </button>
             </div>
           </div>
@@ -169,7 +175,7 @@
       <div class="modal-card" onclick={(e) => e.stopPropagation()}>
         <div class="modal-header">
           <div class="title-wrap">
-            <span class="modal-icon">📦</span>
+            <span class="modal-icon"><Package size={20} /></span>
             <h5>Helm Release: {selectedRelease.name}</h5>
             <span class="status-badge {getStatusClass(selectedRelease.status)}">{selectedRelease.status}</span>
           </div>
@@ -189,24 +195,24 @@
               class="tab-btn {activeDetailTab === 'values' ? 'active' : ''}" 
               onclick={() => activeDetailTab = 'values'}
             >
-              ⚙️ values.yaml
+              <Sliders size={14} class="inline-icon" /> values.yaml
             </button>
             <button 
               class="tab-btn {activeDetailTab === 'manifest' ? 'active' : ''}" 
               onclick={() => activeDetailTab = 'manifest'}
             >
-              📄 Manifest
+              <FileText size={14} class="inline-icon" /> Manifest
             </button>
             <button 
               class="tab-btn {activeDetailTab === 'notes' ? 'active' : ''}" 
               onclick={() => activeDetailTab = 'notes'}
             >
-              📝 Release Notes
+              <FileText size={14} class="inline-icon" /> Release Notes
             </button>
           </div>
 
           {#if loadingDetails}
-            <div class="modal-loading">⏳ Loading release details & values...</div>
+            <div class="modal-loading"><Loader2 size={16} class="spin inline-icon" /> Loading release details & values...</div>
           {:else if releaseDetails}
             <div class="tab-view-container">
               {#if activeDetailTab === 'values'}

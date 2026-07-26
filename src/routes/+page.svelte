@@ -30,6 +30,7 @@
   
   // Import theme switcher for dev mode
   import ThemeSwitcher from '$lib/components/ThemeSwitcher.svelte';
+  import { RefreshCw, AlertTriangle, ClipboardList, Rocket, ArrowUp, Loader2, Server, ArrowRight, Search } from 'lucide-svelte';
 
 
   // State variables
@@ -78,6 +79,18 @@
   let activeLoadingContext: string | null = null; // Track which context we're currently loading
   const CONTEXT_SET_TIMEOUT = 3000; // 3 seconds for context set
   const CLUSTER_LOAD_TIMEOUT = 5000; // 5 seconds for cluster overview
+
+  let welcomeContextSearchTerm = '';
+  $: filteredWelcomeContexts = contexts.filter(ctx => {
+    if (!welcomeContextSearchTerm.trim()) return true;
+    const term = welcomeContextSearchTerm.toLowerCase().trim();
+    return (
+      ctx.name.toLowerCase().includes(term) ||
+      (ctx.cluster && ctx.cluster.toLowerCase().includes(term)) ||
+      (ctx.namespace && ctx.namespace.toLowerCase().includes(term)) ||
+      (ctx.user && ctx.user.toLowerCase().includes(term))
+    );
+  });
 
   // Check if we're running in Tauri environment
   onMount(async () => {
@@ -827,7 +840,7 @@
               setContext(selectedContextName);
             }
           }} title="Retry">
-            🔄 Retry
+            <RefreshCw size={14} class="spin" /> Retry
           </button>
         {/if}
         <button class="toast-close" onclick={() => error = ''} title="Dismiss">×</button>
@@ -867,15 +880,15 @@
   {:else if currentContext}
     <div class="loading-cluster">
       <div class="loading-content">
-        <h2>🔄 Loading Cluster Data</h2>
+        <h2><RefreshCw size={24} class="spin inline-icon" /> Loading Cluster Data</h2>
         <p>Fetching cluster overview...</p>
-        <div class="loading-spinner">⏳</div>
+        <div class="loading-spinner"><Loader2 size={32} class="spin" /></div>
       </div>
     </div>
   {:else if loading}
     <div class="welcome-screen">
       <div class="welcome-content">
-        <div class="welcome-icon">🔄</div>
+        <div class="welcome-icon"><RefreshCw size={48} class="spin" /></div>
         <h2>Connecting...</h2>
         <p>Loading Kubernetes configurations...</p>
       </div>
@@ -886,7 +899,7 @@
     <!-- No kubeconfig found or error loading -->
     <div class="welcome-screen error-screen">
       <div class="welcome-content">
-        <div class="welcome-icon">⚠️</div>
+        <div class="welcome-icon text-warning"><AlertTriangle size={48} /></div>
         <h2>No Kubernetes Configuration Found</h2>
         <p class="error-detail">{error}</p>
         <div class="help-section">
@@ -908,7 +921,7 @@
         </div>
         <div class="action-buttons">
           <button class="retry-btn" onclick={handleRefresh}>
-            🔄 Retry
+            <RefreshCw size={16} /> Retry
           </button>
         </div>
       </div>
@@ -917,7 +930,7 @@
     <!-- No contexts in kubeconfig -->
     <div class="welcome-screen">
       <div class="welcome-content">
-        <div class="welcome-icon">📋</div>
+        <div class="welcome-icon"><ClipboardList size={48} /></div>
         <h2>No Kubernetes Contexts Found</h2>
         <p>Your kubeconfig file was found, but it doesn't contain any contexts.</p>
         <div class="help-section">
@@ -936,7 +949,7 @@
         </div>
         <div class="action-buttons">
           <button class="retry-btn" onclick={handleRefresh}>
-            🔄 Refresh
+            <RefreshCw size={16} /> Refresh
           </button>
         </div>
       </div>
@@ -944,13 +957,74 @@
   {:else}
     <!-- Contexts available but none selected -->
     <div class="welcome-screen">
-      <div class="welcome-content">
-        <div class="welcome-icon">🚀</div>
+      <div class="welcome-content wide-welcome">
+        <div class="welcome-icon"><Rocket size={48} /></div>
         <h2>Welcome to Kuboard</h2>
-        <p>Select a Kubernetes context from the dropdown above to get started.</p>
+        <p>Select a Kubernetes context below or from the dropdown above to get started.</p>
+
+        <div class="welcome-context-list">
+          <div class="context-list-header">
+            <span>{contexts.length} context{contexts.length !== 1 ? 's' : ''} available</span>
+          </div>
+
+          {#if contexts.length > 3}
+            <div class="welcome-search-box">
+              <Search size={16} class="search-box-icon" />
+              <input 
+                type="text" 
+                placeholder="Filter contexts by name, cluster, or namespace..." 
+                bind:value={welcomeContextSearchTerm}
+                class="welcome-search-input"
+              />
+              {#if welcomeContextSearchTerm}
+                <button class="clear-search-btn" onclick={() => welcomeContextSearchTerm = ''}>✕</button>
+              {/if}
+            </div>
+          {/if}
+
+          {#if filteredWelcomeContexts.length > 0}
+            <div class="context-grid">
+              {#each filteredWelcomeContexts as ctx}
+                <button 
+                  class="welcome-context-card" 
+                  onclick={() => setContext(ctx.name)}
+                  disabled={loading && activeLoadingContext === ctx.name}
+                  title="Connect to {ctx.name}"
+                >
+                  <div class="ctx-card-header">
+                    <span class="ctx-card-icon"><Server size={18} /></span>
+                    <span class="ctx-card-name" title={ctx.name}>{ctx.name}</span>
+                  </div>
+                  <div class="ctx-card-details">
+                    <span class="ctx-detail-item"><strong>Cluster:</strong> {ctx.cluster || '-'}</span>
+                    {#if ctx.user}
+                      <span class="ctx-detail-item"><strong>User:</strong> {ctx.user}</span>
+                    {/if}
+                    {#if ctx.namespace}
+                      <span class="ctx-detail-item"><strong>Namespace:</strong> {ctx.namespace}</span>
+                    {/if}
+                  </div>
+                  <div class="ctx-card-action">
+                    {#if loading && activeLoadingContext === ctx.name}
+                      <Loader2 size={15} class="spin" /> Connecting...
+                    {:else}
+                      <ArrowRight size={15} /> Connect
+                    {/if}
+                  </div>
+                </button>
+              {/each}
+            </div>
+          {:else}
+            <div class="no-filtered-contexts">
+              <p>No contexts found matching "<strong>{welcomeContextSearchTerm}</strong>"</p>
+              <button class="btn-reset-filter" onclick={() => welcomeContextSearchTerm = ''}>Reset Filter</button>
+            </div>
+          {/if}
+        </div>
+
         <div class="context-hint">
-          <span class="arrow-hint">👆</span>
-          <span>{contexts.length} context{contexts.length !== 1 ? 's' : ''} available</span>
+          <span class="arrow-hint"><ArrowUp size={18} /></span>
+          <span>Or choose from the context selector in the top header bar</span>
         </div>
       </div>
     </div>
@@ -1267,6 +1341,215 @@
   @keyframes bounce {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-5px); }
+  }
+
+  .welcome-content.wide-welcome {
+    max-width: 900px;
+    width: 100%;
+  }
+
+  .welcome-context-list {
+    margin-top: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+    width: 100%;
+  }
+
+  .context-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-md);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .welcome-search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .welcome-search-box :global(.search-box-icon) {
+    position: absolute;
+    left: 12px;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  .welcome-search-input {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-sm) 36px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    outline: none;
+    transition: all 0.2s;
+  }
+
+  .welcome-search-input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(46, 145, 190, 0.25);
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  .clear-search-btn {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 2px 6px;
+    border-radius: 50%;
+  }
+
+  .clear-search-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .context-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: var(--spacing-md);
+    max-height: 380px;
+    overflow-y: auto;
+    padding: 4px;
+  }
+
+  .context-grid::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .context-grid::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+  }
+
+  .context-grid::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+  }
+
+  .context-grid::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color);
+  }
+
+  .welcome-context-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    color: var(--text-primary);
+  }
+
+  .welcome-context-card:hover {
+    background: rgba(46, 145, 190, 0.14);
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(46, 145, 190, 0.25);
+  }
+
+  .welcome-context-card:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .ctx-card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+
+  .ctx-card-icon {
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .ctx-card-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ctx-card-details {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+  }
+
+  .ctx-detail-item {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ctx-detail-item strong {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .ctx-card-action {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    margin-top: var(--spacing-xs);
+    padding-top: var(--spacing-xs);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .no-filtered-contexts {
+    padding: var(--spacing-xl);
+    text-align: center;
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: var(--radius-md);
+  }
+
+  .btn-reset-filter {
+    margin-top: var(--spacing-sm);
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+
+  .btn-reset-filter:hover {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
   }
 
   /* Responsive Design */

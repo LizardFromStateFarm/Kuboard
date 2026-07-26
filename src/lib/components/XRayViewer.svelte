@@ -2,6 +2,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { Search, AlertTriangle, Layers, Boxes, Box, Globe, Database, Cpu, FileText } from 'lucide-svelte';
 
   // Props
   export let resource: any;
@@ -74,15 +75,15 @@
 
   function getKindIcon(kind: string) {
     const icons: Record<string, string> = {
-      'Deployment': '🚀',
-      'ReplicaSet': '🔄',
-      'Pod': '📦',
-      'Service': '🌐',
-      'Ingress': '🌐',
-      'StatefulSet': '💾',
-      'DaemonSet': '👾'
+      'Deployment': 'Layers',
+      'ReplicaSet': 'Boxes',
+      'Pod': 'Box',
+      'Service': 'Globe',
+      'Ingress': 'Globe',
+      'StatefulSet': 'Database',
+      'DaemonSet': 'Cpu'
     };
-    return icons[kind] || '📄';
+    return icons[kind] || 'FileText';
   }
 </script>
 
@@ -90,7 +91,7 @@
   <div class="xray-container">
     <div class="xray-header">
       <div class="header-left">
-        <h3>🔦 Resource X-Ray</h3>
+        <h3><Search size={18} class="inline-icon" /> Resource X-Ray</h3>
         <span class="resource-info">{resourceType}: {resource.metadata.name}</span>
       </div>
       <button class="close-button" onclick={onClose}>×</button>
@@ -104,7 +105,7 @@
         </div>
       {:else if error}
         <div class="error-state">
-          <span class="error-icon">⚠️</span>
+          <span class="error-icon"><AlertTriangle size={18} /></span>
           <p>{error}</p>
         </div>
       {:else}

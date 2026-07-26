@@ -3,6 +3,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   import { openGlobalPodLogs } from '../stores/logs';
+  import { ArrowLeft, FileText, Settings, ExternalLink, Box, Sliders, Tag, Loader2 } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -159,11 +160,11 @@
   <!-- Top Action Bar -->
   <div class="details-nav-bar">
     <div class="nav-actions">
-      <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}>← Back to DaemonSets</button>
+      <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}><ArrowLeft size={14} class="inline-icon" /> Back to DaemonSets</button>
       <button class="btn-subtle" onclick={() => openGlobalPodLogs(undefined, ds?.metadata?.name, ds?.metadata?.namespace)}>
-        📋 Logs
+        <FileText size={14} class="inline-icon" /> Logs
       </button>
-      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}>⚙️ Actions</button>
+      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}><Settings size={14} class="inline-icon" /> Actions</button>
     </div>
     <div class="nav-heading">
       <span class="status-pill status-{getStatusClass(status)}">{status}</span>
@@ -192,7 +193,7 @@
         <div class="spec-cell">
           <span class="spec-label">Controlled By</span>
           <button class="controller-link-btn" onclick={() => dispatch('navigateToWorkload', { type: owner.type.toLowerCase(), name: owner.name })} title="Navigate to {owner.type} Details">
-            🔗 {owner.type} / {owner.name} ↗
+            <ExternalLink size={13} class="inline-icon" /> {owner.type} / {owner.name}
           </button>
         </div>
       {/if}
@@ -204,9 +205,9 @@
 
     <!-- Managed Pods -->
     <div class="sheet-section">
-      <h5>📦 Managed Pods ({managedPods.length})</h5>
+      <h5><Box size={16} /> Managed Pods ({managedPods.length})</h5>
       {#if podsLoading}
-        <div class="muted-text">⏳ Loading managed pods...</div>
+        <div class="muted-text"><Loader2 size={14} class="spin inline-icon" /> Loading managed pods...</div>
       {:else if managedPods.length > 0}
         <div class="pods-table">
           <div class="p-head">
@@ -220,7 +221,7 @@
           {#each managedPods as pod}
             <div class="p-row">
               <div class="bold resource-click-link" onclick={() => dispatch('navigateToWorkload', { type: 'pod', name: pod.metadata?.name })}>
-                🔗 {pod.metadata?.name || 'Unknown'} ↗
+                <ExternalLink size={13} class="inline-icon" /> {pod.metadata?.name || 'Unknown'}
               </div>
               <div><span class="status-pill status-{getPodStatusClass(pod.status?.phase)}">{pod.status?.phase || 'Unknown'}</span></div>
               <div>{pod.spec?.nodeName || '-'}</div>
@@ -237,7 +238,7 @@
 
     <!-- Selectors -->
     <div class="sheet-section">
-      <h5>⚙️ Selectors</h5>
+      <h5><Sliders size={16} /> Selectors</h5>
       <div class="kv-grid">
         <div class="kv-block">
           <span class="kv-title">Match Labels</span>
@@ -256,7 +257,7 @@
 
     <!-- Labels & Annotations -->
     <div class="sheet-section">
-      <h5>🏷️ Labels & Annotations</h5>
+      <h5><Tag size={16} /> Labels & Annotations</h5>
       <div class="kv-grid">
         <div class="kv-block">
           <span class="kv-title">Labels</span>

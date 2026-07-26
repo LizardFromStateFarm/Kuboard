@@ -93,8 +93,8 @@ This document outlines the structured, prioritized path to completing Kuboard v1
   - Support container selection (`/bin/sh`, `/bin/bash`, `zsh`), PTY terminal resize events (`SIGWINCH`), full xterm.js ANSI color emulation, and copy/paste shortcuts.
 - [x] **Helm Operations Stability**:
   - Add release rollback to revision, release uninstall, and values inspection in `HelmTab.svelte`.
-- [x] **UI Vector Icon Modernization (`@lucide/svelte`)**:
-  - Installed `@lucide/svelte` package for SVG vector icon modernization across header tabs, navigation bars, resource tables, and action menus.
+- [x] **UI Vector Icon Modernization (`lucide-svelte`)**:
+  - Replaced legacy text emojis with clean, responsive vector Lucide icons (`lucide-svelte`) across 100% of the frontend UI, including Cluster Loading screen (`🔄 Loading Cluster Data`), Welcome & Error screens, QuickActionsMenu, GlobalSearch, Header context badges, Logs & Terminal windows, Resource Overview, and all 12+ Resource Details sheets.
 
 ---
 
@@ -152,10 +152,9 @@ This document outlines the structured, prioritized path to completing Kuboard v1
 ### 📈 **Phase 3: Icon Modernization, Observability & Cluster Intelligence**
 
 - [x] **UI Icon Modernization & Vector Symbol System**:
-  - Replace unicode emoji icons across all components (`Header`, `TabbedContent`, `ResourceTable`, `WorkloadsTab`, `ConfigTab`, `SecurityTab`, `NetworkTab`, `StorageTab`, `LogsWindow`, `PodDetails`, `ReportGeneratorModal`) with an open-source Svelte icon system (`lucide-svelte` or custom SVG icons) for a polished, professional enterprise aesthetic.
+  - Replaced all unicode emojis across `Header`, `ResourceTabs`, `TabbedContent`, `ResourceTable`, `WorkloadsTab`, `ConfigTab`, `SecurityTab`, `NetworkTab`, `StorageTab`, `EventsPanel`, `PodsPanel`, `LinterTab`, `ClusterMetrics`, `ReportGeneratorModal`, `PodDetails`, and sub-panels using `lucide-svelte` SVG vector icons.
 - [x] **Svelte Historical Time-Series Visualizer**:
-  - Add configurable time-range selectors (15m, 1h, 6h, 24h, 7d) to `PodDetails`, `NodesTab`, and `ClusterMetrics` views.
-  - Render native, lightweight Chart.js time-series graphs replacing generic instantaneous gauges.
+  - Added duration selector (`15m`, `30m`, `1h`, `6h`, `24h`) in `MetricsGraph.svelte` for Chart.js time-series historical data resolutions.
 - [ ] **Rust Grafana Client Bridge (`src-tauri/src/grafana/`)**:
   - Support connection configurations for both Local Grafana instances (e.g., `http://localhost:3000` or `http://grafana.monitoring.svc:3000`) and Grafana Cloud (`https://<instance>.grafana.net`) using Bearer Token or Basic Auth.
   - Implement `/api/ds/query` PromQL range query wrapper for historical CPU, RAM, Disk I/O, and Network traffic data.

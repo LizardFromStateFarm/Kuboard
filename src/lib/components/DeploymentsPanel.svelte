@@ -5,6 +5,8 @@
   import ResourceTable from './ResourceTable.svelte';
   import DeploymentDetails from './DeploymentDetails.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import { RefreshCw } from 'lucide-svelte';
+  import MultiNamespaceSelect from './MultiNamespaceSelect.svelte';
   
   const dispatch = createEventDispatcher();
 
@@ -12,6 +14,11 @@
   export let currentContext: any = null;
   export let deployments: any[] = [];
   export let initialSelectedName: string | null = null;
+  export let selectedNamespace: string = 'all';
+  export let selectedNamespaces: string[] = ['all'];
+  export let namespacesList: string[] = [];
+  export let loading: boolean = false;
+  export let onRefresh: (() => void) | null = null;
 
   // State
   let selectedDeployment: any = null;
@@ -415,11 +422,21 @@
     return timeA - timeB;
   }
 
-  function getRenderDeployments(): any[] {
-    if (liveDeployments !== null && liveDeployments.length > 0) {
-      return liveDeployments;
+  function filterByNs(list: any[], nsList: string[]) {
+    if (!nsList || nsList.length === 0 || nsList.includes('all')) {
+      return list;
     }
-    return deployments ?? [];
+    return list.filter(item => {
+      const ns = item.metadata?.namespace || item.namespace;
+      return nsList.includes(ns);
+    });
+  }
+
+  $: rawDeployments = (liveDeployments && liveDeployments.length > 0) ? liveDeployments : (deployments || []);
+  $: nsFilteredDeployments = filterByNs(rawDeployments, selectedNamespaces);
+
+  function getRenderDeployments(): any[] {
+    return nsFilteredDeployments;
   }
 
   // Reactive: Initialize deployments when props change
@@ -429,7 +446,7 @@
 
   // Reactive sorted and filtered deployments
   $: sortedDeployments = (() => {
-    const deps = (liveDeployments && liveDeployments.length > 0) ? liveDeployments : (deployments || []);
+    const deps = nsFilteredDeployments;
     if (!sortColumn || !sortDirection) {
       return deps;
     }
@@ -512,6 +529,23 @@
         noItemsMessage="No Deployments are currently in this cluster"
         noSearchResultsMessage="No Deployments match your search query:"
       >
+        <div slot="controls" class="table-controls-right">
+          {#if namespacesList && namespacesList.length > 0}
+            <MultiNamespaceSelect bind:selectedNamespaces={selectedNamespaces} {namespacesList} />
+          {/if}
+
+          {#if onRefresh}
+            <button 
+              class="refresh-button" 
+              onclick={onRefresh}
+              disabled={loading}
+              title="Refresh deployments"
+            >
+              <RefreshCw size={14} class={loading ? 'spin' : ''} />
+            </button>
+          {/if}
+        </div>
+
         <svelte:fragment slot="table">      <div class="deployments-table">
         <div class="table-header">
           <div class="header-cell sortable" onclick={() => handleSort('name')} role="button" tabindex="0">

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { Search, RefreshCw, Trash2, X } from 'lucide-svelte';
+  import { Search, RefreshCw, Trash2, X, Inbox } from 'lucide-svelte';
 
   export let items: any[] = [];
   export let filteredItems: any[] = [];
@@ -25,28 +25,32 @@
   }
 </script>
 
-{#if items && items.length > 0}
-  <!-- Search & Bulk Actions Bar -->
+<div class="resource-table-wrapper">
+  <!-- Search & Bulk Actions Bar (Always Visible) -->
   <div class="search-bar-container">
-    <div class="search-input-wrapper">
-      <span class="search-icon"><Search size={14} /></span>
-      <input
-        type="text"
-        class="search-input"
-        placeholder={searchPlaceholder}
-        bind:value={searchQuery}
-        autocomplete="off"
-      />
-      {#if searchQuery}
-        <button class="search-clear" onclick={() => searchQuery = ''} title="Clear search"><X size={14} /></button>
-      {/if}
+    <div class="search-main-row">
+      <div class="search-input-wrapper">
+        <span class="search-icon"><Search size={14} /></span>
+        <input
+          type="text"
+          class="search-input"
+          placeholder={searchPlaceholder}
+          bind:value={searchQuery}
+          autocomplete="off"
+        />
+        {#if searchQuery}
+          <button class="search-clear" onclick={() => searchQuery = ''} title="Clear search"><X size={14} /></button>
+        {/if}
+      </div>
+
+      <slot name="controls"></slot>
     </div>
     <div class="search-results-row">
       <div class="search-results-count">
         {#if searchQuery}
-          Showing {filteredItems.length} of {items.length} items
+          Showing {filteredItems ? filteredItems.length : 0} of {items ? items.length : 0} items
         {:else}
-          {items.length} items
+          {items ? items.length : 0} items
         {/if}
       </div>
 
@@ -61,9 +65,16 @@
     </div>
   </div>
 
-  {#if filteredItems.length === 0 && searchQuery}
+  {#if !items || items.length === 0 || (filteredItems && filteredItems.length === 0 && !searchQuery)}
+    <!-- No Items Available (Search & Namespace Controls stay visible above!) -->
+    <div class="no-items-message">
+      <div class="no-items-icon"><Inbox size={28} /></div>
+      <h5>No Items Available</h5>
+      <p>{noItemsMessage}</p>
+    </div>
+  {:else if filteredItems && filteredItems.length === 0 && searchQuery}
     <div class="no-search-results">
-      <div class="no-results-icon">🔍</div>
+      <div class="no-results-icon"><Search size={28} /></div>
       <h5>No Results Found</h5>
       <p>{noSearchResultsMessage} <strong>"{searchQuery}"</strong></p>
       <button class="clear-search-button" onclick={() => searchQuery = ''}>Clear Search</button>
@@ -82,14 +93,7 @@
       </slot>
     </div>
   {/if}
-{:else}
-  <!-- No Items Available -->
-  <div class="no-items-message">
-    <div class="no-items-icon">🟢</div>
-    <h5>No Items Available</h5>
-    <p>{noItemsMessage}</p>
-  </div>
-{/if}
+</div>
 
 <style>
   .search-bar-container {
@@ -99,7 +103,61 @@
     margin-bottom: var(--spacing-md);
   }
 
+  .search-main-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    width: 100%;
+  }
+
+  :global(.table-controls-right) {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-shrink: 0;
+  }
+
+  :global(.table-controls-right .namespace-selector) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.85rem;
+  }
+
+  :global(.table-controls-right .namespace-dropdown) {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-sm);
+    color: white;
+    padding: 4px 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    outline: none;
+  }
+
+  :global(.table-controls-right .refresh-button) {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-sm);
+    color: white;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 5px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition-normal);
+  }
+
+  :global(.table-controls-right .refresh-button:hover:not(:disabled)) {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
   .search-input-wrapper {
+    flex: 1;
+    min-width: 180px;
     position: relative;
     display: flex;
     align-items: center;

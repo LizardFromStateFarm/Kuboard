@@ -13,23 +13,27 @@
   let selectedIndex = 0;
   let inputElement: HTMLInputElement;
 
-  const kindIcons: Record<string, string> = {
-    'Pod': '📦',
-    'Deployment': '🚀',
-    'Service': '🌐',
-    'Node': '🖥️',
-    'Namespace': '📂',
-    'StatefulSet': '💾',
-    'DaemonSet': '👾',
-    'ReplicaSet': '🔄',
-    'Job': '🏃',
-    'CronJob': '⏰',
-    'ConfigMap': '⚙️',
-    'Secret': '🔑',
-    'Ingress': '🌐',
-    'PersistentVolume': '💾',
-    'PersistentVolumeClaim': '📥',
-    'StorageClass': '🏗️'
+  import { 
+    Search, Box, Layers, Globe, Server, Folder, Database, Cpu, Clock, FileText, Key, HardDrive, Inbox, Building2, File 
+  } from 'lucide-svelte';
+
+  const kindIcons: Record<string, any> = {
+    'Pod': Box,
+    'Deployment': Layers,
+    'Service': Globe,
+    'Node': Server,
+    'Namespace': Folder,
+    'StatefulSet': Database,
+    'DaemonSet': Cpu,
+    'ReplicaSet': Layers,
+    'Job': Clock,
+    'CronJob': Clock,
+    'ConfigMap': FileText,
+    'Secret': Key,
+    'Ingress': Globe,
+    'PersistentVolume': HardDrive,
+    'PersistentVolumeClaim': Inbox,
+    'StorageClass': Building2
   };
 
   const kindToTab: Record<string, string> = {
@@ -154,7 +158,7 @@
   <div class="search-overlay" onclick={() => visible = false}>
     <div class="search-modal" onclick={(e) => e.stopPropagation()}>
       <div class="search-input-wrapper">
-        <span class="search-icon">🔍</span>
+        <span class="search-icon"><Search size={18} /></span>
         <input
           bind:this={inputElement}
           bind:value={query}
@@ -180,7 +184,10 @@
               onclick={() => selectResult(result)}
               onmouseenter={() => selectedIndex = i}
             >
-              <span class="result-icon">{kindIcons[result.kind] || '📄'}</span>
+              <span class="result-icon">
+                <svelte:component this={kindIcons[result.kind] || File} size={16} />
+              </span>
+
               <div class="result-info">
                 <div class="result-name">{result.name}</div>
                 <div class="result-meta">

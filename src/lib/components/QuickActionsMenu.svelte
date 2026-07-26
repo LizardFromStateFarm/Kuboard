@@ -5,6 +5,9 @@
   import { openEditor } from '../stores/editor';
   import { openXRay } from '../stores/xray';
   import { openGlobalPodLogs, openGlobalPodTerminal } from '../stores/logs';
+  import { 
+    FileEdit, Search, FileText, Shield, Copy, Globe, RefreshCw, Trash2, Play, Pause, AlertTriangle, Check, Loader2, X 
+  } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -402,55 +405,56 @@
     return yaml.replace(/^(\s*(?:data|stringData|password|token|secret|authorization):\s*)(.+)$/gmi, '$1"[REDACTED]"');
   }
 
-  function getAvailableActions(): Array<{ id: string; label: string; icon: string; disabled?: boolean }> {
-    const baseActions: Array<{ id: string; label: string; icon: string }> = [
-    { id: 'edit-yaml', label: 'Edit YAML', icon: '📝' },
-    { id: 'x-ray', label: 'X-Ray', icon: '🔦' },
-    { id: 'view-yaml', label: 'View YAML', icon: '📄' },
-    { id: 'copy-sanitized-yaml', label: 'Copy Sanitized YAML', icon: '🛡️' },
-    { id: 'edit', label: 'Edit', icon: '✏️' },
+  const actionIcons: Record<string, any> = {
+    'edit-yaml': FileEdit,
+    'x-ray': Search,
+    'view-yaml': FileText,
+    'copy-sanitized-yaml': Shield,
+    'edit': FileEdit,
+    'copy-name': Copy,
+    'copy-namespace': Copy,
+    'copy-ip': Globe,
+    'restart': RefreshCw,
+    'delete': Trash2,
+    'logs': FileText,
+    'resume': Play,
+    'suspend': Pause,
+    'trigger': Play
+  };
+
+  function getAvailableActions(): Array<{ id: string; label: string; icon: any; disabled?: boolean }> {
+    const baseActions: Array<{ id: string; label: string; icon: any }> = [
+      { id: 'edit-yaml', label: 'Edit YAML', icon: FileEdit },
+      { id: 'x-ray', label: 'X-Ray', icon: Search },
+      { id: 'view-yaml', label: 'View YAML', icon: FileText },
+      { id: 'copy-sanitized-yaml', label: 'Copy Sanitized YAML', icon: Shield },
+      { id: 'edit', label: 'Edit', icon: FileEdit },
     ];
 
     const commonActions = [
-      { id: 'copy-name', label: 'Copy Name', icon: '📋' },
-      { id: 'copy-namespace', label: 'Copy Namespace', icon: '📋' },
+      { id: 'copy-name', label: 'Copy Name', icon: Copy },
+      { id: 'copy-namespace', label: 'Copy Namespace', icon: Copy },
     ];
 
     switch (resourceType) {
       case 'pod':
         return [
-          { id: 'copy-name', label: 'Copy Name', icon: '📋' },
-          { id: 'copy-ip', label: 'Copy IP', icon: '🌐', disabled: !getResourceIP() },
+          { id: 'copy-name', label: 'Copy Name', icon: Copy },
+          { id: 'copy-ip', label: 'Copy IP', icon: Globe, disabled: !getResourceIP() },
           ...baseActions,
-          { id: 'restart', label: 'Restart', icon: '🔄' },
-          { id: 'delete', label: 'Delete', icon: '🗑️' },
+          { id: 'restart', label: 'Restart', icon: RefreshCw },
+          { id: 'delete', label: 'Delete', icon: Trash2 },
         ];
       
       case 'deployment':
-        return [
-          ...commonActions,
-          ...baseActions,
-          { id: 'logs', label: 'View Logs', icon: '📋' },
-          { id: 'restart', label: 'Restart', icon: '🔄' },
-          { id: 'delete', label: 'Delete', icon: '🗑️' },
-        ];
-      
       case 'statefulset':
-        return [
-          ...commonActions,
-          ...baseActions,
-          { id: 'logs', label: 'View Logs', icon: '📋' },
-          { id: 'restart', label: 'Restart', icon: '🔄' },
-          { id: 'delete', label: 'Delete', icon: '🗑️' },
-        ];
-      
       case 'daemonset':
         return [
           ...commonActions,
           ...baseActions,
-          { id: 'logs', label: 'View Logs', icon: '📋' },
-          { id: 'restart', label: 'Restart', icon: '🔄' },
-          { id: 'delete', label: 'Delete', icon: '🗑️' },
+          { id: 'logs', label: 'View Logs', icon: FileText },
+          { id: 'restart', label: 'Restart', icon: RefreshCw },
+          { id: 'delete', label: 'Delete', icon: Trash2 },
         ];
       
       case 'cronjob':
@@ -459,72 +463,42 @@
           ...commonActions,
           ...baseActions,
           suspended 
-            ? { id: 'resume', label: 'Resume', icon: '▶️' }
-            : { id: 'suspend', label: 'Suspend', icon: '⏸️' },
-          { id: 'trigger', label: 'Trigger Now', icon: '▶️', disabled: suspended },
-          { id: 'delete', label: 'Delete', icon: '🗑️' },
+            ? { id: 'resume', label: 'Resume', icon: Play }
+            : { id: 'suspend', label: 'Suspend', icon: Pause },
+          { id: 'trigger', label: 'Trigger Now', icon: Play, disabled: suspended },
+          { id: 'delete', label: 'Delete', icon: Trash2 },
         ];
       
       case 'replicaset':
         return [
           ...commonActions,
           ...baseActions,
-          { id: 'logs', label: 'View Logs', icon: '📋' },
-          { id: 'delete', label: 'Delete', icon: '🗑️' },
+          { id: 'logs', label: 'View Logs', icon: FileText },
+          { id: 'delete', label: 'Delete', icon: Trash2 },
         ];
       
       case 'service':
-        return [
-          ...commonActions,
-          ...baseActions,
-          { id: 'delete', label: 'Delete', icon: '🗑️' },
-        ];
-      
       case 'persistentvolumeclaim':
-        return [
-          ...commonActions,
-          ...baseActions,
-          { id: 'delete', label: 'Delete', icon: '🗑️' },
-        ];
-      
-      case 'persistentvolume':
-        return [
-          { id: 'copy-name', label: 'Copy Name', icon: '📋' },
-          ...baseActions,
-          { id: 'delete', label: 'Delete', icon: '🗑️' },
-        ];
-      
-      case 'storageclass':
-        return [
-          { id: 'copy-name', label: 'Copy Name', icon: '📋' },
-          ...baseActions,
-          { id: 'delete', label: 'Delete', icon: '🗑️' },
-        ];
-      
       case 'role':
       case 'rolebinding':
       case 'serviceaccount':
-        return [
-          ...commonActions,
-          ...baseActions,
-          { id: 'delete', label: 'Delete', icon: '🗑️' },
-        ];
-      
-      case 'clusterrole':
-      case 'clusterrolebinding':
-      case 'ingressclass':
-        return [
-          { id: 'copy-name', label: 'Copy Name', icon: '📋' },
-          ...baseActions,
-          { id: 'delete', label: 'Delete', icon: '🗑️' },
-        ];
-      
       case 'ingress':
       case 'networkpolicy':
         return [
           ...commonActions,
           ...baseActions,
-          { id: 'delete', label: 'Delete', icon: '🗑️' },
+          { id: 'delete', label: 'Delete', icon: Trash2 },
+        ];
+      
+      case 'persistentvolume':
+      case 'storageclass':
+      case 'clusterrole':
+      case 'clusterrolebinding':
+      case 'ingressclass':
+        return [
+          { id: 'copy-name', label: 'Copy Name', icon: Copy },
+          ...baseActions,
+          { id: 'delete', label: 'Delete', icon: Trash2 },
         ];
 
       default:
@@ -536,30 +510,39 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if visible}
-  <div
+  <div class="menu-backdrop" onclick={closeMenu} role="button" tabindex="-1"></div>
+  <div 
     bind:this={menuElement}
     class="quick-actions-menu"
-    style="top: {computedPos.y}px; left: {computedPos.x}px;"
+    style="left: {computedPos.x}px; top: {computedPos.y}px;"
     role="menu"
-    onclick={(e) => e.stopPropagation()}
+    tabindex="-1"
   >
     {#if confirmAction}
-      <!-- Confirmation Dialog -->
-      <div class="confirmation-dialog">
-        <div class="confirmation-message">{confirmAction.message}</div>
+      <!-- Confirmation Screen -->
+      <div class="confirmation-screen">
+        <div class="confirmation-header">
+          <h4>Confirm Action</h4>
+        </div>
+        <p class="confirmation-message">{confirmAction.message}</p>
         <div class="confirmation-buttons">
           <button
             class="btn-confirm"
             onclick={() => handleAction(confirmAction!.action)}
             disabled={actionExecuting === confirmAction.action}
           >
-            {actionExecuting === confirmAction.action ? '⏳' : '✓'} Confirm
+            {#if actionExecuting === confirmAction.action}
+              <Loader2 size={14} class="spin" />
+            {:else}
+              <Check size={14} />
+            {/if}
+            Confirm
           </button>
           <button
             class="btn-cancel"
             onclick={() => { confirmAction = null; }}
           >
-            ✕ Cancel
+            <X size={14} /> Cancel
           </button>
         </div>
       </div>
@@ -567,7 +550,7 @@
       <!-- Action Menu -->
       <div class="menu-header">
         <span class="resource-name">{getResourceName()}</span>
-        <button class="btn-close" onclick={closeMenu} title="Close">✕</button>
+        <button class="btn-close" onclick={closeMenu} title="Close"><X size={16} /></button>
       </div>
       
       <div class="menu-actions">
@@ -579,10 +562,12 @@
             role="menuitem"
             disabled={action.disabled || actionExecuting === action.id}
           >
-            <span class="action-icon">{action.icon}</span>
+            <span class="action-icon">
+              <svelte:component this={action.icon} size={15} />
+            </span>
             <span class="action-label">{action.label}</span>
             {#if actionExecuting === action.id}
-              <span class="action-spinner">⏳</span>
+              <span class="action-spinner"><Loader2 size={14} class="spin" /></span>
             {/if}
           </button>
         {/each}
@@ -590,7 +575,7 @@
 
       {#if errorMessage}
         <div class="error-message">
-          <span class="error-icon">⚠️</span>
+          <span class="error-icon"><AlertTriangle size={15} /></span>
           <span class="error-text">{errorMessage}</span>
         </div>
       {/if}

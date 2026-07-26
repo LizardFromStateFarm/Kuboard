@@ -2,6 +2,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { FileText, AlertTriangle } from 'lucide-svelte';
 
   // Props
   export let resource: any;
@@ -102,7 +103,7 @@
   <div class="yaml-editor-modal">
     <div class="editor-header">
       <div class="header-left">
-        <h3>📝 Edit YAML</h3>
+        <h3><FileText size={18} class="inline-icon" /> Edit YAML</h3>
         <span class="resource-title">{getResourceTitle()}</span>
       </div>
       <div class="header-actions">
@@ -121,7 +122,7 @@
 
     {#if error}
       <div class="error-banner">
-        <span class="error-icon">⚠️</span>
+        <span class="error-icon"><AlertTriangle size={18} /></span>
         <p>{error}</p>
         <button class="error-close" onclick={() => error = null}>×</button>
       </div>

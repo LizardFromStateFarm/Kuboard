@@ -2,7 +2,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { 
-    LayoutDashboard, Activity, Boxes, Server, Sliders, Globe, Database, Wrench, Stethoscope, Shield, Layers 
+    Activity, Boxes, Server, Sliders, Globe, Database, Wrench, Stethoscope, Shield, Layers 
   } from 'lucide-svelte';
 
   // Props
@@ -48,18 +48,6 @@
 </script>
 
 <div class="resource-tabs-container">
-  <div class="tabs-header">
-    <div class="title-wrap">
-      <LayoutDashboard size={18} class="title-icon" />
-      <h3>Resource Management</h3>
-    </div>
-    <div class="tabs-summary">
-      <span class="summary-text">
-        {tabs.filter(t => !t.disabled).length} categories available
-      </span>
-    </div>
-  </div>
-  
   <div class="tabs-list">
     {#each tabs as tab}
       <button
@@ -90,65 +78,45 @@
   @import '../styles/variables.css';
 
   .resource-tabs-container {
-    padding: 5px;
+    padding: 2px 5px;
     margin-bottom: 5px;
-  }
-
-  .tabs-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 5px;
-    padding-bottom: var(--spacing-sm);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .title-wrap {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--primary-color);
-  }
-
-  .tabs-header h3 {
-    margin: 0;
-    color: white;
-    font-size: 1.2rem;
-    font-weight: 600;
-  }
-
-  .tabs-summary {
-    display: flex;
-    align-items: center;
-  }
-
-  .summary-text {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.9rem;
-    font-weight: 500;
   }
 
   .tabs-list {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--spacing-sm);
+    flex-wrap: nowrap;
+    gap: 6px;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .tabs-list::-webkit-scrollbar {
+    height: 3px;
+  }
+
+  .tabs-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
   }
 
   .tab-button {
+    flex: 1 1 0px;
+    min-width: 0;
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md) var(--spacing-lg);
+    justify-content: center;
+    gap: 5px;
+    padding: 6px 10px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-md);
     color: rgba(255, 255, 255, 0.8);
     cursor: pointer;
     transition: var(--transition-normal);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 500;
-    min-width: 140px;
-    justify-content: center;
+    white-space: nowrap;
   }
 
   .tab-button:hover:not(.disabled) {
@@ -173,24 +141,30 @@
   }
 
   .tab-icon {
-    font-size: 1.1rem;
+    font-size: 1rem;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
   }
 
   .tab-label {
-    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
     text-align: center;
   }
 
   .tab-count {
     background: rgba(255, 255, 255, 0.2);
     color: white;
-    padding: 2px 6px;
+    padding: 1px 5px;
     border-radius: var(--radius-sm);
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    min-width: 20px;
+    min-width: 18px;
     text-align: center;
+    flex-shrink: 0;
   }
 
   .tab-button.active .tab-count {
@@ -199,15 +173,6 @@
 
   /* Responsive Design */
   @media (max-width: 768px) {
-    .tabs-list {
-      flex-direction: column;
-    }
-    
-    .tab-button {
-      min-width: auto;
-      width: 100%;
-    }
-    
     .tabs-header {
       flex-direction: column;
       align-items: flex-start;
