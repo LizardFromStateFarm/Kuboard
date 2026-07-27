@@ -3,7 +3,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   import { openGlobalPodLogs } from '../stores/logs';
-  import { ArrowLeft, Sliders, RefreshCw, FileText, Settings, AlertTriangle, Boxes, Box, Tag, ExternalLink, Loader2 } from 'lucide-svelte';
+  import YamlEditor from './YamlEditor.svelte';
+  import { ArrowLeft, Sliders, RefreshCw, FileText, Settings, AlertTriangle, Boxes, Box, Tag, ExternalLink, Loader2, Trash2 } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -27,6 +28,12 @@
 
   let scaleValue: number = 0;
   let showScaleInput = false;
+
+  let versionFilter: 'active' | 'all' = 'active';
+
+  $: displayedReplicaSets = versionFilter === 'active'
+    ? managedReplicaSets.filter(r => (r.spec?.replicas || 0) > 0 || (r.status?.replicas || 0) > 0)
+    : managedReplicaSets;
 
   let actionsMenuVisible = false;
   let actionsMenuPosition = { x: 0, y: 0 };
@@ -106,13 +113,12 @@
     if (!deployment?.metadata?.name || !deployment?.metadata?.namespace) return;
     loading = true; error = null;
     try {
-      const details = await invoke('kuboard_get_deployment_details', {
+      const details = await invoke('kuboard_get_deployment', {
         name: deployment.metadata.name,
         namespace: deployment.metadata.namespace
       });
       deploymentDetails = details;
       scaleValue = deploymentDetails?.spec?.replicas || deployment?.spec?.replicas || 0;
-      await Promise.all([loadManagedReplicaSets(), loadManagedPods()]);
     } catch (err: any) {
       console.warn('Failed to load deployment details via Tauri API:', err);
       deploymentDetails = deployment;
@@ -120,6 +126,7 @@
     } finally {
       loading = false;
     }
+    await Promise.all([loadManagedReplicaSets(), loadManagedPods()]);
   }
 
   async function loadManagedReplicaSets() {
@@ -143,17 +150,11 @@
     if (!deployment?.metadata?.name || !deployment?.metadata?.namespace) return;
     podsLoading = true; podsError = null;
     try {
-      const selector = deployment.spec?.selector?.matchLabels;
-      if (selector) {
-        const labelSelector = Object.entries(selector).map(([k, v]) => `${k}=${v}`).join(',');
-        const pods = await invoke('kuboard_get_pods_by_selector', {
-          namespace: deployment.metadata.namespace,
-          labelSelector
-        }) as any[];
-        managedPods = pods || [];
-      } else {
-        managedPods = [];
-      }
+      const pods = await invoke('kuboard_get_deployment_pods', {
+        name: deployment.metadata.name,
+        namespace: deployment.metadata.namespace
+      }) as any[];
+      managedPods = pods || [];
     } catch (err: any) {
       console.warn('Failed to load managed pods:', err);
       managedPods = [];
@@ -217,6 +218,42 @@
     actionsMenuVisible = true;
   }
 
+  let yamlEditorVisible = false;
+  let yamlEditorContent = '';
+  let copiedNotice = false;
+  let copiedText = 'Copied!';
+
+  async function copyToClipboard(text: string | undefined, label: string = 'Value') {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedText = `${label} Copied!`;
+      copiedNotice = true;
+      setTimeout(() => copiedNotice = false, 1500);
+    } catch (err) {
+      console.error(`Failed to copy ${label}:`, err);
+    }
+  }
+
+  function handleActionEdit() {
+    yamlEditorVisible = true;
+  }
+
+  async function handleActionDelete() {
+    if (!dep?.metadata?.name || !dep?.metadata?.namespace) return;
+    if (!confirm(`Are you sure you want to delete Deployment "${dep.metadata.name}"?`)) return;
+    try {
+      await invoke('kuboard_delete_resource', {
+        kind: 'Deployment',
+        name: dep.metadata.name,
+        namespace: dep.metadata.namespace
+      });
+      if (onBack) onBack();
+    } catch (err: any) {
+      alert(`Failed to delete Deployment: ${err}`);
+    }
+  }
+
   function handleActionMenuClose() { actionsMenuVisible = false; }
   function handleActionDeleted() { handleActionMenuClose(); onBack(); }
   function handleActionRestarted() { handleActionMenuClose(); loadDeploymentDetails(); }
@@ -235,20 +272,23 @@
   <div class="details-nav-bar">
     <div class="nav-actions">
       <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}><ArrowLeft size={14} class="inline-icon" /> Back to Deployments</button>
+      <button class="btn-subtle" onclick={() => openGlobalPodLogs(undefined, dep?.metadata?.name, dep?.metadata?.namespace)}>
+        <FileText size={14} class="inline-icon" /> Logs
+      </button>
       <button class="btn-subtle" onclick={() => { showScaleInput = !showScaleInput; scaleValue = desired; }}>
         <Sliders size={14} class="inline-icon" /> {showScaleInput ? 'Cancel Scale' : 'Scale'}
       </button>
       <button class="btn-subtle" onclick={restartDeployment} disabled={restartLoading}>
         <RefreshCw size={14} class={restartLoading ? 'spin inline-icon' : 'inline-icon'} /> {restartLoading ? 'Restarting...' : 'Restart'}
       </button>
-      <button class="btn-subtle" onclick={() => openGlobalPodLogs(undefined, dep?.metadata?.name, dep?.metadata?.namespace)}>
-        <FileText size={14} class="inline-icon" /> Logs
-      </button>
-      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}><Settings size={14} class="inline-icon" /> Actions</button>
+      <button class="btn-subtle" onclick={handleActionEdit} title="Edit YAML"><FileText size={14} class="inline-icon" /> Edit YAML</button>
+      <button class="btn-subtle danger" onclick={handleActionDelete} title="Delete Deployment"><Trash2 size={14} class="inline-icon" /> Delete</button>
     </div>
     <div class="nav-heading">
       <span class="status-pill status-{getStatusClass(status)}">{status}</span>
-      <h3 class="nav-title">{dep?.metadata?.name}</h3>
+      <h3 class="nav-title clickable" onclick={() => copyToClipboard(dep?.metadata?.name, 'Deployment Name')} title="Click to copy deployment name">
+        {dep?.metadata?.name} {#if copiedNotice}<span class="copy-toast-inline">{copiedText}</span>{/if}
+      </h3>
       <span class="namespace-pill">{dep?.metadata?.namespace}</span>
     </div>
   </div>
@@ -295,20 +335,35 @@
 
     <!-- Managed ReplicaSets -->
     <div class="sheet-section">
-      <h5><Boxes size={16} /> ReplicaSets ({managedReplicaSets.length})</h5>
+      <div class="section-title-row">
+        <h5><Boxes size={16} /> ReplicaSets & Revisions ({displayedReplicaSets.length})</h5>
+        <select bind:value={versionFilter} class="version-filter-select">
+          <option value="active">Active Revisions Only ({managedReplicaSets.filter(r => (r.spec?.replicas || 0) > 0 || (r.status?.replicas || 0) > 0).length})</option>
+          <option value="all">All Revisions & History ({managedReplicaSets.length})</option>
+        </select>
+      </div>
       {#if replicasetsLoading}
         <div class="muted-text"><Loader2 size={14} class="spin inline-icon" /> Loading ReplicaSets...</div>
-      {:else if managedReplicaSets.length > 0}
+      {:else if displayedReplicaSets.length > 0}
         <div class="rs-table">
           <div class="rs-head">
             <div>Name</div>
+            <div>Revision Status</div>
             <div>Replicas (Ready/Desired)</div>
             <div>Age</div>
           </div>
-          {#each managedReplicaSets as rsItem}
+          {#each displayedReplicaSets as rsItem}
+            {@const isActive = (rsItem.spec?.replicas || 0) > 0 || (rsItem.status?.replicas || 0) > 0}
             <div class="rs-row">
               <div class="bold resource-click-link" onclick={() => dispatch('navigateToWorkload', { type: 'replicaset', name: rsItem.metadata?.name })}>
                 <ExternalLink size={13} class="inline-icon" /> {rsItem.metadata?.name || 'Unknown'}
+              </div>
+              <div>
+                {#if isActive}
+                  <span class="status-pill status-running">Active</span>
+                {:else}
+                  <span class="status-pill status-stopped">Historical (0 Replicas)</span>
+                {/if}
               </div>
               <div>{rsItem.status?.readyReplicas || 0} / {rsItem.spec?.replicas || 0}</div>
               <div>{formatAge(rsItem.metadata?.creationTimestamp)}</div>
@@ -418,6 +473,15 @@
   on:view-yaml={handleViewYaml}
 />
 
+{#if yamlEditorVisible}
+  <YamlEditor
+    resource={dep}
+    resourceType="deployment"
+    onSave={() => { yamlEditorVisible = false; loadDeploymentDetails(); }}
+    onCancel={() => yamlEditorVisible = false}
+  />
+{/if}
+
 {#if yamlViewerVisible}
   <div class="modal-overlay" onclick={closeYamlViewer} role="button" tabindex="-1" onkeydown={(e) => e.key === 'Escape' && closeYamlViewer()}>
     <div class="modal-box" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
@@ -508,4 +572,27 @@
   .btn-close { background: transparent; border: none; color: var(--text-secondary); font-size: 1.2rem; cursor: pointer; }
   .modal-bdy { padding: 16px; overflow-y: auto; }
   .yaml-code { background: #0d0d14; color: #a7f3d0; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 0.8rem; margin: 0; white-space: pre-wrap; }
+  .section-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .section-title-row h5 {
+    margin: 0;
+  }
+  .version-filter-select {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-primary);
+    color: var(--text-primary);
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+  }
+  .version-filter-select:hover {
+    border-color: var(--primary-color);
+  }
 </style>

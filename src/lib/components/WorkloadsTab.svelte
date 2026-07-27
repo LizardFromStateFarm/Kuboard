@@ -10,6 +10,7 @@
   import CronJobsPanel from './CronJobsPanel.svelte';
   import ServicesPanel from './ServicesPanel.svelte';
   import { Box, Boxes, Layers, Cpu, Clock, Copy, Globe, RefreshCw, AlertTriangle, Inbox } from 'lucide-svelte';
+  import { navigationStore } from '../stores/nav';
 
   // Props
   export let currentContext: any = null;
@@ -199,6 +200,28 @@
       loadWorkloadType(selectedWorkloadType);
     }
   });
+
+  let lastProcessedWorkloadNav: any = null;
+
+  $: if ($navigationStore && $navigationStore.resourceName && $navigationStore !== lastProcessedWorkloadNav) {
+    lastProcessedWorkloadNav = $navigationStore;
+    const nav = $navigationStore;
+    const rawKind = (nav.tab || 'pods').toLowerCase();
+    let targetType = rawKind;
+    if (targetType === 'deployment') targetType = 'deployments';
+    if (targetType === 'statefulset') targetType = 'statefulsets';
+    if (targetType === 'daemonset') targetType = 'daemonsets';
+    if (targetType === 'replicaset') targetType = 'replicasets';
+    if (targetType === 'cronjob') targetType = 'cronjobs';
+    if (targetType === 'pod') targetType = 'pods';
+    if (targetType === 'service') targetType = 'services';
+
+    if (workloadTypes.some(t => t.id === targetType)) {
+      selectedTargetResourceName[targetType] = nav.resourceName;
+      setWorkloadType(targetType);
+      loadWorkloadType(targetType, true);
+    }
+  }
 
   $: if (currentContext) {
     loadNamespaces();
@@ -455,9 +478,9 @@
     background: transparent;
     border: none;
     color: var(--text-secondary);
-    padding: 6px 8px;
+    padding: var(--spacing-xs) var(--spacing-sm);
     border-radius: var(--radius-sm);
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -466,18 +489,18 @@
 
   .sub-nav-item:hover {
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .sub-nav-item.active {
-    color: white;
-    background: var(--primary-color);
+    color: var(--primary-color);
+    background: rgba(59, 130, 246, 0.1);
     font-weight: 600;
   }
 
   .tab-badge {
-    background: rgba(255, 255, 255, 0.15);
-    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
     font-size: 0.75rem;
     padding: 1px 6px;
     border-radius: 10px;
@@ -485,8 +508,8 @@
   }
 
   .sub-nav-item.active .tab-badge {
-    background: rgba(255, 255, 255, 0.25);
-    color: white;
+    background: rgba(59, 130, 246, 0.2);
+    color: var(--primary-color);
   }
 
   .error-message {

@@ -10,7 +10,9 @@
   import PodConditions from './PodConditions.svelte';
   import PodEvents from './PodEvents.svelte';
   import PodVolumes from './PodVolumes.svelte';
-  import { Activity, HardDrive, Boxes, CheckCircle2, ArrowLeft, Terminal, FileText, Plug, Settings, Tag, MapPin, Zap, Search, AlertTriangle, ExternalLink, X, Loader2 } from 'lucide-svelte';
+  import NamespaceDetailsModal from './NamespaceDetailsModal.svelte';
+  import { navigationStore } from '../stores/nav';
+  import { Activity, HardDrive, Boxes, CheckCircle2, ArrowLeft, Terminal, FileText, Plug, Settings, Tag, MapPin, Zap, Search, AlertTriangle, ExternalLink, X, Loader2, Trash2 } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -28,6 +30,16 @@
   let eventsLoading = false;
   let eventsError: string | null = null;
   let metricsInitialized = false;
+
+  let namespaceModalOpen = false;
+
+  function navigateToNode(nodeName: string) {
+    if (!nodeName) return;
+    navigationStore.set({
+      tab: 'nodes',
+      resourceName: nodeName
+    });
+  }
 
   // Quick Actions Menu state
   let actionsMenuVisible = false;
@@ -147,11 +159,6 @@
     handleActionMenuClose();
   }
 
-  function handleActionEdit(event: CustomEvent) {
-    yamlEditorContent = event.detail.yaml || '';
-    yamlEditorVisible = true;
-    yamlEditorError = null;
-  }
 
   function closeYamlEditor() {
     yamlEditorVisible = false;
@@ -316,16 +323,41 @@ spec:
   })();
 
   let copiedNotice = false;
+  let copiedNoticeText = 'Copied!';
 
-  async function copyPodName() {
-    if (!pod?.metadata?.name) return;
+  async function copyToClipboard(text: string | undefined, label: string = 'Value') {
+    if (!text) return;
     try {
-      await navigator.clipboard.writeText(pod.metadata.name);
+      await navigator.clipboard.writeText(text);
+      copiedNoticeText = `${label} Copied!`;
       copiedNotice = true;
       setTimeout(() => { copiedNotice = false; }, 1500);
     } catch (err) {
-      console.error('Failed to copy pod name:', err);
+      console.error(`Failed to copy ${label}:`, err);
     }
+  }
+
+  async function copyPodName() {
+    copyToClipboard(pod?.metadata?.name, 'Pod Name');
+  }
+
+  async function handleActionDelete() {
+    if (!pod?.metadata?.name || !pod?.metadata?.namespace) return;
+    if (!confirm(`Are you sure you want to delete pod "${pod.metadata.name}"?`)) return;
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('kuboard_delete_pod', {
+        podName: pod.metadata.name,
+        namespace: pod.metadata.namespace
+      });
+      if (onBack) onBack();
+    } catch (err: any) {
+      alert(`Failed to delete pod: ${err}`);
+    }
+  }
+
+  function handleActionEdit() {
+    yamlEditorVisible = true;
   }
 
   function changeResourceType(type: 'cpu' | 'memory') { selectedResourceType = type; }
@@ -358,7 +390,8 @@ spec:
       <button class="btn-subtle" onclick={() => onOpenLogs(pod)}><FileText size={14} class="inline-icon" /> Logs</button>
       <button class="btn-subtle" onclick={() => openGlobalPodTerminal(undefined, pod?.metadata?.name, pod?.metadata?.namespace, selectedContainer?.name)} title="Exec into Pod"><Terminal size={14} class="inline-icon" /> Exec</button>
       <button class="btn-subtle" onclick={() => portForwardManagerOpen = true} title="Port Forward"><Plug size={14} class="inline-icon" /> Port Forward</button>
-      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}><Settings size={14} class="inline-icon" /> Actions</button>
+      <button class="btn-subtle" onclick={handleActionEdit} title="Edit YAML"><FileText size={14} class="inline-icon" /> Edit YAML</button>
+      <button class="btn-subtle danger" onclick={handleActionDelete} title="Delete Pod"><Trash2 size={14} class="inline-icon" /> Delete</button>
     </div>
   </div>
 
@@ -367,7 +400,7 @@ spec:
     <!-- Key Specs Summary Strip -->
     <div class="sheet-section specs-strip">
       <div class="spec-cell pod-name-spec-cell">
-        <span class="spec-label">Pod Name {#if copiedNotice}<span class="copy-success-badge">Copied!</span>{/if}</span>
+        <span class="spec-label">Pod Name {#if copiedNotice}<span class="copy-success-badge">{copiedNoticeText}</span>{/if}</span>
         <div class="pod-name-wrap">
           <span class="status-pill status-{getStatusClass(pod.status?.phase)}">{pod.status?.phase}</span>
           <h3 
@@ -380,16 +413,37 @@ spec:
           >
             {pod.metadata?.name}
           </h3>
-          <span class="namespace-pill">{pod.metadata?.namespace}</span>
+          <button class="namespace-pill clickable-pill" onclick={() => namespaceModalOpen = true} title="Inspect Namespace Details ({pod.metadata?.namespace})">
+            {pod.metadata?.namespace}
+          </button>
         </div>
       </div>
       <div class="spec-cell">
         <span class="spec-label">Node</span>
-        <span class="spec-val" title={pod.spec?.nodeName}>{pod.spec?.nodeName || '-'}</span>
+        {#if pod.spec?.nodeName}
+          <button 
+            class="controller-link-btn" 
+            onclick={() => navigateToNode(pod.spec?.nodeName)}
+            title="Inspect Node Details ({pod.spec?.nodeName})"
+          >
+            <ExternalLink size={13} class="inline-icon" /> {pod.spec?.nodeName}
+          </button>
+        {:else}
+          <span class="spec-val">-</span>
+        {/if}
       </div>
       <div class="spec-cell">
         <span class="spec-label">Pod IP</span>
-        <span class="spec-val">{pod.status?.podIP || '-'}</span>
+        <span 
+          class="spec-val clickable" 
+          onclick={() => copyToClipboard(pod.status?.podIP, 'Pod IP')}
+          onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && copyToClipboard(pod.status?.podIP, 'Pod IP')}
+          role="button"
+          tabindex="0"
+          title="Click to copy Pod IP ({pod.status?.podIP || ''})"
+        >
+          {pod.status?.podIP || '-'}
+        </span>
       </div>
       <div class="spec-cell">
         <span class="spec-label">Age</span>
@@ -649,6 +703,13 @@ spec:
   </div>
 {/if}
 
+{#if namespaceModalOpen}
+  <NamespaceDetailsModal 
+    namespaceName={pod.metadata?.namespace} 
+    onClose={() => namespaceModalOpen = false} 
+  />
+{/if}
+
 <!-- Quick Actions Menu -->
 <QuickActionsMenu
   resource={pod}
@@ -665,12 +726,20 @@ spec:
 
 
 
+{#if yamlEditorVisible}
+  <YamlEditor
+    resource={pod}
+    resourceType="pod"
+    onSave={() => yamlEditorVisible = false}
+    onCancel={() => yamlEditorVisible = false}
+  />
+{/if}
+
 {#if portForwardManagerOpen}
   <div class="port-forward-overlay">
     <PortForwardManager
       bind:isOpen={portForwardManagerOpen}
-      podName={pod?.metadata?.name}
-      namespace={pod?.metadata?.namespace}
+      pod={pod}
       onClose={() => portForwardManagerOpen = false}
     />
   </div>
@@ -779,7 +848,18 @@ spec:
     font-size: 0.8rem;
     padding: 2px 8px;
     border-radius: 12px;
-    flex-shrink: 0;
+    white-space: nowrap;
+    border: none;
+  }
+  .namespace-pill.clickable-pill {
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .namespace-pill.clickable-pill:hover {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    border-color: rgba(59, 130, 246, 0.4);
   }
 
   .status-pill {

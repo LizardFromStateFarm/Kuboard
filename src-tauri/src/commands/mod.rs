@@ -42,4 +42,6 @@ pub mod pods;
 pub use pods::*;
 pub mod resources;
 pub use resources::*;
+pub mod grafana;
+pub use grafana::*;
 

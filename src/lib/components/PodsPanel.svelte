@@ -43,6 +43,7 @@
   let containerMetrics: any = null;
   let containerMetricsLoading: boolean = false;
   let containerMetricsError: string | null = null;
+  let selectedContainer: any = null;
   let selectedContainerResourceType: 'cpu' | 'memory' = 'cpu';
 
   // Events state
@@ -953,38 +954,7 @@
     return '';
   }
 
-  // Format toleration effect
-  function getTolerationEffectClass(effect: string): string {
-    switch (effect?.toLowerCase()) {
-      case 'noschedule': return 'toleration-noschedule';
-      case 'prefernoschedule': return 'toleration-prefernoschedule';
-      case 'noexecute': return 'toleration-noexecute';
-      default: return 'toleration-unknown';
-    }
-  }
 
-  // Format object to display string
-  function formatObject(obj: any): string {
-    if (typeof obj === 'string') return obj;
-    if (typeof obj === 'number') return obj.toString();
-    if (typeof obj === 'boolean') return obj.toString();
-    if (Array.isArray(obj)) return obj.join(', ');
-    if (obj && typeof obj === 'object') {
-      return JSON.stringify(obj, null, 2);
-    }
-    return 'N/A';
-  }
-
-  // Format event timestamp
-  function formatEventTime(timestamp: string): string {
-    if (!timestamp) return 'Unknown';
-    try {
-      const date = new Date(timestamp);
-      return date.toLocaleString();
-    } catch {
-      return timestamp;
-    }
-  }
 
   // Get event type class for styling
   function getEventTypeClass(type: string): string {
@@ -1013,24 +983,98 @@
     }
   }
 
+  function handleWatchError(error: any) {
+    console.error('Watch error:', error);
+    watchError = error?.error || String(error) || 'Watch connection error';
+  }
+
+  // Start watch stream
+  async function startWatch() {
+    if (!currentContext) return;
+    
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('kuboard_stop_pod_watch');
+      await invoke('kuboard_start_pod_watch');
+      watchActive = true;
+      watchError = null;
+      console.log('✅ Watch started');
+    } catch (e: any) {
+      console.error('Failed to start watch:', e);
+      watchError = String(e);
+      watchActive = false;
+    }
+  }
+
+  // Stop watch stream
+  async function stopWatch() {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('kuboard_stop_pod_watch');
+      watchActive = false;
+      console.log('🛑 Watch stopped');
+    } catch (e: any) {
+      console.error('Failed to stop watch:', e);
+    }
+  }
+
+  // Handle watch events
+  function handleWatchEvent(event: any) {
+    console.log('📡 Raw watch event received:', event);
+    const { event_type, pod } = event;
+    
+    if (!pod || !pod.metadata) {
+      console.error('⚠️ Invalid watch event: missing pod or metadata', event);
+      return;
+    }
+    
+    const key = getPodKey(pod);
+    const eventTypeStr = String(event_type);
+    
+    switch (eventTypeStr) {
+      case 'Added':
+        if (!podsMap.has(key)) {
+          podsMap.set(key, pod);
+          livePods = [...Array.from(podsMap.values())];
+        }
+        break;
+        
+      case 'Modified':
+        podsMap.set(key, pod);
+        livePods = [...Array.from(podsMap.values())];
+        break;
+        
+      case 'Deleted':
+        if (podsMap.has(key)) {
+          podsMap.delete(key);
+          livePods = [...Array.from(podsMap.values())];
+        }
+        break;
+        
+      default:
+        console.warn(`⚠️ Unknown event type: ${eventTypeStr}`, event);
+    }
+    watchError = null;
+  }
+
   // Lifecycle
-  let watchEventListenerUnsubscribe: (() => Promise<void>) | null = null;
-  let watchErrorListenerUnsubscribe: (() => Promise<void>) | null = null;
+  let watchEventListenerUnsubscribe: (() => void) | null = null;
+  let watchErrorListenerUnsubscribe: (() => void) | null = null;
   let lastContext: string | null = null;
 
-  onMount(async () => {
+  onMount(() => {
     // Initialize pods from props
     initializePods();
     
     // Listen to watch events
-    const { listen } = await import('@tauri-apps/api/event');
-    
-    watchEventListenerUnsubscribe = await listen('pod-watch-event', (event: any) => {
-      handleWatchEvent(event.payload);
-    });
-    
-    watchErrorListenerUnsubscribe = await listen('pod-watch-error', (event: any) => {
-      handleWatchError(event.payload);
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('pod-watch-event', (event: any) => {
+        handleWatchEvent(event.payload);
+      }).then(unsub => { watchEventListenerUnsubscribe = unsub; });
+      
+      listen('pod-watch-error', (event: any) => {
+        handleWatchError(event.payload);
+      }).then(unsub => { watchErrorListenerUnsubscribe = unsub; });
     });
     
     // Start watch when context is available
@@ -1038,17 +1082,17 @@
       startWatch();
     }
     
-    return async () => {
-      if (watchEventListenerUnsubscribe) await watchEventListenerUnsubscribe();
-      if (watchErrorListenerUnsubscribe) await watchErrorListenerUnsubscribe();
-      await stopWatch();
+    return () => {
+      if (watchEventListenerUnsubscribe) watchEventListenerUnsubscribe();
+      if (watchErrorListenerUnsubscribe) watchErrorListenerUnsubscribe();
+      stopWatch();
     };
   });
 
-  onDestroy(async () => {
-    if (watchEventListenerUnsubscribe) await watchEventListenerUnsubscribe();
-    if (watchErrorListenerUnsubscribe) await watchErrorListenerUnsubscribe();
-    await stopWatch();
+  onDestroy(() => {
+    if (watchEventListenerUnsubscribe) watchEventListenerUnsubscribe();
+    if (watchErrorListenerUnsubscribe) watchErrorListenerUnsubscribe();
+    stopWatch();
   });
 
   // Restart watch only when context actually changes
@@ -1071,13 +1115,7 @@
 </script>
 
 <div class="pods-panel">
-  <div class="panel-header">
-    <div class="panel-controls">
-      <span class="live-indicator {watchError ? 'error' : watchActive ? 'active' : ''}">
-        {watchError ? 'Watch Error' : watchActive ? '🟢 Live' : '⏸️ Paused'}
-      </span>
-    </div>
-  </div>
+
 
   <!-- Always show the basic UI structure -->
   <div class="pods-content">

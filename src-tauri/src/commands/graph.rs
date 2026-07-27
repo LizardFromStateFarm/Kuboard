@@ -60,12 +60,18 @@ pub async fn kuboard_get_resource_graph(
     let svcs_api: Api<kube::core::DynamicObject> = Api::namespaced_with(client.clone(), &namespace, &kube::discovery::ApiResource::from_gvk(&kube::api::GroupVersionKind::gvk("", "v1", "Service")));
     let deploys_api: Api<kube::core::DynamicObject> = Api::namespaced_with(client.clone(), &namespace, &kube::discovery::ApiResource::from_gvk(&kube::api::GroupVersionKind::gvk("apps", "v1", "Deployment")));
     let rs_api: Api<kube::core::DynamicObject> = Api::namespaced_with(client.clone(), &namespace, &kube::discovery::ApiResource::from_gvk(&kube::api::GroupVersionKind::gvk("apps", "v1", "ReplicaSet")));
+    let sts_api: Api<kube::core::DynamicObject> = Api::namespaced_with(client.clone(), &namespace, &kube::discovery::ApiResource::from_gvk(&kube::api::GroupVersionKind::gvk("apps", "v1", "StatefulSet")));
+    let ds_api: Api<kube::core::DynamicObject> = Api::namespaced_with(client.clone(), &namespace, &kube::discovery::ApiResource::from_gvk(&kube::api::GroupVersionKind::gvk("apps", "v1", "DaemonSet")));
+    let ing_api: Api<kube::core::DynamicObject> = Api::namespaced_with(client.clone(), &namespace, &kube::discovery::ApiResource::from_gvk(&kube::api::GroupVersionKind::gvk("networking.k8s.io", "v1", "Ingress")));
 
     // Fetch lists
-    let pods = pods_api.list(&ListParams::default()).await.map_err(|e| e.to_string())?;
-    let svcs = svcs_api.list(&ListParams::default()).await.map_err(|e| e.to_string())?;
-    let deploys = deploys_api.list(&ListParams::default()).await.map_err(|e| e.to_string())?;
-    let rss = rs_api.list(&ListParams::default()).await.map_err(|e| e.to_string())?;
+    let pods = pods_api.list(&ListParams::default()).await.map(|l| l.items).unwrap_or_default();
+    let svcs = svcs_api.list(&ListParams::default()).await.map(|l| l.items).unwrap_or_default();
+    let deploys = deploys_api.list(&ListParams::default()).await.map(|l| l.items).unwrap_or_default();
+    let rss = rs_api.list(&ListParams::default()).await.map(|l| l.items).unwrap_or_default();
+    let stss = sts_api.list(&ListParams::default()).await.map(|l| l.items).unwrap_or_default();
+    let dss = ds_api.list(&ListParams::default()).await.map(|l| l.items).unwrap_or_default();
+    let ings = ing_api.list(&ListParams::default()).await.map(|l| l.items).unwrap_or_default();
 
     // Add all these to nodes
     for p in &pods {
@@ -74,7 +80,7 @@ pub async fn kuboard_get_resource_graph(
             name: p.name_any(),
             kind: "Pod".to_string(),
             namespace: Some(namespace.clone()),
-            status: "Running".to_string(), // Simplified
+            status: "Running".to_string(),
         });
     }
 
@@ -98,11 +104,41 @@ pub async fn kuboard_get_resource_graph(
         });
     }
 
+    for s in &stss {
+        nodes.push(GraphNode {
+            id: format!("StatefulSet/{}", s.name_any()),
+            name: s.name_any(),
+            kind: "StatefulSet".to_string(),
+            namespace: Some(namespace.clone()),
+            status: "Ready".to_string(),
+        });
+    }
+
+    for d in &dss {
+        nodes.push(GraphNode {
+            id: format!("DaemonSet/{}", d.name_any()),
+            name: d.name_any(),
+            kind: "DaemonSet".to_string(),
+            namespace: Some(namespace.clone()),
+            status: "Ready".to_string(),
+        });
+    }
+
     for s in &svcs {
         nodes.push(GraphNode {
             id: format!("Service/{}", s.name_any()),
             name: s.name_any(),
             kind: "Service".to_string(),
+            namespace: Some(namespace.clone()),
+            status: "Active".to_string(),
+        });
+    }
+
+    for i in &ings {
+        nodes.push(GraphNode {
+            id: format!("Ingress/{}", i.name_any()),
+            name: i.name_any(),
+            kind: "Ingress".to_string(),
             namespace: Some(namespace.clone()),
             status: "Active".to_string(),
         });
@@ -163,5 +199,30 @@ pub async fn kuboard_get_resource_graph(
     // Filter the graph to only include nodes reachable from the target resource
     // (Or just return the whole namespace graph for now)
     
+    // Build edges for Ingress -> Service
+    for i in &ings {
+        if let Some(spec) = i.data.get("spec") {
+            if let Some(rules) = spec.get("rules").and_then(|v| v.as_array()) {
+                for rule in rules {
+                    if let Some(http) = rule.get("http") {
+                        if let Some(paths) = http.get("paths").and_then(|v| v.as_array()) {
+                            for path in paths {
+                                if let Some(backend) = path.get("backend") {
+                                    if let Some(svc_name) = backend.get("service").and_then(|s| s.get("name")).and_then(|n| n.as_str()) {
+                                        edges.push(GraphEdge {
+                                            from: format!("Ingress/{}", i.name_any()),
+                                            to: format!("Service/{}", svc_name),
+                                            relationship: "Routes".to_string(),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Ok(ResourceGraph { nodes, edges })
 }

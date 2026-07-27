@@ -4,6 +4,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import ResourceTable from './ResourceTable.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import RoleBindingDetails from './RoleBindingDetails.svelte';
   import { Link } from 'lucide-svelte';
 
   // Props
@@ -18,6 +19,7 @@
   let sortColumn: string = 'name';
   let sortDirection: 'asc' | 'desc' = 'asc';
   let refreshTimer: any;
+  let selectedRoleBinding: any = null;
 
   // Context Menu State
   let contextMenuVisible = false;
@@ -118,7 +120,9 @@
     <h4><Link size={16} /> Role Bindings ({filteredBindings.length})</h4>
   </div>
 
-  {#if loading && roleBindings.length === 0}
+  {#if selectedRoleBinding}
+    <RoleBindingDetails binding={selectedRoleBinding} isClusterScoped={false} onBack={() => selectedRoleBinding = null} />
+  {:else if loading && roleBindings.length === 0}
     <div class="loading-state">
       <div class="spinner"></div>
       <p>Loading Role Bindings...</p>
@@ -148,7 +152,7 @@
 
       <svelte:fragment slot="rows">
         {#each filteredBindings as rb (rb.metadata.uid)}
-          <tr class="resource-row" oncontextmenu={(e) => handleContextMenu(e, rb)}>
+          <tr class="resource-row clickable-row" onclick={() => selectedRoleBinding = rb} oncontextmenu={(e) => handleContextMenu(e, rb)}>
             <td class="name-cell">{rb.metadata.name}</td>
             <td>{rb.metadata.namespace}</td>
             <td>
@@ -158,7 +162,7 @@
             </td>
             <td>{formatAge(rb.metadata.creationTimestamp)}</td>
             <td class="actions-cell">
-              <button class="action-btn" onclick={(e) => handleContextMenu(e, rb)}>⚙️</button>
+              <button class="action-btn" onclick={(e) => { e.stopPropagation(); handleContextMenu(e, rb); }}>⚙️</button>
             </td>
           </tr>
         {/each}

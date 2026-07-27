@@ -5,6 +5,7 @@
   import { ShieldAlert } from 'lucide-svelte';
   import ResourceTable from './ResourceTable.svelte';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
+  import RoleDetails from './RoleDetails.svelte';
 
   // Props
   export let currentContext: any = null;
@@ -17,6 +18,7 @@
   let sortColumn: string = 'name';
   let sortDirection: 'asc' | 'desc' = 'asc';
   let refreshTimer: any;
+  let selectedClusterRole: any = null;
 
   // Context Menu State
   let contextMenuVisible = false;
@@ -114,7 +116,9 @@
     <h4><ShieldAlert size={16} /> Cluster Roles ({filteredRoles.length})</h4>
   </div>
 
-  {#if loading && clusterRoles.length === 0}
+  {#if selectedClusterRole}
+    <RoleDetails role={selectedClusterRole} isClusterScoped={true} onBack={() => selectedClusterRole = null} />
+  {:else if loading && clusterRoles.length === 0}
     <div class="loading-state">
       <div class="spinner"></div>
       <p>Loading Cluster Roles...</p>
@@ -142,11 +146,11 @@
 
       <svelte:fragment slot="rows">
         {#each filteredRoles as role (role.metadata.uid)}
-          <tr class="resource-row" oncontextmenu={(e) => handleContextMenu(e, role)}>
+          <tr class="resource-row clickable-row" onclick={() => selectedClusterRole = role} oncontextmenu={(e) => handleContextMenu(e, role)}>
             <td class="name-cell">{role.metadata.name}</td>
             <td>{formatAge(role.metadata.creationTimestamp)}</td>
             <td class="actions-cell">
-              <button class="action-btn" onclick={(e) => handleContextMenu(e, role)}>⚙️</button>
+              <button class="action-btn" onclick={(e) => { e.stopPropagation(); handleContextMenu(e, role); }}>⚙️</button>
             </td>
           </tr>
         {/each}

@@ -243,37 +243,73 @@ pub async fn kuboard_get_replicaset_pods(
         Err(e) => return Err(format!("Failed to get replicaset: {}", e)),
     };
 
-    // Get selector from replicaset
-    let selector = match replicaset.spec.as_ref() {
-        Some(spec) => &spec.selector,
-        None => return Err("ReplicaSet has no spec".to_string()),
-    };
+    let rs_uid = replicaset.metadata.uid.as_deref().unwrap_or("");
+    let selector = replicaset.spec.as_ref().map(|s| &s.selector);
 
-    // List pods with matching labels
+    // List pods with matching labels or owner references
     let pods_api: Api<Pod> = Api::namespaced(client.clone(), &namespace);
     let pods = match pods_api.list(&Default::default()).await {
         Ok(pod_list) => pod_list.items,
         Err(e) => return Err(format!("Failed to list pods: {}", e)),
     };
 
-    // Filter pods by selector
+    // Filter pods by owner reference OR label selector
     let matching_pods: Vec<Pod> = pods
         .into_iter()
         .filter(|pod| {
-            if let Some(pod_labels) = pod.metadata.labels.as_ref() {
-                if let Some(match_labels) = selector.match_labels.as_ref() {
-                    match_labels.iter().all(|(key, value)| {
-                        pod_labels.get(key).map_or(false, |v| v == value)
-                    })
-                } else {
-                    false
+            // Check 1: Direct OwnerReference match (most reliable for ReplicaSets)
+            if let Some(owners) = pod.metadata.owner_references.as_ref() {
+                if owners.iter().any(|o| (o.kind == "ReplicaSet" && o.name == name) || (!rs_uid.is_empty() && o.uid == rs_uid)) {
+                    return true;
                 }
-            } else {
-                false
             }
+
+            // Check 2: Label selector fallback
+            if let Some(sel) = selector {
+                if let Some(pod_labels) = pod.metadata.labels.as_ref() {
+                    if let Some(match_labels) = sel.match_labels.as_ref() {
+                        if !match_labels.is_empty() {
+                            return match_labels.iter().all(|(key, value)| {
+                                pod_labels.get(key).map_or(false, |v| v == value)
+                            });
+                        }
+                    }
+                }
+            }
+            false
         })
         .collect();
 
     Ok(matching_pods)
+}
+
+#[tauri::command]
+pub async fn kuboard_delete_resource(
+    kind: String,
+    name: String,
+    namespace: String,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    let lower_kind = kind.to_lowercase();
+    if lower_kind == "replicaset" {
+        return crate::commands::pods::kuboard_delete_replicaset(name, namespace, state).await;
+    }
+
+    let client_guard = state.current_client.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "No active context. Please set a context first.".to_string())?;
+
+    let api: Api<kube::core::DynamicObject> = Api::namespaced_with(
+        client.clone(),
+        &namespace,
+        &kube::discovery::ApiResource::from_gvk(&kube::api::GroupVersionKind::gvk("", "v1", &kind))
+    );
+
+    match api.delete(&name, &kube::api::DeleteParams::default()).await {
+        Ok(_) => Ok(format!("Resource {} {}/{} deleted successfully", kind, namespace, name)),
+        Err(kube::Error::Api(e)) if e.code == 404 => Ok(format!("Resource {} {}/{} not found (already deleted)", kind, namespace, name)),
+        Err(e) => Err(format!("Failed to delete {}: {}", kind, e)),
+    }
 }
 

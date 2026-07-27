@@ -24,6 +24,17 @@
   let sortDirection: 'asc' | 'desc' = 'asc';
   let selectedConfigMap: any = null;
 
+  import { navigationStore } from '../stores/nav';
+
+  let lastProcessedConfigNav: any = null;
+
+  $: if ($navigationStore && ($navigationStore.tab === 'config' || $navigationStore.tab === 'configmap') && $navigationStore.resourceName && $navigationStore !== lastProcessedConfigNav) {
+    lastProcessedConfigNav = $navigationStore;
+    const targetName = $navigationStore.resourceName;
+    const found = configmaps.find(cm => cm.metadata?.name === targetName);
+    selectedConfigMap = found || { metadata: { name: targetName, namespace: 'default' }, data: {} };
+  }
+
   // Context Menu State
   let contextMenuVisible = false;
   let contextMenuPosition = { x: 0, y: 0 };
@@ -208,27 +219,29 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: var(--background-secondary);
-    padding: 8px 12px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-primary);
+    background: rgba(255, 255, 255, 0.02);
+    padding: var(--spacing-md);
+    border-bottom: 1px solid var(--border-primary);
   }
 
   .sub-tabs {
     display: flex;
-    gap: 8px;
+    gap: var(--spacing-sm);
   }
 
   .sub-tab-btn {
     background: transparent;
     border: none;
     color: var(--text-secondary);
-    padding: 6px 14px;
+    padding: var(--spacing-xs) var(--spacing-sm);
     border-radius: var(--radius-sm);
-    font-weight: 600;
+    font-weight: 500;
     font-size: 0.9rem;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
 
   .sub-tab-btn:hover {
@@ -237,8 +250,9 @@
   }
 
   .sub-tab-btn.active {
-    background: var(--primary-color);
-    color: white;
+    color: var(--primary-color);
+    background: rgba(59, 130, 246, 0.1);
+    font-weight: 600;
   }
 
   .refresh-btn {

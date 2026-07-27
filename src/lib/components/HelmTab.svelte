@@ -93,11 +93,6 @@
         disabled={loading}
         title="Refresh releases"
       >
-        class="refresh-button" 
-        onclick={loadReleases}
-        disabled={loading}
-        title="Refresh releases"
-      >
         <RefreshCw size={14} class={loading ? 'spin' : ''} /> Refresh
       </button>
       {#if lastUpdate}

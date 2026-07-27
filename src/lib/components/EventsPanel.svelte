@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import ResourceTable from './ResourceTable.svelte';
-  import { Activity, AlertTriangle, CheckCircle2, Radio, Pause, RefreshCw } from 'lucide-svelte';
+  import { Activity, AlertTriangle, CheckCircle2, Radio, Pause, RefreshCw, Clock } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
@@ -15,8 +15,24 @@
   let error: string | null = null;
   let searchQuery: string = '';
   let typeFilter: 'all' | 'warning' | 'normal' = 'all';
+  let timeFrame: '15m' | '30m' | '1h' | '6h' | '24h' | 'all' = 'all';
   let sortColumn: string = 'timestamp';
   let sortDirection: 'asc' | 'desc' = 'desc';
+
+  function isWithinTimeFrame(timestamp: string | undefined): boolean {
+    if (timeFrame === 'all' || !timestamp) return true;
+    const evtTime = new Date(timestamp).getTime();
+    if (isNaN(evtTime)) return true;
+    const diffMins = (Date.now() - evtTime) / 60000;
+    switch (timeFrame) {
+      case '15m': return diffMins <= 15;
+      case '30m': return diffMins <= 30;
+      case '1h': return diffMins <= 60;
+      case '6h': return diffMins <= 360;
+      case '24h': return diffMins <= 1440;
+      default: return true;
+    }
+  }
 
 
 
@@ -53,6 +69,7 @@
   }
 
   $: filteredEvents = events.filter(evt => {
+    const matchesTime = isWithinTimeFrame(evt.last_timestamp || evt.first_timestamp || evt.event_time);
     const matchesNamespace = namespace === 'all' || evt.involved_object?.namespace === namespace;
     const matchesType = typeFilter === 'all' || (evt.type_ || '').toLowerCase() === typeFilter;
     const q = searchQuery.toLowerCase();
@@ -62,7 +79,7 @@
       (evt.involved_object?.name || '').toLowerCase().includes(q) ||
       (evt.involved_object?.kind || '').toLowerCase().includes(q) ||
       (evt.involved_object?.namespace || '').toLowerCase().includes(q);
-    return matchesNamespace && matchesType && matchesSearch;
+    return matchesTime && matchesNamespace && matchesType && matchesSearch;
   });
 
   $: sortedEvents = [...filteredEvents].sort((a, b) => {
@@ -178,6 +195,17 @@
       </div>
     </div>
     <div class="header-actions">
+      <div class="time-frame-selector" title="Filter cluster events duration window">
+        <Clock size={14} class="inline-icon" />
+        <select bind:value={timeFrame} class="select-sm">
+          <option value="15m">Last 15m</option>
+          <option value="30m">Last 30m</option>
+          <option value="1h">Last 1h</option>
+          <option value="6h">Last 6h</option>
+          <option value="24h">Last 24h</option>
+          <option value="all">All Time</option>
+        </select>
+      </div>
       <button class="stream-btn {liveStream ? 'active' : ''}" onclick={toggleLiveStream}>
         {#if liveStream}
           <Radio size={14} class="spin-slow" /> Live Stream (ON)

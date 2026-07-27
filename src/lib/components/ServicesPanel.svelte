@@ -20,7 +20,6 @@
 
   // State
   let services: any[] = [];
-  let loading: boolean = true;
   let error: string | null = null;
   let searchQuery: string = '';
   let sortColumn: string = 'name';

@@ -3,7 +3,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   import PortForwardManager from './PortForwardManager.svelte';
-  import { ArrowLeft, Plug, Settings, Sliders, Tag } from 'lucide-svelte';
+  import YamlEditor from './YamlEditor.svelte';
+  import { ArrowLeft, Plug, Settings, Sliders, Tag, FileText, Trash2 } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -91,6 +92,42 @@
     actionsMenuVisible = true;
   }
 
+  let yamlEditorVisible = false;
+  let yamlEditorContent = '';
+  let copiedNotice = false;
+  let copiedText = 'Copied!';
+
+  async function copyToClipboard(text: string | undefined, label: string = 'Value') {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedText = `${label} Copied!`;
+      copiedNotice = true;
+      setTimeout(() => copiedNotice = false, 1500);
+    } catch (err) {
+      console.error(`Failed to copy ${label}:`, err);
+    }
+  }
+
+  function handleActionEdit() {
+    yamlEditorVisible = true;
+  }
+
+  async function handleActionDelete() {
+    if (!svc?.metadata?.name || !svc?.metadata?.namespace) return;
+    if (!confirm(`Are you sure you want to delete Service "${svc.metadata.name}"?`)) return;
+    try {
+      await invoke('kuboard_delete_resource', {
+        kind: 'Service',
+        name: svc.metadata.name,
+        namespace: svc.metadata.namespace
+      });
+      if (onBack) onBack();
+    } catch (err: any) {
+      alert(`Failed to delete Service: ${err}`);
+    }
+  }
+
   function handleActionMenuClose() { actionsMenuVisible = false; }
   function handleActionDeleted() { handleActionMenuClose(); onBack(); }
   function handleViewYaml(event: CustomEvent) {
@@ -109,11 +146,14 @@
     <div class="nav-actions">
       <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}><ArrowLeft size={14} class="inline-icon" /> Back to Services</button>
       <button class="btn-subtle" onclick={() => portForwardManagerOpen = true}><Plug size={14} class="inline-icon" /> Port Forward</button>
-      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}><Settings size={14} class="inline-icon" /> Actions</button>
+      <button class="btn-subtle" onclick={handleActionEdit} title="Edit YAML"><FileText size={14} class="inline-icon" /> Edit YAML</button>
+      <button class="btn-subtle danger" onclick={handleActionDelete} title="Delete Service"><Trash2 size={14} class="inline-icon" /> Delete</button>
     </div>
     <div class="nav-heading">
       <span class="status-pill status-ready">{type}</span>
-      <h3 class="nav-title">{svc?.metadata?.name}</h3>
+      <h3 class="nav-title clickable" onclick={() => copyToClipboard(svc?.metadata?.name, 'Service Name')} title="Click to copy service name">
+        {svc?.metadata?.name} {#if copiedNotice}<span class="copy-toast-inline">{copiedText}</span>{/if}
+      </h3>
       <span class="namespace-pill">{svc?.metadata?.namespace}</span>
     </div>
   </div>
@@ -235,12 +275,20 @@
   on:view-yaml={handleViewYaml}
 />
 
+{#if yamlEditorVisible}
+  <YamlEditor
+    resource={svc}
+    resourceType="service"
+    onSave={() => { yamlEditorVisible = false; loadServiceDetails(); }}
+    onCancel={() => yamlEditorVisible = false}
+  />
+{/if}
+
 {#if portForwardManagerOpen}
   <div class="port-forward-overlay">
     <PortForwardManager
       bind:isOpen={portForwardManagerOpen}
-      serviceName={service?.metadata?.name}
-      namespace={service?.metadata?.namespace}
+      service={svc}
       onClose={() => portForwardManagerOpen = false}
     />
   </div>

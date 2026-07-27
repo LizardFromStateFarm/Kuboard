@@ -1,9 +1,10 @@
-<!-- Kuboard Role / ClusterRole Details View -->
+<!-- Kuboard RoleBinding / ClusterRoleBinding Details View -->
 <script lang="ts">
-  import { ArrowLeft, ShieldCheck, ShieldAlert, FileText, Trash2, Tag, Key, Lock } from 'lucide-svelte';
+  import { ArrowLeft, Link2, ShieldCheck, ShieldAlert, FileText, User, Users, Box, Tag, ExternalLink } from 'lucide-svelte';
+  import { navigationStore } from '../stores/nav';
   import YamlEditor from './YamlEditor.svelte';
 
-  export let role: any;
+  export let binding: any;
   export let isClusterScoped: boolean = false;
   export let onBack: () => void = () => {};
 
@@ -19,23 +20,28 @@
     if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
     return `${Math.floor(diff / 86400)}d`;
   }
+
+  function navigateToTargetRole(kind: string, name: string) {
+    if (!name) return;
+    const isClusterRole = kind === 'ClusterRole';
+    navigationStore.set({
+      tab: 'security',
+      resourceName: name
+    });
+  }
 </script>
 
-<div class="role-details-container">
+<div class="binding-details-container">
   <!-- Top Navigation Toolbar -->
   <div class="details-top-bar">
     <div class="left-actions">
       <button class="back-btn" onclick={onBack}>
-        <ArrowLeft size={16} class="inline-icon" /> Back to {isClusterScoped ? 'Cluster Roles' : 'Roles'}
+        <ArrowLeft size={16} class="inline-icon" /> Back to {isClusterScoped ? 'Cluster Role Bindings' : 'Role Bindings'}
       </button>
       <div class="resource-title-badge">
-        {#if isClusterScoped}
-          <ShieldAlert size={18} class="inline-icon text-warning" />
-        {:else}
-          <ShieldCheck size={18} class="inline-icon text-primary" />
-        {/if}
-        <span class="res-kind">{isClusterScoped ? 'ClusterRole' : 'Role'}</span>
-        <span class="res-name">{role?.metadata?.name || 'Unknown'}</span>
+        <Link2 size={18} class="inline-icon text-primary" />
+        <span class="res-kind">{isClusterScoped ? 'ClusterRoleBinding' : 'RoleBinding'}</span>
+        <span class="res-name">{binding?.metadata?.name || 'Unknown'}</span>
       </div>
     </div>
 
@@ -50,70 +56,80 @@
   <div class="specs-summary-strip">
     <div class="spec-cell">
       <span class="spec-label">Namespace</span>
-      <span class="spec-val">{role?.metadata?.namespace || (isClusterScoped ? 'Cluster-Scoped' : 'default')}</span>
+      <span class="spec-val">{binding?.metadata?.namespace || (isClusterScoped ? 'Cluster-Scoped' : 'default')}</span>
     </div>
     <div class="spec-cell">
-      <span class="spec-label">Rules Count</span>
-      <span class="spec-val font-bold">{role?.rules?.length || 0} policy rules</span>
+      <span class="spec-label">Bound Role</span>
+      <span class="spec-val font-bold">
+        {binding?.roleRef?.kind || 'Role'} / {binding?.roleRef?.name || '-'}
+      </span>
+    </div>
+    <div class="spec-cell">
+      <span class="spec-label">Subjects Count</span>
+      <span class="spec-val font-bold">{binding?.subjects?.length || 0} bound subjects</span>
     </div>
     <div class="spec-cell">
       <span class="spec-label">Age</span>
-      <span class="spec-val">{formatAge(role?.metadata?.creationTimestamp)}</span>
-    </div>
-    <div class="spec-cell">
-      <span class="spec-label">UID</span>
-      <span class="spec-val font-mono">{role?.metadata?.uid || '-'}</span>
+      <span class="spec-val">{formatAge(binding?.metadata?.creationTimestamp)}</span>
     </div>
   </div>
 
-  <!-- Rules Breakdown Section -->
+  <!-- Bound Role Ref Section -->
   <div class="sheet-section">
     <div class="section-header">
-      <h5><Lock size={16} class="inline-icon" /> RBAC Permissions & Policy Rules</h5>
+      <h5><ShieldCheck size={16} class="inline-icon" /> Target Role Reference</h5>
     </div>
-    
-    {#if role?.rules && role.rules.length > 0}
+
+    <div class="role-ref-card">
+      <div class="ref-info">
+        <span class="ref-kind-badge">{binding?.roleRef?.kind || 'Role'}</span>
+        <span class="ref-name">{binding?.roleRef?.name || '-'}</span>
+        <span class="ref-group">API Group: {binding?.roleRef?.apiGroup || 'rbac.authorization.k8s.io'}</span>
+      </div>
+      <button 
+        class="btn-inspect-role" 
+        onclick={() => navigateToTargetRole(binding?.roleRef?.kind, binding?.roleRef?.name)}
+      >
+        <ExternalLink size={14} class="inline-icon" /> Inspect Role Details
+      </button>
+    </div>
+  </div>
+
+  <!-- Subjects Table Section -->
+  <div class="sheet-section">
+    <div class="section-header">
+      <h5><Users size={16} class="inline-icon" /> Bound Subjects (Users, Groups & ServiceAccounts)</h5>
+    </div>
+
+    {#if binding?.subjects && binding.subjects.length > 0}
       <div class="table-container">
-        <table class="rules-table">
+        <table class="subjects-table">
           <thead>
             <tr>
-              <th>API Groups</th>
-              <th>Resources</th>
-              <th>Resource Names</th>
-              <th>Verbs / Allowed Actions</th>
+              <th>Subject Kind</th>
+              <th>Name</th>
+              <th>Namespace</th>
+              <th>API Group</th>
             </tr>
           </thead>
           <tbody>
-            {#each role.rules as rule, idx}
+            {#each binding.subjects as subject}
               <tr>
-                <td class="group-cell">
-                  {#if !rule.apiGroups || rule.apiGroups.length === 0 || rule.apiGroups.includes('')}
-                    <span class="group-badge core">core ("")</span>
-                  {:else}
-                    {#each rule.apiGroups as group}
-                      <span class="group-badge">{group}</span>
-                    {/each}
-                  {/if}
+                <td class="kind-cell">
+                  <span class="kind-pill kind-{subject.kind?.toLowerCase()}">
+                    {#if subject.kind === 'ServiceAccount'}
+                      <Box size={12} class="inline-icon" />
+                    {:else if subject.kind === 'User'}
+                      <User size={12} class="inline-icon" />
+                    {:else}
+                      <Users size={12} class="inline-icon" />
+                    {/if}
+                    {subject.kind}
+                  </span>
                 </td>
-                <td class="resource-cell">
-                  {#each (rule.resources || []) as res}
-                    <span class="res-pill">{res}</span>
-                  {/each}
-                </td>
-                <td class="resource-names-cell">
-                  {#if rule.resourceNames && rule.resourceNames.length > 0}
-                    {#each rule.resourceNames as name}
-                      <span class="name-pill">{name}</span>
-                    {/each}
-                  {:else}
-                    <span class="muted-text">All Resources (*)</span>
-                  {/if}
-                </td>
-                <td class="verbs-cell">
-                  {#each (rule.verbs || []) as verb}
-                    <span class="verb-badge verb-{verb}">{verb}</span>
-                  {/each}
-                </td>
+                <td class="name-cell font-bold">{subject.name}</td>
+                <td>{subject.namespace || binding?.metadata?.namespace || '-'}</td>
+                <td class="font-mono text-muted">{subject.apiGroup || 'core'}</td>
               </tr>
             {/each}
           </tbody>
@@ -121,23 +137,23 @@
       </div>
     {:else}
       <div class="empty-state">
-        <p class="muted-text">No RBAC policy rules defined for this {isClusterScoped ? 'ClusterRole' : 'Role'}.</p>
+        <p class="muted-text">No subjects bound to this {isClusterScoped ? 'ClusterRoleBinding' : 'RoleBinding'}.</p>
       </div>
     {/if}
   </div>
 
   <!-- Labels & Annotations -->
-  {#if role?.metadata?.labels || role?.metadata?.annotations}
+  {#if binding?.metadata?.labels || binding?.metadata?.annotations}
     <div class="sheet-section">
       <div class="section-header">
         <h5><Tag size={16} class="inline-icon" /> Metadata & Labels</h5>
       </div>
       <div class="metadata-grid">
-        {#if role?.metadata?.labels}
+        {#if binding?.metadata?.labels}
           <div class="meta-block">
             <span class="meta-title">Labels</span>
             <div class="pill-cloud">
-              {#each Object.entries(role.metadata.labels) as [k, v]}
+              {#each Object.entries(binding.metadata.labels) as [k, v]}
                 <span class="label-pill"><strong>{k}:</strong> {v}</span>
               {/each}
             </div>
@@ -150,15 +166,15 @@
 
 {#if showYamlEditor}
   <YamlEditor 
-    resource={role} 
-    resourceType={isClusterScoped ? "clusterrole" : "role"} 
+    resource={binding} 
+    resourceType={isClusterScoped ? "clusterrolebinding" : "rolebinding"} 
     onSave={() => showYamlEditor = false} 
     onCancel={() => showYamlEditor = false} 
   />
 {/if}
 
 <style>
-  .role-details-container {
+  .binding-details-container {
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -191,7 +207,6 @@
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.15s ease;
   }
 
   .back-btn:hover {
@@ -205,8 +220,8 @@
   }
 
   .res-kind {
-    background: rgba(59, 130, 246, 0.2);
-    color: #60a5fa;
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
     font-size: 11px;
     font-weight: 800;
     padding: 2px 8px;
@@ -277,75 +292,94 @@
     color: var(--text-primary);
   }
 
-  .rules-table {
+  .role-ref-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+  }
+
+  .ref-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ref-kind-badge {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .ref-name {
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .ref-group {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .btn-inspect-role {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: #60a5fa;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .subjects-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
   }
 
-  .rules-table th, .rules-table td {
+  .subjects-table th, .subjects-table td {
     padding: 10px 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     text-align: left;
   }
 
-  .rules-table th {
+  .subjects-table th {
     color: var(--text-muted);
     font-weight: 700;
     text-transform: uppercase;
     font-size: 11px;
   }
 
-  .group-badge {
-    background: rgba(255, 255, 255, 0.08);
-    color: #e2e8f0;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-family: monospace;
-  }
-  .group-badge.core {
-    background: rgba(59, 130, 246, 0.15);
-    color: #60a5fa;
-  }
-
-  .res-pill, .name-pill {
-    background: rgba(16, 185, 129, 0.15);
-    color: #34d399;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-family: monospace;
-    display: inline-block;
-    margin-right: 4px;
-    margin-bottom: 4px;
-  }
-
-  .verb-badge {
+  .kind-pill {
     padding: 2px 8px;
     border-radius: 4px;
     font-size: 11px;
     font-weight: 700;
-    font-family: monospace;
-    display: inline-block;
-    margin-right: 4px;
-    margin-bottom: 4px;
-    text-transform: lowercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 
-  .verb-get, .verb-list, .verb-watch {
+  .kind-serviceaccount {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+  }
+
+  .kind-user {
     background: rgba(59, 130, 246, 0.2);
     color: #60a5fa;
   }
 
-  .verb-create, .verb-update, .verb-patch {
+  .kind-group {
     background: rgba(245, 158, 11, 0.2);
     color: #fbbf24;
-  }
-
-  .verb-delete, .verb-deletecollection, .verb-\* {
-    background: rgba(239, 68, 68, 0.2);
-    color: #f87171;
   }
 
   .pill-cloud {

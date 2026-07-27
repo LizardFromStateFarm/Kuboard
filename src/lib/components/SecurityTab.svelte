@@ -22,6 +22,15 @@
     sessionTabMap[tabSessionId] = tab;
     sessionTabMap = { ...sessionTabMap };
   }
+
+  import { navigationStore } from '../stores/nav';
+
+  let lastProcessedSecurityNav: any = null;
+
+  $: if ($navigationStore && ($navigationStore.tab === 'security' || $navigationStore.tab === 'secret') && $navigationStore.resourceName && $navigationStore !== lastProcessedSecurityNav) {
+    lastProcessedSecurityNav = $navigationStore;
+    setActiveTab('secrets');
+  }
 </script>
 
 <div class="security-tab">

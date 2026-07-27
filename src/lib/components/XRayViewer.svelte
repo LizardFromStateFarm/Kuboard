@@ -2,7 +2,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { Search, AlertTriangle, Layers, Boxes, Box, Globe, Database, Cpu, FileText } from 'lucide-svelte';
+  import { navigationStore } from '../stores/nav';
+  import { Search, AlertTriangle, Layers, Boxes, Box, Globe, Database, Cpu, FileText, ArrowRight, ExternalLink } from 'lucide-svelte';
 
   // Props
   export let resource: any;
@@ -69,21 +70,24 @@
     graph = { ...graph };
   }
 
-  onMount(() => {
-    loadGraph();
-  });
-
-  function getKindIcon(kind: string) {
-    const icons: Record<string, string> = {
-      'Deployment': 'Layers',
-      'ReplicaSet': 'Boxes',
-      'Pod': 'Box',
-      'Service': 'Globe',
-      'Ingress': 'Globe',
-      'StatefulSet': 'Database',
-      'DaemonSet': 'Cpu'
+  function navigateToResource(node: any) {
+    if (!node || !node.kind || !node.name) return;
+    const kindMap: Record<string, string> = {
+      'pod': 'pods',
+      'deployment': 'deployments',
+      'statefulset': 'statefulsets',
+      'daemonset': 'daemonsets',
+      'replicaset': 'replicasets',
+      'cronjob': 'cronjobs',
+      'service': 'services',
+      'ingress': 'ingresses'
     };
-    return icons[kind] || 'FileText';
+    const targetTab = kindMap[node.kind.toLowerCase()] || 'workloads';
+    navigationStore.set({
+      tab: targetTab,
+      resourceName: node.name
+    });
+    onClose();
   }
 </script>
 
@@ -136,17 +140,24 @@
             <!-- Nodes -->
             {#each graph.nodes as node}
               {#if node.x !== undefined}
-                <g class="node-group" transform="translate({node.x - 80}, {node.y - 30})">
+                <g 
+                  class="node-group clickable-node" 
+                  transform="translate({node.x - 80}, {node.y - 30})"
+                  onclick={() => navigateToResource(node)}
+                  role="button"
+                  tabindex="0"
+                  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && navigateToResource(node)}
+                >
                   <rect 
                     width="160" 
                     height="60" 
                     rx="8" 
                     class="node-rect"
-                    class:highlight={node.name === resource.metadata.name && node.kind.toLowerCase() === resourceType.toLowerCase()}
+                    class:highlight={node.name === resource?.metadata?.name && node.kind?.toLowerCase() === resourceType?.toLowerCase()}
                   />
-                  <text x="10" y="25" class="node-kind">{getKindIcon(node.kind)} {node.kind}</text>
-                  <text x="10" y="45" class="node-name">{node.name.length > 18 ? node.name.substring(0, 15) + '...' : node.name}</text>
-                  <circle cx="150" cy="30" r="4" class="status-dot status-{node.status.toLowerCase()}" />
+                  <text x="12" y="25" class="node-kind">{node.kind}</text>
+                  <text x="12" y="45" class="node-name">{node.name?.length > 18 ? node.name.substring(0, 15) + '...' : node.name}</text>
+                  <circle cx="148" cy="30" r="4" class="status-dot status-{node.status?.toLowerCase() || 'running'}" />
                 </g>
               {/if}
             {/each}
@@ -253,9 +264,13 @@
     fill: rgba(59, 130, 246, 0.1);
   }
 
-  .node-group:hover .node-rect {
-    fill: rgba(255, 255, 255, 0.1);
-    stroke: rgba(255, 255, 255, 0.3);
+  .clickable-node {
+    cursor: pointer;
+  }
+  .clickable-node:hover .node-rect {
+    fill: rgba(59, 130, 246, 0.2);
+    stroke: var(--primary-color);
+    filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.4));
   }
 
   .node-kind {

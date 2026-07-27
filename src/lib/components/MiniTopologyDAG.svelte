@@ -1,6 +1,7 @@
 <!-- Kuboard Resource Mini-Topology DAG Component -->
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { Network, Box, Boxes, Settings, Pin, Lock, HardDrive, Zap, Plug, RefreshCw } from 'lucide-svelte';
 
   export let resource: any;
   export let resourceType: string = 'pod';
@@ -13,7 +14,7 @@
     name: string;
     namespace?: string;
     status?: string;
-    icon: string;
+    iconType: string;
     role: 'parent' | 'current' | 'child';
   }
 
@@ -36,7 +37,7 @@
             name: owner.name,
             namespace: ns,
             status: 'Active',
-            icon: owner.kind === 'ReplicaSet' ? '🔄' : owner.kind === 'StatefulSet' ? '📦' : '⚙️',
+            iconType: owner.kind,
             role: 'parent'
           });
         });
@@ -47,7 +48,7 @@
           name: 'Unmanaged Pod',
           namespace: ns,
           status: 'Active',
-          icon: '📌',
+          iconType: 'Standalone',
           role: 'parent'
         });
       }
@@ -59,7 +60,7 @@
         name,
         namespace: ns,
         status: res.status?.phase || 'Running',
-        icon: '🐳',
+        iconType: 'Pod',
         role: 'current'
       });
 
@@ -72,7 +73,7 @@
             kind: 'ConfigMap',
             name: v.configMap.name,
             namespace: ns,
-            icon: '⚙️',
+            iconType: 'ConfigMap',
             role: 'child'
           });
         } else if (v.secret) {
@@ -81,7 +82,7 @@
             kind: 'Secret',
             name: v.secret.secretName,
             namespace: ns,
-            icon: '🔒',
+            iconType: 'Secret',
             role: 'child'
           });
         } else if (v.persistentVolumeClaim) {
@@ -90,31 +91,29 @@
             kind: 'PVC',
             name: v.persistentVolumeClaim.claimName,
             namespace: ns,
-            icon: '💾',
+            iconType: 'PVC',
             role: 'child'
           });
         }
       });
     } else if (type === 'deployment') {
-      // Deployment -> ReplicaSet -> Pods
       result.push({
         id: `current-${name}`,
         kind: 'Deployment',
         name,
         namespace: ns,
         status: `${res.status?.readyReplicas || 0}/${res.status?.replicas || 0} Ready`,
-        icon: '🚀',
+        iconType: 'Deployment',
         role: 'current'
       });
     } else if (type === 'service') {
-      // Service -> Selector Pods / Endpoints
       result.push({
         id: `current-${name}`,
         kind: 'Service',
         name,
         namespace: ns,
         status: res.spec?.type || 'ClusterIP',
-        icon: '🔌',
+        iconType: 'Service',
         role: 'current'
       });
     }
@@ -122,14 +121,40 @@
     return result;
   }
 
+  import { navigationStore } from '../stores/nav';
+
   function handleNodeClick(node: NodeItem) {
+    if (node.kind === 'Standalone' || !node.name) return;
+
+    const kindMap: Record<string, string> = {
+      'pod': 'pods',
+      'deployment': 'deployments',
+      'statefulset': 'statefulsets',
+      'daemonset': 'daemonsets',
+      'replicaset': 'replicasets',
+      'cronjob': 'cronjobs',
+      'service': 'services',
+      'ingress': 'ingresses',
+      'configmap': 'config',
+      'secret': 'security',
+      'pvc': 'storage'
+    };
+
+    const targetTab = kindMap[node.kind.toLowerCase()] || 'workloads';
+
+    navigationStore.set({
+      tab: targetTab,
+      resourceName: node.name
+    });
+
     dispatch('navigate', { kind: node.kind, name: node.name, namespace: node.namespace });
+    dispatch('navigateToWorkload', { targetTab: node.kind, resourceName: node.name, namespace: node.namespace });
   }
 </script>
 
 <div class="mini-topology-dag">
   <div class="dag-header">
-    <h5>🌐 Resource Topology DAG & Live Links</h5>
+    <h5><Network size={16} class="inline-icon" /> Resource Topology DAG & Live Links</h5>
     <span class="dag-subtitle">Owner hierarchy & bound volume/config dependencies</span>
   </div>
 
@@ -139,7 +164,17 @@
       <span class="col-title">Controller Parent</span>
       {#each nodes.filter(n => n.role === 'parent') as node}
         <button class="node-card parent-card" onclick={() => handleNodeClick(node)}>
-          <span class="node-icon">{node.icon}</span>
+          <span class="node-icon">
+            {#if node.iconType === 'ReplicaSet'}
+              <RefreshCw size={16} />
+            {:else if node.iconType === 'StatefulSet'}
+              <Boxes size={16} />
+            {:else if node.iconType === 'Standalone'}
+              <Pin size={16} />
+            {:else}
+              <Settings size={16} />
+            {/if}
+          </span>
           <div class="node-meta">
             <span class="node-kind">{node.kind}</span>
             <span class="node-name" title={node.name}>{node.name}</span>
@@ -156,7 +191,15 @@
       <span class="col-title">Current Resource</span>
       {#each nodes.filter(n => n.role === 'current') as node}
         <div class="node-card current-card">
-          <span class="node-icon">{node.icon}</span>
+          <span class="node-icon">
+            {#if node.iconType === 'Deployment'}
+              <Zap size={16} />
+            {:else if node.iconType === 'Service'}
+              <Plug size={16} />
+            {:else}
+              <Box size={16} />
+            {/if}
+          </span>
           <div class="node-meta">
             <span class="node-kind">{node.kind}</span>
             <span class="node-name" title={node.name}>{node.name}</span>
@@ -176,7 +219,17 @@
       <span class="col-title">Bound Config & Volume Dependencies</span>
       {#each nodes.filter(n => n.role === 'child') as node}
         <button class="node-card child-card" onclick={() => handleNodeClick(node)}>
-          <span class="node-icon">{node.icon}</span>
+          <span class="node-icon">
+            {#if node.iconType === 'ConfigMap'}
+              <Settings size={16} />
+            {:else if node.iconType === 'Secret'}
+              <Lock size={16} />
+            {:else if node.iconType === 'PVC'}
+              <HardDrive size={16} />
+            {:else}
+              <Box size={16} />
+            {/if}
+          </span>
           <div class="node-meta">
             <span class="node-kind">{node.kind}</span>
             <span class="node-name" title={node.name}>{node.name}</span>

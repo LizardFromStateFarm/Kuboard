@@ -117,7 +117,7 @@
 
 <div class="roles-panel">
   {#if selectedRole}
-    <RoleDetails role={selectedRole} onBack={() => selectedRole = null} />
+    <RoleDetails role={selectedRole} isClusterScoped={false} onBack={() => selectedRole = null} />
   {:else}
     <div class="panel-header">
       <h4><ShieldCheck size={16} /> Roles ({filteredRoles.length})</h4>

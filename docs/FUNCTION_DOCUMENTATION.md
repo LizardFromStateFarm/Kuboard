@@ -153,3 +153,12 @@ Below is the complete, reconciled list of registered Tauri commands exposed via 
 | `TabbedContent.svelte` | `sessionTabMap[tabSessionId]` | Per-session reactive tab map preventing tab cross-talk when multiple tabs run in the same cluster context | ✅ Working |
 | `ConfigTab.svelte` | `switchSubTab(id)` | Searchable ConfigMaps table view with dedicated `ConfigMapDetails.svelte` payload editor & Helm Releases sub-tab | ✅ Working |
 | `SecurityTab.svelte` | `SecuritySubNav` | Integrated sub-tabs for Secrets, Roles, ClusterRoles, RoleBindings, ClusterRoleBindings, and ServiceAccounts | ✅ Working |
+
+## 📊 Grafana Client Bridge IPC Commands (`src-tauri/src/commands/grafana.rs`)
+
+| Command Name | Parameters | Returns | Description |
+|--------------|------------|---------|-------------|
+| `kuboard_grafana_test_connection` | `url: String`, `apiToken: Option<String>` | `Result<bool, String>` | Verifies HTTP health connectivity to local Grafana or Grafana Cloud instances |
+| `kuboard_grafana_discover_datasources` | `url: String`, `apiToken: Option<String>` | `Result<Value, String>` | Queries `/api/datasources` endpoint to discover Prometheus & Thanos datasources |
+| `kuboard_grafana_query_promql` | `url: String`, `apiToken: Option<String>`, `datasourceId: Option<i64>`, `query: String`, `startTime: i64`, `endTime: i64`, `step: Option<String>` | `Result<Value, String>` | Executes PromQL range query for historical CPU, Memory, Disk, and Network utilization |
+

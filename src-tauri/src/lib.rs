@@ -58,6 +58,8 @@ pub fn run() {
             commands::kuboard_get_replicasets,
             commands::kuboard_get_replicaset,
             commands::kuboard_scale_replicaset,
+            commands::kuboard_delete_replicaset,
+            commands::kuboard_delete_resource,
             commands::kuboard_get_replicaset_pods,
             commands::kuboard_get_deployment,
             commands::kuboard_scale_deployment,
@@ -85,6 +87,11 @@ pub fn run() {
             commands::kuboard_get_service_endpoints,
             commands::kuboard_get_configmaps,
             commands::kuboard_get_secrets,
+            
+            // Grafana Client Bridge
+            commands::kuboard_grafana_test_connection,
+            commands::kuboard_grafana_discover_datasources,
+            commands::kuboard_grafana_query_promql,
             
             // Metrics (Real Implementation)
             commands::kuboard_get_node_metrics,

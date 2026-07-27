@@ -8,8 +8,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
   import TerminalWindow from './TerminalWindow.svelte';
-  import { activeLogsState } from '$lib/stores/logs';
-  import { Terminal as TerminalIcon, FileText, Box, AlertTriangle, Pause, Play, RefreshCw, Radio, Loader2 } from 'lucide-svelte';
+  import { activeLogsState, closeGlobalLogTab, setGlobalLogsOpen } from '$lib/stores/logs';
+  import { Terminal as TerminalIcon, FileText, Box, AlertTriangle, Pause, Play, RefreshCw, Radio, Loader2, Layers, Flame, Sparkles } from 'lucide-svelte';
   
   // Props
   export let isOpen = false;
@@ -60,6 +60,7 @@
     entriesByTab = {};
     nextEntryIdByTab = {};
     isOpen = false;
+    setGlobalLogsOpen(undefined, false);
     onClose();
   }
   
@@ -77,7 +78,7 @@
   let loading: { [key: string]: boolean } = {};
   let errors: { [key: string]: string } = {};
   let activeTab = '';
-  let tabs: Array<{id: string, podName: string, namespace: string, containerName?: string}> = [];
+  let tabs: Array<{id: string, podName: string, namespace: string, containerName?: string, type?: 'log' | 'terminal'}> = [];
   let tailLines = 100;
   let followMode = true; // Enable follow mode by default
   let refreshInterval: number | null = null;
@@ -101,6 +102,72 @@
   let currentMatchIndex = 0;
   let matchIndices: number[] = [];
   let filteredEntriesByTab: Record<string, LogEntry[]> = {};
+
+  // Pattern Recognition & Log Anomaly Grouping
+  let groupDuplicates = false;
+
+  interface GroupedLogEntry {
+    fingerprint: string;
+    level: string;
+    count: number;
+    firstSeen: string;
+    lastSeen: string;
+    sampleMessage: string;
+    isAnomaly: boolean;
+    entries: LogEntry[];
+    isExpanded: boolean;
+  }
+
+  function computeFingerprint(msg: string): string {
+    if (!msg) return '';
+    return msg
+      .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?Z?/g, '')
+      .replace(/\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g, '<UUID>')
+      .replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?\b/g, '<IP>')
+      .replace(/0x[0-9a-fA-F]+/g, '<HEX>')
+      .replace(/\b\d+\b/g, '<N>');
+  }
+
+  function getGroupedLogs(entries: LogEntry[]): GroupedLogEntry[] {
+    if (!entries || entries.length === 0) return [];
+    
+    const freqMap = new Map<string, number>();
+    entries.forEach(e => {
+      const fp = computeFingerprint(e.message);
+      freqMap.set(fp, (freqMap.get(fp) || 0) + 1);
+    });
+
+    const total = entries.length;
+    const result: GroupedLogEntry[] = [];
+    let current: GroupedLogEntry | null = null;
+
+    for (const e of entries) {
+      const fp = computeFingerprint(e.message);
+      const freqPct = ((freqMap.get(fp) || 1) / total) * 100;
+      const isAnomaly = freqPct < 3.0 || ['ERROR', 'FATAL', 'CRITICAL', 'PANIC'].includes(e.level?.toUpperCase());
+
+      if (current && current.fingerprint === fp && current.level === e.level) {
+        current.count++;
+        current.lastSeen = e.timestamp;
+        current.entries.push(e);
+        if (isAnomaly) current.isAnomaly = true;
+      } else {
+        current = {
+          fingerprint: fp,
+          level: e.level,
+          count: 1,
+          firstSeen: e.timestamp,
+          lastSeen: e.timestamp,
+          sampleMessage: e.message,
+          isAnomaly,
+          entries: [e],
+          isExpanded: false
+        };
+        result.push(current);
+      }
+    }
+    return result;
+  }
   
   // Tab management
   function addLogTab(podName: string, namespace: string, containerName?: string) {
@@ -134,11 +201,8 @@
   
   function closeTab(tabId: string) {
     console.log('🗑️ Closing tab:', tabId);
-    console.log('🗑️ Tabs before close:', tabs.map(t => t.id));
     
     tabs = tabs.filter(tab => tab.id !== tabId);
-    
-    console.log('🗑️ Tabs after close:', tabs.map(t => t.id));
     
     // Clean up state
     delete logs[tabId];
@@ -150,10 +214,13 @@
     delete entriesByTab[tabId];
     delete nextEntryIdByTab[tabId];
     
-    // Switch to another tab if this was active
-    if (activeTab === tabId) {
-      activeTab = tabs.length > 0 ? tabs[0].id : '';
-      console.log('🗑️ Switched to new active tab:', activeTab);
+    // Update global store so closed tab is not restored on re-open
+    closeGlobalLogTab(undefined, tabId);
+
+    if (tabs.length === 0) {
+      closeAllTabs();
+    } else if (activeTab === tabId) {
+      activeTab = tabs[tabs.length - 1].id;
     }
   }
   
@@ -740,6 +807,13 @@
             </button>
           {/if}
           <button 
+            class="control-button compact {groupDuplicates ? 'active' : ''}" 
+            onclick={() => groupDuplicates = !groupDuplicates} 
+            title="Group duplicate patterns & highlight anomalies"
+          >
+            <Layers size={14} class="inline-icon" /> {groupDuplicates ? 'Grouped' : 'Group Patterns'}
+          </button>
+          <button 
             class="control-button compact {followMode ? 'active' : ''}" 
             onclick={toggleFollowMode}
             title={followMode ? 'Stop following logs' : 'Follow logs (auto-refresh)'}
@@ -798,24 +872,56 @@
                 bind:this={logContainers[activeTab]}
                 onscroll={(e) => handleScroll(e, activeTab)}
               >
-                {#each (searchQuery.trim() ? (filteredEntriesByTab[activeTab] || []) : (entriesByTab[activeTab] || [])) as entry, idx (entry.id)}
-                  {@const originalIndex = entriesByTab[activeTab]?.indexOf(entry) ?? -1}
-                  {@const isCurrentMatch = searchQuery.trim() && matchIndices.length > 0 && currentMatchIndex >= 0 && matchIndices[currentMatchIndex] === originalIndex}
-                  {@const hasStackTrace = isStackTraceLine(entry.message)}
-                  {@const displayMessage = entry.isExpanded ? entry.message : (entry.message.split('\n')[0].length > 300 ? entry.message.split('\n')[0].slice(0, 300) + '…' : entry.message.split('\n')[0])}
-                  <div class="log-line {getLevelClass(entry.level || 'INFO')} {entry.isJson ? 'log-json' : ''} {hasStackTrace ? 'log-stack-trace' : ''} {isCurrentMatch ? 'highlight-match' : ''}">
-                    <span 
-                      class="log-message" 
-                      role="button" 
-                      tabindex="0" 
-                      onclick={() => entry.isExpanded = !entry.isExpanded} 
-                      onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (entry.isExpanded = !entry.isExpanded)}
-                    >
-                      {#if hasStackTrace}<span class="stack-trace-badge"><AlertTriangle size={12} class="inline-icon" /> STACK TRACE</span>{/if}
-                      {@html searchQuery.trim() ? highlightText(displayMessage, searchQuery) : displayMessage}
-                    </span>
-                  </div>
-                {/each}
+                {#if groupDuplicates}
+                  {#each getGroupedLogs(searchQuery.trim() ? (filteredEntriesByTab[activeTab] || []) : (entriesByTab[activeTab] || [])) as group, idx (group.fingerprint + idx)}
+                    <div class="log-group-card {getLevelClass(group.level || 'INFO')} {group.isAnomaly ? 'anomaly-highlight' : ''}">
+                      <div 
+                        class="log-group-header" 
+                        onclick={() => group.isExpanded = !group.isExpanded}
+                        role="button"
+                        tabindex="0"
+                        onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (group.isExpanded = !group.isExpanded)}
+                      >
+                        <span class="group-count-badge">[x{group.count}]</span>
+                        {#if group.isAnomaly}
+                          <span class="anomaly-badge"><Flame size={12} class="inline-icon" /> ANOMALY</span>
+                        {/if}
+                        <span class="group-time-range">{group.lastSeen}</span>
+                        <span class="group-message">{group.sampleMessage}</span>
+                        <span class="group-expand-hint">{group.isExpanded ? '▲' : '▼'}</span>
+                      </div>
+                      {#if group.isExpanded}
+                        <div class="log-group-subentries">
+                          {#each group.entries as subEntry}
+                            <div class="sub-log-line font-mono">
+                              <span class="sub-time">{subEntry.timestamp}</span>
+                              <span class="sub-msg">{subEntry.message}</span>
+                            </div>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                  {/each}
+                {:else}
+                  {#each (searchQuery.trim() ? (filteredEntriesByTab[activeTab] || []) : (entriesByTab[activeTab] || [])) as entry, idx (entry.id)}
+                    {@const originalIndex = entriesByTab[activeTab]?.indexOf(entry) ?? -1}
+                    {@const isCurrentMatch = searchQuery.trim() && matchIndices.length > 0 && currentMatchIndex >= 0 && matchIndices[currentMatchIndex] === originalIndex}
+                    {@const hasStackTrace = isStackTraceLine(entry.message)}
+                    {@const displayMessage = entry.isExpanded ? entry.message : (entry.message.split('\n')[0].length > 300 ? entry.message.split('\n')[0].slice(0, 300) + '…' : entry.message.split('\n')[0])}
+                    <div class="log-line {getLevelClass(entry.level || 'INFO')} {entry.isJson ? 'log-json' : ''} {hasStackTrace ? 'log-stack-trace' : ''} {isCurrentMatch ? 'highlight-match' : ''}">
+                      <span 
+                        class="log-message" 
+                        role="button" 
+                        tabindex="0" 
+                        onclick={() => entry.isExpanded = !entry.isExpanded} 
+                        onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (entry.isExpanded = !entry.isExpanded)}
+                      >
+                        {#if hasStackTrace}<span class="stack-trace-badge"><AlertTriangle size={12} class="inline-icon" /> STACK TRACE</span>{/if}
+                        {@html searchQuery.trim() ? highlightText(displayMessage, searchQuery) : displayMessage}
+                      </span>
+                    </div>
+                  {/each}
+                {/if}
                 {#if searchQuery.trim() && (!filteredEntriesByTab[activeTab] || filteredEntriesByTab[activeTab].length === 0)}
                   <div class="search-no-results">
                     <p>No results found for "{searchQuery}"</p>
@@ -1317,6 +1423,89 @@
   .empty-hint {
     font-size: 11px;
     margin-top: 4px;
+  }
+
+  /* Log Anomaly & Group Card Styles */
+  .log-group-card {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    margin-bottom: 4px;
+    background: rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+  }
+  .log-group-card.anomaly-highlight {
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.05);
+  }
+  .log-group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    user-select: none;
+  }
+  .log-group-header:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .group-count-badge {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: monospace;
+  }
+  .anomaly-badge {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+  }
+  .group-time-range {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-family: monospace;
+  }
+  .group-message {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-primary);
+  }
+  .group-expand-hint {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+  .log-group-subentries {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.3);
+    padding: 4px 8px 6px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 250px;
+    overflow-y: auto;
+  }
+  .sub-log-line {
+    font-size: 11px;
+    display: flex;
+    gap: 10px;
+    color: var(--text-secondary);
+  }
+  .sub-time {
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .sub-msg {
+    word-break: break-all;
   }
 </style>
 

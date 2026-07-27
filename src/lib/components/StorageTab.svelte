@@ -18,6 +18,15 @@
     sessionTabMap[tabSessionId] = tab;
     sessionTabMap = { ...sessionTabMap };
   }
+
+  import { navigationStore } from '../stores/nav';
+
+  let lastProcessedStorageNav: any = null;
+
+  $: if ($navigationStore && ($navigationStore.tab === 'storage' || $navigationStore.tab === 'pvc') && $navigationStore.resourceName && $navigationStore !== lastProcessedStorageNav) {
+    lastProcessedStorageNav = $navigationStore;
+    setActiveTab('pvc');
+  }
 </script>
 
 <div class="storage-tab">

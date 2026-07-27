@@ -1,10 +1,14 @@
-<!-- Kuboard Nodes Tab Component -->
+<!-- Kuboard Nodes Tab Component - Overhauled 2-Tier Architecture -->
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { createEventDispatcher } from 'svelte';
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { formatMemory, formatCPU } from '$lib/utils/formatters';
   import MetricsGraph from './MetricsGraph.svelte';
   import { navigationStore } from '../stores/nav';
+  import { 
+    Server, Cpu, HardDrive, Layers, Search, Copy, 
+    ExternalLink, RefreshCw, Sliders, CheckCircle2, AlertTriangle, 
+    ArrowLeft, FileText, Activity, Loader2, Filter, X, Box, Check
+  } from 'lucide-svelte';
 
   // Props
   export let currentContext: any = null;
@@ -15,7 +19,12 @@
   let showFullDetails: boolean = false;
   let refreshTimer: any;
   let isLoading: boolean = false;
-  
+  let searchQuery: string = '';
+  let selectedPoolFilter: string | null = null;
+  let selectedPoolDetails: NodePoolItem | null = null;
+  let poolNodeSearchQuery: string = '';
+  let copiedNotice: string | null = null;
+
   // Metrics state
   let nodeMetrics: any = null;
   let metricsLoading: boolean = false;
@@ -23,13 +32,19 @@
   let selectedResourceType: 'cpu' | 'memory' | 'disk' = 'cpu';
   let selectedTimeRange: number = 30; // Default to 30 minutes
 
-  // Event dispatcher
   const dispatch = createEventDispatcher();
 
-  // Debug logging
-  console.log('🚀 NodesTab component script loaded');
-  
-  // Set loading state when context changes but nodes haven't loaded yet
+  interface NodePoolItem {
+    name: string;
+    roleOrPool: string;
+    nodeCount: number;
+    readyCount: number;
+    totalCpu: number;
+    totalMemoryBytes: number;
+    instanceType: string;
+    nodes: any[];
+  }
+
   $: if (currentContext && (!nodes || nodes.length === 0)) {
     isLoading = true;
   } else {
@@ -45,7 +60,97 @@
     }
   }
 
-  // Select node (for dispatching to other components if needed)
+  function getNodePool(node: any): string {
+    const labels = node.metadata?.labels || {};
+    return (
+      labels['agentpool'] ||
+      labels['eks.amazonaws.com/nodegroup'] ||
+      labels['kops.k8s.io/instance_group'] ||
+      labels['topology.kubernetes.io/zone'] ||
+      labels['node.kubernetes.io/instance-type'] ||
+      (labels['node-role.kubernetes.io/control-plane'] !== undefined ? 'Control Plane' : 'Worker Pool')
+    );
+  }
+
+  function getNodeRole(node: any): string {
+    const labels = node.metadata?.labels || {};
+    if (labels['node-role.kubernetes.io/control-plane'] !== undefined || labels['node-role.kubernetes.io/master'] !== undefined) {
+      return 'Control Plane';
+    }
+    return 'Worker';
+  }
+
+  function parseCpuCores(cpuStr: string | undefined): number {
+    if (!cpuStr) return 0;
+    if (cpuStr.endsWith('m')) return parseFloat(cpuStr.replace('m', '')) / 1000;
+    return parseFloat(cpuStr) || 0;
+  }
+
+  function parseMemoryBytes(memStr: string | undefined): number {
+    if (!memStr) return 0;
+    if (memStr.endsWith('Ki')) return parseInt(memStr.replace('Ki', '')) * 1024;
+    if (memStr.endsWith('Mi')) return parseInt(memStr.replace('Mi', '')) * 1024 * 1024;
+    if (memStr.endsWith('Gi')) return parseInt(memStr.replace('Gi', '')) * 1024 * 1024 * 1024;
+    return parseInt(memStr) || 0;
+  }
+
+  $: nodePools = (() => {
+    if (!nodes || nodes.length === 0) return [];
+    const map = new Map<string, NodePoolItem>();
+    nodes.forEach(n => {
+      const poolName = getNodePool(n);
+      const isReady = n.status?.conditions?.some((c: any) => c.type === 'Ready' && c.status === 'True');
+      const cpu = parseCpuCores(n.status?.capacity?.cpu);
+      const mem = parseMemoryBytes(n.status?.capacity?.memory);
+      const inst = n.metadata?.labels?.['node.kubernetes.io/instance-type'] || n.status?.nodeInfo?.architecture || 'Standard';
+
+      if (!map.has(poolName)) {
+        map.set(poolName, {
+          name: poolName,
+          roleOrPool: getNodeRole(n),
+          nodeCount: 0,
+          readyCount: 0,
+          totalCpu: 0,
+          totalMemoryBytes: 0,
+          instanceType: inst,
+          nodes: []
+        });
+      }
+      const pool = map.get(poolName)!;
+      pool.nodeCount += 1;
+      if (isReady) pool.readyCount += 1;
+      pool.totalCpu += cpu;
+      pool.totalMemoryBytes += mem;
+      pool.nodes.push(n);
+    });
+    return Array.from(map.values());
+  })();
+
+  $: filteredNodes = (nodes || []).filter(n => {
+    const matchesPool = !selectedPoolFilter || getNodePool(n) === selectedPoolFilter;
+    const q = searchQuery.toLowerCase();
+    const name = (n.metadata?.name || '').toLowerCase();
+    const pool = getNodePool(n).toLowerCase();
+    const role = getNodeRole(n).toLowerCase();
+    const ip = (n.status?.addresses?.find((a: any) => a.type === 'InternalIP')?.address || '').toLowerCase();
+    const os = (n.status?.nodeInfo?.operatingSystem || '').toLowerCase();
+    const kubelet = (n.status?.nodeInfo?.kubeletVersion || '').toLowerCase();
+
+    const matchesSearch = !q || name.includes(q) || pool.includes(q) || role.includes(q) || ip.includes(q) || os.includes(q) || kubelet.includes(q);
+    return matchesPool && matchesSearch;
+  });
+
+  async function copyText(text: string | undefined, label: string = 'Text') {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedNotice = `${label} copied!`;
+      setTimeout(() => copiedNotice = null, 1500);
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
+  }
+
   function selectNode(node: any) {
     selectedNode = {
       name: node.metadata?.name || 'Unknown',
@@ -61,1033 +166,793 @@
       cpuAllocatable: node.status?.allocatable?.cpu || '0',
       memoryAllocatable: parseInt(node.status?.allocatable?.memory?.replace('Ki', '') || '0') * 1024,
       architecture: node.status?.nodeInfo?.architecture || 'Unknown',
-      creationTimestamp: node.metadata?.creationTimestamp || 'Unknown'
+      creationTimestamp: node.metadata?.creationTimestamp || 'Unknown',
+      raw: node
     };
     dispatch('nodeSelect', selectedNode);
   }
 
-  // Load metrics for a specific node
   async function loadNodeMetrics(node: any) {
     if (!node?.metadata?.name) return;
-    
     metricsLoading = true;
     metricsError = null;
-    
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-        const metrics = await invoke('kuboard_get_node_metrics_history', {
-          nodeName: node.metadata.name,
-          durationMinutes: selectedTimeRange
-        });
+      const metrics = await invoke('kuboard_get_node_metrics_history', {
+        nodeName: node.metadata.name,
+        durationMinutes: selectedTimeRange
+      });
       nodeMetrics = metrics;
-    } catch (err) {
-      metricsError = err as string;
-      console.error('Failed to load node metrics:', err);
+    } catch (err: any) {
+      metricsError = String(err);
     } finally {
       metricsLoading = false;
     }
   }
 
-  // Show full details view
   function showFullNodeDetails(node: any) {
-    selectedNode = {
-      name: node.metadata?.name || 'Unknown',
-      status: node.status?.conditions?.find((c: any) => c.type === 'Ready')?.status || 'Unknown',
-      os: node.status?.nodeInfo?.operatingSystem || 'Unknown',
-      kernelVersion: node.status?.nodeInfo?.kernelVersion || 'Unknown',
-      kubeletVersion: node.status?.nodeInfo?.kubeletVersion || 'Unknown',
-      containerRuntime: node.status?.nodeInfo?.containerRuntimeVersion || 'Unknown',
-      diskCapacity: parseInt(node.status?.capacity?.['ephemeral-storage']?.replace('Ki', '') || '0') * 1024,
-      diskAllocatable: parseInt(node.status?.allocatable?.['ephemeral-storage']?.replace('Ki', '') || '0') * 1024,
-      cpuCapacity: node.status?.capacity?.cpu || '0',
-      memoryCapacity: parseInt(node.status?.capacity?.memory?.replace('Ki', '') || '0') * 1024,
-      cpuAllocatable: node.status?.allocatable?.cpu || '0',
-      memoryAllocatable: parseInt(node.status?.allocatable?.memory?.replace('Ki', '') || '0') * 1024,
-      architecture: node.status?.nodeInfo?.architecture || 'Unknown',
-      creationTimestamp: node.metadata?.creationTimestamp || 'Unknown'
-    };
+    selectNode(node);
     showFullDetails = true;
     loadNodeMetrics(node);
   }
 
-  // Back to nodes list
+  function openNodePoolDetails(pool: NodePoolItem) {
+    selectedPoolDetails = pool;
+    poolNodeSearchQuery = '';
+  }
+
+  function getFilteredPoolNodes(pool: NodePoolItem): any[] {
+    if (!pool || !pool.nodes) return [];
+    if (!poolNodeSearchQuery) return pool.nodes;
+    const q = poolNodeSearchQuery.toLowerCase();
+    return pool.nodes.filter(n => {
+      const name = (n.metadata?.name || '').toLowerCase();
+      const ip = (n.status?.addresses?.find((a: any) => a.type === 'InternalIP')?.address || '').toLowerCase();
+      const kubelet = (n.status?.nodeInfo?.kubeletVersion || '').toLowerCase();
+      const role = getNodeRole(n).toLowerCase();
+      return name.includes(q) || ip.includes(q) || kubelet.includes(q) || role.includes(q);
+    });
+  }
+
   function backToNodesList() {
     showFullDetails = false;
     selectedNode = null;
     nodeMetrics = null;
-    selectedResourceType = 'cpu'; // Reset to CPU when going back
+    selectedResourceType = 'cpu';
   }
 
-  // Change resource type for metrics graph
-  function changeResourceType(type: 'cpu' | 'memory' | 'disk') {
-    selectedResourceType = type;
-  }
-
-  // Change time range for metrics graph
+  function changeResourceType(type: 'cpu' | 'memory' | 'disk') { selectedResourceType = type; }
   function changeTimeRange(minutes: number) {
     selectedTimeRange = minutes;
-    // Reload metrics with new time range if a node is selected
-    if (selectedNode) {
-      loadNodeMetrics(selectedNode);
-    }
+    if (selectedNode) loadNodeMetrics(selectedNode);
   }
 
-  // Get status class
   function getStatusClass(status: string): string {
     switch (status?.toLowerCase()) {
-      case 'ready': return 'ready';
-      case 'notready': return 'not-ready';
-      case 'unknown': return 'unknown';
+      case 'ready':
+      case 'true': return 'ready';
+      case 'notready':
+      case 'false': return 'not-ready';
       default: return 'unknown';
     }
   }
 
-  // Copy to clipboard function
-  async function copyToClipboard(text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (err) {
-      console.error('Failed to copy to clipboard:', err);
-    }
-  }
-
-  // Lifecycle
-  onMount(() => {
-    console.log('🚀 NodesTab onMount called - currentContext:', currentContext, 'nodes:', nodes.length);
-  });
-
   onDestroy(() => {
-    if (refreshTimer) {
-      clearInterval(refreshTimer);
-    }
+    if (refreshTimer) clearInterval(refreshTimer);
   });
 </script>
 
-    <div class="nodes-tab">
-  
-  <div class="tab-header">
-    <div class="tab-controls">
-      <button 
-        class="refresh-button" 
-        onclick={() => console.log('Refresh clicked')}
-        title="Refresh nodes"
-      >
-        ↻
-      </button>
-    </div>
-  </div>
+<div class="nodes-tab">
+  {#if copiedNotice}
+    <div class="copy-toast"><Check size={14} /> {copiedNotice}</div>
+  {/if}
 
-  <!-- Always show the basic UI structure -->
-  <div class="nodes-content">
-    {#if showFullDetails && selectedNode}
-      <!-- Full Details View -->
-      <div class="full-details-view">
-        <div class="details-header">
-          <button class="back-button" onclick={backToNodesList}>
-            ← Back to Nodes
-          </button>
-          <h3>{selectedNode.name}</h3>
+  {#if showFullDetails && selectedNode}
+    <!-- Detailed Node View -->
+    <div class="full-details-view">
+      <div class="details-header">
+        <button class="btn-back" onclick={backToNodesList}>
+          <ArrowLeft size={14} class="inline-icon" /> {selectedPoolDetails ? `Back to Pool (${selectedPoolDetails.name})` : 'Back to All Nodes'}
+        </button>
+        <h3 class="node-details-title" onclick={() => copyText(selectedNode.name, 'Node Name')} title="Click to copy node name">
+          <Server size={18} class="inline-icon" /> {selectedNode.name}
+        </h3>
+        <span class="status-badge status-{getStatusClass(selectedNode.status)}">
+          {selectedNode.status === 'True' || selectedNode.status === 'Ready' ? 'Ready' : 'Not Ready'}
+        </span>
+      </div>
+      
+      <div class="node-details-content">
+        <div class="details-section">
+          <h6><Server size={14} class="inline-icon" /> System Information</h6>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">OS</span>
+              <span class="info-val">{selectedNode.os} ({selectedNode.architecture})</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Kernel</span>
+              <span class="info-val">{selectedNode.kernelVersion}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Kubelet</span>
+              <span class="info-val">{selectedNode.kubeletVersion}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Runtime</span>
+              <span class="info-val">{selectedNode.containerRuntime}</span>
+            </div>
+          </div>
         </div>
-        
-        <div class="node-details-content">
-          <!-- System Information -->
-          <div class="details-section">
-            <h6>System Information</h6>
-            <div class="info-grid">
-              <div class="info-item">
-                <span class="info-label">Status:</span>
-                <div class="info-value-container">
-                  <span class="info-value status-badge status-{getStatusClass(selectedNode.status === 'True' ? 'Ready' : 'NotReady')}">
-                    {selectedNode.status === 'True' ? 'Ready' : 'Not Ready'}
-                  </span>
-                </div>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Operating System:</span>
-                <div class="info-value-container">
-                  <span class="info-value" title={selectedNode.os}>{selectedNode.os}</span>
-                  <button 
-                    class="copy-button" 
-                    onclick={() => copyToClipboard(selectedNode.os || '')}
-                    title="Copy to clipboard"
-                  >
-                    📋
-                  </button>
-                </div>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Kernel Version:</span>
-                <div class="info-value-container">
-                  <span class="info-value" title={selectedNode.kernelVersion}>{selectedNode.kernelVersion}</span>
-                  <button 
-                    class="copy-button" 
-                    onclick={() => copyToClipboard(selectedNode.kernelVersion || '')}
-                    title="Copy to clipboard"
-                  >
-                    📋
-                  </button>
-                </div>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Kubelet Version:</span>
-                <div class="info-value-container">
-                  <span class="info-value" title={selectedNode.kubeletVersion}>{selectedNode.kubeletVersion}</span>
-                  <button 
-                    class="copy-button" 
-                    onclick={() => copyToClipboard(selectedNode.kubeletVersion || '')}
-                    title="Copy to clipboard"
-                  >
-                    📋
-                  </button>
-                </div>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Container Runtime:</span>
-                <div class="info-value-container">
-                  <span class="info-value" title={selectedNode.containerRuntime}>{selectedNode.containerRuntime}</span>
-                  <button 
-                    class="copy-button" 
-                    onclick={() => copyToClipboard(selectedNode.containerRuntime || '')}
-                    title="Copy to clipboard"
-                  >
-                    📋
-                  </button>
-                </div>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Architecture:</span>
-                <div class="info-value-container">
-                  <span class="info-value" title={selectedNode.architecture}>{selectedNode.architecture}</span>
-                  <button 
-                    class="copy-button" 
-                    onclick={() => copyToClipboard(selectedNode.architecture || '')}
-                    title="Copy to clipboard"
-                  >
-                    📋
-                  </button>
-                </div>
+
+        <div class="details-section">
+          <h6><Activity size={14} class="inline-icon" /> Resource Allocation</h6>
+          <div class="resource-grid">
+            <div class="resource-item">
+              <span class="resource-label">CPU Capacity / Allocatable</span>
+              <span class="resource-val">{formatCPU(selectedNode.cpuAllocatable)} / {formatCPU(selectedNode.cpuCapacity)}</span>
+            </div>
+            <div class="resource-item">
+              <span class="resource-label">Memory Capacity / Allocatable</span>
+              <span class="resource-val">{formatMemory(selectedNode.memoryAllocatable)} / {formatMemory(selectedNode.memoryCapacity)}</span>
+            </div>
+            <div class="resource-item">
+              <span class="resource-label">Disk Storage</span>
+              <span class="resource-val">{formatMemory(selectedNode.diskAllocatable)} / {formatMemory(selectedNode.diskCapacity)}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Historical Utilization Graph -->
+        <div class="details-section">
+          <div class="section-header-row">
+            <h6><Activity size={14} class="inline-icon" /> Node Historical Utilization Graph</h6>
+            <div class="controls-row">
+              <select class="select-sm" bind:value={selectedTimeRange} onchange={() => changeTimeRange(selectedTimeRange)}>
+                <option value={15}>15m</option>
+                <option value={30}>30m</option>
+                <option value={60}>1h</option>
+                <option value={360}>6h</option>
+                <option value={1440}>24h</option>
+              </select>
+              <div class="pill-toggle">
+                <button class="pill-btn" class:active={selectedResourceType === 'cpu'} onclick={() => changeResourceType('cpu')}>CPU</button>
+                <button class="pill-btn" class:active={selectedResourceType === 'memory'} onclick={() => changeResourceType('memory')}>RAM</button>
+                <button class="pill-btn" class:active={selectedResourceType === 'disk'} onclick={() => changeResourceType('disk')}>Disk</button>
               </div>
             </div>
           </div>
+          {#if metricsLoading}
+            <div class="metrics-loading"><Loader2 size={16} class="spin" /><p>Loading node metrics...</p></div>
+          {:else if nodeMetrics}
+            <MetricsGraph 
+              data={nodeMetrics} 
+              type={selectedResourceType} 
+              duration={selectedTimeRange} 
+              loading={metricsLoading} 
+              error={metricsError}
+              maxCpuCores={parseFloat(selectedNode.cpuCapacity || '0')}
+              maxMemoryBytes={selectedNode.memoryCapacity || 0}
+              maxDiskBytes={selectedNode.diskCapacity || 0}
+            />
+          {:else}
+            <p class="muted-text">No metrics history available for this node.</p>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {:else if selectedPoolDetails}
+    <!-- Node Pool Details View -->
+    <div class="full-details-view pool-details-view">
+      <div class="details-header">
+        <button class="btn-back" onclick={() => selectedPoolDetails = null}>
+          <ArrowLeft size={14} class="inline-icon" /> Back to Node Pools
+        </button>
+        <h3 class="node-details-title clickable" onclick={() => copyText(selectedPoolDetails?.name, 'Node Pool Name')} title="Click to copy pool name">
+          <Layers size={18} class="inline-icon" /> Node Pool: {selectedPoolDetails.name}
+        </h3>
+        <span class="status-badge status-ready">
+          {selectedPoolDetails.readyCount} / {selectedPoolDetails.nodeCount} Ready
+        </span>
+      </div>
 
-          <!-- Resource Information -->
-          <div class="details-section">
-            <h6>Resource Information</h6>
-            <div class="resource-grid">
-              <div class="resource-item">
-                <span class="resource-label">CPU Capacity:</span>
-                <div class="resource-value-container">
-                  <span class="resource-value" title={selectedNode.cpuCapacity}>{formatCPU(selectedNode.cpuCapacity || '0')}</span>
-                  <button 
-                    class="copy-button" 
-                    onclick={() => copyToClipboard(selectedNode.cpuCapacity || '')}
-                    title="Copy to clipboard"
-                  >
-                    📋
-                  </button>
-                </div>
-              </div>
-              <div class="resource-item">
-                <span class="resource-label">CPU Allocatable:</span>
-                <div class="resource-value-container">
-                  <span class="resource-value" title={selectedNode.cpuAllocatable}>{formatCPU(selectedNode.cpuAllocatable || '0')}</span>
-                  <button 
-                    class="copy-button" 
-                    onclick={() => copyToClipboard(selectedNode.cpuAllocatable || '')}
-                    title="Copy to clipboard"
-                  >
-                    📋
-                  </button>
-                </div>
-              </div>
-              <div class="resource-item">
-                <span class="resource-label">Memory Capacity:</span>
-                <div class="resource-value-container">
-                  <span class="resource-value" title={formatMemory(selectedNode.memoryCapacity || 0)}>{formatMemory(selectedNode.memoryCapacity || 0)}</span>
-                  <button 
-                    class="copy-button" 
-                    onclick={() => copyToClipboard(formatMemory(selectedNode.memoryCapacity || 0))}
-                    title="Copy to clipboard"
-                  >
-                    📋
-                  </button>
-                </div>
-              </div>
-              <div class="resource-item">
-                <span class="resource-label">Memory Allocatable:</span>
-                <div class="resource-value-container">
-                  <span class="resource-value" title={formatMemory(selectedNode.memoryAllocatable || 0)}>{formatMemory(selectedNode.memoryAllocatable || 0)}</span>
-                  <button 
-                    class="copy-button" 
-                    onclick={() => copyToClipboard(formatMemory(selectedNode.memoryAllocatable || 0))}
-                    title="Copy to clipboard"
-                  >
-                    📋
-                  </button>
-                </div>
-              </div>
-              <div class="resource-item">
-                <span class="resource-label">Disk Capacity:</span>
-                <div class="resource-value-container">
-                  <span class="resource-value" title={formatMemory(selectedNode.diskCapacity || 0)}>{formatMemory(selectedNode.diskCapacity || 0)}</span>
-                  <button 
-                    class="copy-button" 
-                    onclick={() => copyToClipboard(formatMemory(selectedNode.diskCapacity || 0))}
-                    title="Copy to clipboard"
-                  >
-                    📋
-                  </button>
-                </div>
-              </div>
-              <div class="resource-item">
-                <span class="resource-label">Disk Allocatable:</span>
-                <div class="resource-value-container">
-                  <span class="resource-value" title={formatMemory(selectedNode.diskAllocatable || 0)}>{formatMemory(selectedNode.diskAllocatable || 0)}</span>
-                  <button 
-                    class="copy-button" 
-                    onclick={() => copyToClipboard(formatMemory(selectedNode.diskAllocatable || 0))}
-                    title="Copy to clipboard"
-                  >
-                    📋
-                  </button>
-                </div>
-              </div>
+      <div class="node-details-content">
+        <div class="details-section">
+          <h6><Layers size={14} class="inline-icon" /> Node Pool Capacity & Summary</h6>
+          <div class="resource-grid">
+            <div class="resource-item">
+              <span class="resource-label">Total Nodes</span>
+              <span class="resource-val">{selectedPoolDetails.nodeCount} ({selectedPoolDetails.readyCount} Healthy)</span>
+            </div>
+            <div class="resource-item">
+              <span class="resource-label">Aggregate CPU Capacity</span>
+              <span class="resource-val">{selectedPoolDetails.totalCpu.toFixed(1)} Cores</span>
+            </div>
+            <div class="resource-item">
+              <span class="resource-label">Aggregate RAM Capacity</span>
+              <span class="resource-val">{formatMemory(selectedPoolDetails.totalMemoryBytes)}</span>
+            </div>
+            <div class="resource-item">
+              <span class="resource-label">Role / Instance Type</span>
+              <span class="resource-val">{selectedPoolDetails.roleOrPool} • {selectedPoolDetails.instanceType}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="details-section">
+          <div class="section-header-row">
+            <h6><Server size={14} class="inline-icon" /> Pool Member Nodes ({selectedPoolDetails.nodes.length})</h6>
+            <div class="search-input-wrap compact-search">
+              <Search size={14} class="search-icon" />
+              <input 
+                type="text" 
+                bind:value={poolNodeSearchQuery} 
+                placeholder="Search member nodes..." 
+                class="node-search-input"
+              />
+              {#if poolNodeSearchQuery}
+                <button class="clear-search-btn" onclick={() => poolNodeSearchQuery = ''}><X size={13} /></button>
+              {/if}
             </div>
           </div>
 
-          <!-- Metrics Section -->
-          <div class="details-section">
-            <h6>Resource Usage Metrics</h6>
-            {#if metricsLoading}
-              <div class="metrics-loading">
-                <div class="loading-spinner">⏳</div>
-                <p>Loading metrics...</p>
+          <div class="nodes-table-container">
+            <table class="nodes-table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Node Name</th>
+                  <th>Internal IP</th>
+                  <th>Kubelet</th>
+                  <th>CPU Allocatable</th>
+                  <th>RAM Allocatable</th>
+                  <th class="actions-col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each getFilteredPoolNodes(selectedPoolDetails) as node}
+                  {@const isReady = node.status?.conditions?.some((c: any) => c.type === 'Ready' && c.status === 'True')}
+                  {@const internalIp = node.status?.addresses?.find((a: any) => a.type === 'InternalIP')?.address || 'N/A'}
+                  {@const cpuAlloc = parseCpuCores(node.status?.allocatable?.cpu)}
+                  {@const cpuCap = parseCpuCores(node.status?.capacity?.cpu)}
+                  {@const cpuPct = cpuCap > 0 ? Math.round((cpuAlloc / cpuCap) * 100) : 0}
+                  {@const memAlloc = parseMemoryBytes(node.status?.allocatable?.memory)}
+                  {@const memCap = parseMemoryBytes(node.status?.capacity?.memory)}
+                  {@const memPct = memCap > 0 ? Math.round((memAlloc / memCap) * 100) : 0}
+
+                  <tr class="node-row" onclick={() => showFullNodeDetails(node)}>
+                    <td>
+                      <span class="status-indicator {isReady ? 'ready' : 'not-ready'}">
+                        {isReady ? 'Ready' : 'Not Ready'}
+                      </span>
+                    </td>
+                    <td class="font-mono node-name-cell">
+                      <Server size={14} class="inline-icon" /> {node.metadata?.name}
+                    </td>
+                    <td class="font-mono text-muted">
+                      <span class="copyable-ip" onclick={(e) => { e.stopPropagation(); copyText(internalIp, 'Internal IP'); }} title="Click to copy IP">
+                        {internalIp}
+                      </span>
+                    </td>
+                    <td class="text-muted font-mono">{node.status?.nodeInfo?.kubeletVersion || '-'}</td>
+                    <td>
+                      <div class="capacity-bar-wrap">
+                        <div class="capacity-bar">
+                          <div class="capacity-fill cpu" style="width: {cpuPct}%"></div>
+                        </div>
+                        <span class="capacity-text">{formatCPU(node.status?.allocatable?.cpu)} / {formatCPU(node.status?.capacity?.cpu)} ({cpuPct}%)</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="capacity-bar-wrap">
+                        <div class="capacity-bar">
+                          <div class="capacity-fill ram" style="width: {memPct}%"></div>
+                        </div>
+                        <span class="capacity-text">{formatMemory(memAlloc)} / {formatMemory(memCap)} ({memPct}%)</span>
+                      </div>
+                    </td>
+                    <td class="actions-col" onclick={(e) => e.stopPropagation()}>
+                      <button class="action-btn" onclick={() => showFullNodeDetails(node)} title="Inspect Node Details">
+                        <FileText size={14} /> Details
+                      </button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  {:else}
+    <!-- 2-Tier Node View -->
+    <div class="nodes-master-view">
+      <!-- Tier 1: Node Pools Cards -->
+      <div class="pools-section">
+        <div class="section-title-row">
+          <h5><Layers size={16} class="inline-icon" /> Node Pools ({nodePools.length})</h5>
+          {#if selectedPoolFilter}
+            <button class="filter-pill-btn" onclick={() => selectedPoolFilter = null}>
+              <Filter size={12} /> Filter: {selectedPoolFilter} <X size={12} />
+            </button>
+          {/if}
+        </div>
+
+        <div class="pools-grid">
+          {#each nodePools as pool}
+            <div 
+              class="pool-card" 
+              class:active={selectedPoolFilter === pool.name}
+              onclick={() => openNodePoolDetails(pool)}
+              role="button"
+              tabindex="0"
+              onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && openNodePoolDetails(pool)}
+            >
+              <div class="pool-card-header">
+                <span class="pool-name" title={pool.name}><Server size={14} class="inline-icon" /> {pool.name}</span>
+                <span class="pool-badge">{pool.readyCount}/{pool.nodeCount} Ready</span>
               </div>
-            {:else if metricsError}
-              <div class="metrics-error">
-                <div class="error-icon">⚠️</div>
-                <p>Failed to load metrics: {metricsError}</p>
-                <button class="retry-button" onclick={() => loadNodeMetrics(selectedNode)}>
-                  Retry
+              <div class="pool-card-metrics">
+                <div class="pool-metric">
+                  <span class="lbl"><Cpu size={12} /> CPU Cores</span>
+                  <span class="val">{pool.totalCpu} Cores</span>
+                </div>
+                <div class="pool-metric">
+                  <span class="lbl"><HardDrive size={12} /> RAM Capacity</span>
+                  <span class="val">{formatMemory(pool.totalMemoryBytes)}</span>
+                </div>
+                <div class="pool-metric">
+                  <span class="lbl"><Box size={12} /> Instance Type</span>
+                  <span class="val">{pool.instanceType}</span>
+                </div>
+              </div>
+              <div class="pool-card-footer">
+                <button class="btn-inspect-pool" onclick={(e) => { e.stopPropagation(); openNodePoolDetails(pool); }}>
+                  <Layers size={12} class="inline-icon" /> Inspect Pool Details →
                 </button>
               </div>
-            {:else if nodeMetrics}
-              <!-- Resource Type Selector -->
-              <div class="resource-type-selector">
-                <div class="metrics-header">
-                  <h6>📊 Resource Usage</h6>
-                  <div class="time-range-selector">
-                    <label for="timeRange">Time Range:</label>
-                    <select 
-                      id="timeRange"
-                      bind:value={selectedTimeRange}
-                      onchange={() => changeTimeRange(selectedTimeRange)}
-                      class="time-range-select"
-                    >
-                      <option value="30">30 minutes</option>
-                      <option value="60">1 hour</option>
-                      <option value="120">2 hours</option>
-                      <option value="240">4 hours</option>
-                      <option value="480">8 hours</option>
-                      <option value="720">12 hours</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="resource-tabs">
-                  <button 
-                    class="resource-tab {selectedResourceType === 'cpu' ? 'active' : ''}"
-                    onclick={() => changeResourceType('cpu')}
-                  >
-                    🖥️ CPU
-                  </button>
-                  <button 
-                    class="resource-tab {selectedResourceType === 'memory' ? 'active' : ''}"
-                    onclick={() => changeResourceType('memory')}
-                  >
-                    💾 Memory
-                  </button>
-                  <button 
-                    class="resource-tab {selectedResourceType === 'disk' ? 'active' : ''}"
-                    onclick={() => changeResourceType('disk')}
-                  >
-                    💿 Disk
-                  </button>
-                </div>
-              </div>
-              
-              <div class="metrics-graph-container">
-                <MetricsGraph
-                  data={nodeMetrics}
-                  type={selectedResourceType}
-                  duration={selectedTimeRange}
-                  loading={metricsLoading}
-                  error={metricsError}
-                  maxCpuCores={parseFloat(selectedNode.cpuCapacity || '0')}
-                  maxMemoryBytes={selectedNode.memoryCapacity || 0}
-                  maxDiskBytes={selectedNode.diskCapacity || 0}
-                />
-              </div>
-            {:else}
-              <div class="metrics-placeholder">
-                <p>No metrics data available</p>
-              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Tier 2: Searchable All Nodes Table -->
+      <div class="nodes-table-section">
+        <div class="table-header-controls">
+          <h5><Server size={16} class="inline-icon" /> Cluster Nodes ({filteredNodes.length})</h5>
+          <div class="search-input-wrap">
+            <Search size={14} class="search-icon" />
+            <input 
+              type="text" 
+              bind:value={searchQuery} 
+              placeholder="Search nodes by name, pool, role, IP, OS..." 
+              class="node-search-input"
+            />
+            {#if searchQuery}
+              <button class="clear-search-btn" onclick={() => searchQuery = ''}><X size={13} /></button>
             {/if}
           </div>
         </div>
-      </div>
-    {:else}
-      <!-- Nodes List View (always show this) -->
-      <div class="nodes-list-view">
-        <div class="nodes-header">
-          <h5>Cluster Nodes {nodes && nodes.length > 0 ? `(${nodes.length})` : ''}</h5>
-          <p>Click on a node to view detailed information and metrics</p>
-        </div>
-        
+
         {#if isLoading}
-          <!-- Loading State -->
           <div class="loading-nodes">
-            <div class="loading-spinner">⏳</div>
-            <h5>Loading Nodes...</h5>
-            <p>Please wait while we fetch the cluster nodes information.</p>
+            <Loader2 size={24} class="spin" />
+            <h5>Loading Cluster Nodes...</h5>
           </div>
-        {:else if nodes && nodes.length > 0}
-          <!-- Nodes Grid -->
-          <div class="nodes-grid">
-            {#each nodes as node}
-              <div class="node-card" onclick={() => showFullNodeDetails(node)} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' || e.key === ' ' ? showFullNodeDetails(node) : null}>
-                <div class="node-card-content">
-                  <div class="node-header">
-                    <h6 class="node-name">{node.metadata?.name || 'Unknown'}</h6>
-                    <div class="node-status">
-                      <span class="status-badge status-{getStatusClass(node.status?.conditions?.find((c: any) => c.type === 'Ready')?.status || 'Unknown')}">
-                        {node.status?.conditions?.find((c: any) => c.type === 'Ready')?.status || 'Unknown'}
+        {:else if filteredNodes.length > 0}
+          <div class="nodes-table-wrap">
+            <table class="nodes-table">
+              <thead>
+                <tr>
+                  <th>Node Name</th>
+                  <th>Status</th>
+                  <th>Node Pool / Role</th>
+                  <th>Internal IP</th>
+                  <th>CPU Allocatable</th>
+                  <th>RAM Allocatable</th>
+                  <th>Kubelet</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each filteredNodes as node}
+                  {@const isReady = node.status?.conditions?.some((c: any) => c.type === 'Ready' && c.status === 'True')}
+                  {@const ip = node.status?.addresses?.find((a: any) => a.type === 'InternalIP')?.address || '-'}
+                  {@const cpuAlloc = parseCpuCores(node.status?.allocatable?.cpu)}
+                  {@const cpuCap = parseCpuCores(node.status?.capacity?.cpu)}
+                  {@const memAlloc = parseMemoryBytes(node.status?.allocatable?.memory)}
+                  {@const memCap = parseMemoryBytes(node.status?.capacity?.memory)}
+                  <tr class="node-row" onclick={() => showFullNodeDetails(node)}>
+                    <td class="node-name-cell">
+                      <span class="node-click-link" title="Click to view details for {node.metadata?.name}">
+                        <Server size={14} class="inline-icon" /> {node.metadata?.name || 'Unknown'}
                       </span>
-                    </div>
-                  </div>
-                  
-                  <div class="node-summary">
-                    <div class="summary-item">
-                      <span class="summary-label">OS:</span>
-                      <span class="summary-value">{node.status?.nodeInfo?.operatingSystem || 'Unknown'}</span>
-                    </div>
-                    <div class="summary-item">
-                      <span class="summary-label">Architecture:</span>
-                      <span class="summary-value">{node.status?.nodeInfo?.architecture || 'Unknown'}</span>
-                    </div>
-                    <div class="summary-item">
-                      <span class="summary-label">Kubelet:</span>
-                      <span class="summary-value">{node.status?.nodeInfo?.kubeletVersion || 'Unknown'}</span>
-                    </div>
-                  </div>
-                  
-                  <div class="node-resources">
-                    <div class="resource-summary">
-                      <div class="resource-item">
-                        <span class="resource-label">CPU:</span>
-                        <span class="resource-value">{formatCPU(node.status?.capacity?.cpu || '0')}</span>
+                    </td>
+                    <td>
+                      <span class="status-pill status-{isReady ? 'ready' : 'not-ready'}">
+                        {isReady ? 'Ready' : 'Not Ready'}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="pool-tag">{getNodePool(node)}</span>
+                    </td>
+                    <td>
+                      <button 
+                        class="btn-copy-ip" 
+                        onclick={(e) => { e.stopPropagation(); copyText(ip, 'Node IP'); }} 
+                        title="Click to copy IP"
+                      >
+                        <Copy size={12} class="inline-icon" /> {ip}
+                      </button>
+                    </td>
+                    <td>
+                      <div class="gauge-bar-wrap">
+                        <span class="gauge-label">{formatCPU(node.status?.allocatable?.cpu || '0')} / {formatCPU(node.status?.capacity?.cpu || '0')}</span>
+                        <div class="gauge-bar"><div class="gauge-fill" style="width: {cpuCap > 0 ? (cpuAlloc / cpuCap) * 100 : 0}%"></div></div>
                       </div>
-                      <div class="resource-item">
-                        <span class="resource-label">Memory:</span>
-                        <span class="resource-value">{formatMemory(parseInt(node.status?.capacity?.memory?.replace('Ki', '') || '0') * 1024)}</span>
+                    </td>
+                    <td>
+                      <div class="gauge-bar-wrap">
+                        <span class="gauge-label">{formatMemory(memAlloc)} / {formatMemory(memCap)}</span>
+                        <div class="gauge-bar"><div class="gauge-fill ram" style="width: {memCap > 0 ? (memAlloc / memCap) * 100 : 0}%"></div></div>
                       </div>
-                      <div class="resource-item">
-                        <span class="resource-label">Disk:</span>
-                        <span class="resource-value">{formatMemory(parseInt(node.status?.capacity?.['ephemeral-storage']?.replace('Ki', '') || '0') * 1024)}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div class="node-actions">
-                    <span class="click-hint">Click to view details →</span>
-                  </div>
-                </div>
-              </div>
-            {/each}
+                    </td>
+                    <td>{node.status?.nodeInfo?.kubeletVersion || '-'}</td>
+                    <td>
+                      <button 
+                        class="btn-table-action" 
+                        onclick={(e) => { e.stopPropagation(); showFullNodeDetails(node); }}
+                        title="View Node Details"
+                      >
+                        <ExternalLink size={13} /> Details
+                      </button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
           </div>
         {:else}
-          <!-- No Nodes Available -->
           <div class="no-nodes-message">
-            <div class="no-nodes-icon">🖥️</div>
-            <h5>No Nodes Available</h5>
-            <p>No nodes are currently available in this cluster context.</p>
+            <Server size={32} class="muted-icon" />
+            <h5>No Nodes Match Search</h5>
+            <p>Try clearing filters or search query.</p>
           </div>
         {/if}
       </div>
-    {/if}
-  </div>
+    </div>
+  {/if}
 </div>
 
 <style>
-  /* Import CSS variables */
   @import '../styles/variables.css';
   @import '../styles/color-palette.css';
 
   .nodes-tab {
-    padding: 0;
+    padding: var(--spacing-sm) 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: relative;
   }
 
-  .tab-header {
+  .copy-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #10b981;
+    color: #ffffff;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .nodes-master-view {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Pools Tier */
+  .pools-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .section-title-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 5px;
-    padding-bottom: var(--spacing-sm);
-    border-bottom: 1px solid var(--border-primary);
   }
-
-  .tab-header h4 {
+  .section-title-row h5 {
     margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
     color: var(--text-primary);
-    font-size: 1.2rem;
-  }
-
-  .tab-controls {
     display: flex;
     align-items: center;
-    gap: var(--spacing-md);
+    gap: 6px;
   }
-
-  .refresh-button {
-    background: var(--background-card);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
+  .filter-pill-btn {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+    border-radius: 14px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
     cursor: pointer;
-    font-size: 1.2rem;
-    padding: var(--spacing-sm);
-    transition: var(--transition-normal);
-  }
-
-  .refresh-button:hover {
-    background: var(--accent-color);
-    border-color: var(--accent-color);
-    color: white;
-  }
-
-  .nodes-content {
-    min-height: 200px;
-  }
-
-  /* Loading State */
-  .loading-nodes {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-xl);
-    color: var(--text-secondary);
-    text-align: center;
+    gap: 6px;
   }
 
-  .loading-spinner {
-    font-size: 2rem;
-    animation: spin 2s linear infinite;
-  }
-
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  .loading-nodes h5 {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 1.2rem;
-  }
-
-  .loading-nodes p {
-    margin: 0;
-    font-size: 0.9rem;
-  }
-
-  /* No Nodes Message */
-  .no-nodes-message {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-xl);
-    color: var(--text-secondary);
-    text-align: center;
-  }
-
-  .no-nodes-icon {
-    font-size: 3rem;
-    opacity: 0.7;
-  }
-
-  .no-nodes-message h5 {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 1.2rem;
-  }
-
-  .no-nodes-message p {
-    margin: 0;
-    font-size: 0.9rem;
-  }
-
-  /* Nodes List View */
-  .nodes-list-view {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-lg);
-  }
-
-  .nodes-header {
-    text-align: center;
-    margin-bottom: 5px;
-  }
-
-  .nodes-header h5 {
-    margin: 0 0 var(--spacing-sm) 0;
-    color: var(--text-primary);
-    font-size: 1.3rem;
-  }
-
-  .nodes-header p {
-    margin: 0;
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-  }
-
-  .nodes-grid {
+  .pools-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: var(--spacing-md);
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
   }
-
-  .node-card {
-    background: var(--background-card);
+  .pool-card {
+    background: rgba(0, 0, 0, 0.25);
     border: 1px solid var(--border-primary);
     border-radius: var(--radius-md);
+    padding: 14px;
     cursor: pointer;
-    transition: var(--transition-normal);
-    overflow: hidden;
+    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
-
-  .node-card:hover {
-    border-color: var(--accent-color);
+  .pool-card:hover, .pool-card.active {
+    border-color: var(--primary-color);
+    background: rgba(59, 130, 246, 0.08);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   }
-
-  .node-card-content {
-    padding: var(--spacing-md);
-  }
-
-  .node-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--spacing-md);
-  }
-
-  .node-name {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 1.1rem;
-    font-weight: 600;
-  }
-
-  .node-status {
-    display: flex;
-    align-items: center;
-  }
-
-  .status-badge {
-    padding: 4px 8px;
-    border-radius: var(--radius-sm);
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-
-  .status-ready {
-    background: var(--status-ready-bg);
-    color: var(--status-ready-text);
-    border: 1px solid var(--status-ready-border);
-  }
-
-  .status-not-ready {
-    background: var(--status-error-bg);
-    color: var(--status-error-text);
-    border: 1px solid var(--status-error-border);
-  }
-
-  .status-unknown {
-    background: var(--status-pending-bg);
-    color: var(--status-pending-text);
-    border: 1px solid var(--status-pending-border);
-  }
-
-  .node-summary {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-    margin-bottom: var(--spacing-md);
-  }
-
-  .summary-item {
+  .pool-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
   }
-
-  .summary-label {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-    font-weight: 500;
-  }
-
-  .summary-value {
+  .pool-name {
+    font-size: 0.88rem;
+    font-weight: 700;
     color: var(--text-primary);
-    font-size: 0.9rem;
-    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-
-  .node-resources {
-    margin-bottom: var(--spacing-md);
+  .pool-badge {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    border-radius: 10px;
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    font-weight: 700;
   }
-
-  .resource-summary {
+  .pool-card-metrics {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-sm);
+    gap: 4px;
   }
-
-  .resource-item {
+  .pool-metric {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    font-size: 0.78rem;
   }
+  .pool-metric .lbl { color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+  .pool-metric .val { color: var(--text-primary); font-weight: 600; }
 
-  .resource-label {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    font-weight: 500;
+  .pool-card-footer {
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
   }
-
-  .resource-value {
-    color: var(--text-primary);
-    font-size: 0.85rem;
+  .btn-inspect-pool {
+    width: 100%;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    color: #60a5fa;
+    padding: 5px 8px;
+    border-radius: 4px;
+    font-size: 0.78rem;
     font-weight: 600;
-  }
-
-  .node-actions {
-    text-align: center;
-    padding-top: var(--spacing-sm);
-    border-top: 1px solid var(--border-primary);
-  }
-
-  .click-hint {
-    color: var(--accent-color);
-    font-size: 0.8rem;
-    font-weight: 500;
-  }
-
-  /* Full Details View */
-  .full-details-view {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-lg);
-  }
-
-  .details-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-    padding-bottom: var(--spacing-md);
-    border-bottom: 1px solid var(--border-primary);
-  }
-
-  .back-button {
-    background: var(--background-card);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
     cursor: pointer;
-    font-size: 0.9rem;
-    padding: var(--spacing-sm) var(--spacing-md);
-    transition: var(--transition-normal);
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  .btn-inspect-pool:hover {
+    background: rgba(59, 130, 246, 0.25);
+    border-color: rgba(59, 130, 246, 0.5);
+    color: #93c5fd;
   }
 
-  .back-button:hover {
-    background: var(--accent-color);
-    border-color: var(--accent-color);
-    color: white;
+  .compact-search {
+    width: 240px;
   }
 
-  .details-header h3 {
+  /* Nodes Table Section */
+  .nodes-table-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .table-header-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .table-header-controls h5 {
     margin: 0;
-    color: var(--text-primary);
-    font-size: 1.5rem;
-  }
-
-  .node-details-content {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-lg);
-  }
-
-  .details-section {
-    background: var(--background-card);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-md);
-  }
-
-  .details-section h6 {
-    margin: 0 0 var(--spacing-md) 0;
-    color: var(--text-primary);
-    font-size: 1.1rem;
-    font-weight: 600;
-  }
-
-  .info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: var(--spacing-md);
-  }
-
-  .info-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-sm);
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: var(--radius-sm);
-  }
-
-  .info-label {
-    color: var(--text-secondary);
-    font-weight: 500;
-    font-size: 0.9rem;
-  }
-
-  .info-value-container {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-  }
-
-  .info-value {
-    color: var(--text-primary);
-    font-weight: 600;
     font-size: 0.95rem;
-  }
-
-  .copy-button {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-sm);
+    font-weight: 700;
     color: var(--text-primary);
-    cursor: pointer;
-    font-size: 0.8rem;
-    padding: 2px 6px;
-    transition: var(--transition-normal);
-    opacity: 0.7;
   }
-
-  .copy-button:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.3);
-    opacity: 1;
-  }
-
-  .resource-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: var(--spacing-md);
-  }
-
-  .resource-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-sm);
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: var(--radius-sm);
-  }
-
-  .resource-label {
-    color: var(--text-secondary);
-    font-weight: 500;
-    font-size: 0.9rem;
-  }
-
-  .resource-value-container {
+  .search-input-wrap {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
+    min-width: 280px;
   }
-
-  .resource-value {
-    color: var(--text-primary);
-    font-weight: 600;
-    font-size: 0.95rem;
-  }
-
-  /* Metrics Section */
-  .metrics-loading, .metrics-error, .metrics-placeholder {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-lg);
-    text-align: center;
-  }
-
-  .metrics-loading {
-    color: var(--text-secondary);
-  }
-
-  .metrics-error {
-    color: var(--error-color);
-  }
-
-  .metrics-placeholder {
+  .search-input-wrap .search-icon {
+    position: absolute;
+    left: 10px;
     color: var(--text-muted);
   }
-
-  .error-icon {
-    font-size: 1.5rem;
-  }
-
-  .retry-button {
-    background: var(--accent-color);
-    border: none;
+  .node-search-input {
+    width: 100%;
+    background: var(--background-secondary);
+    border: 1px solid var(--border-primary);
     border-radius: var(--radius-sm);
-    color: white;
+    padding: 6px 30px 6px 30px;
+    color: var(--text-primary);
+    font-size: 0.82rem;
+  }
+  .node-search-input:focus {
+    border-color: var(--primary-color);
+    outline: none;
+  }
+  .clear-search-btn {
+    position: absolute;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
     cursor: pointer;
-    font-size: 0.9rem;
-    padding: var(--spacing-sm) var(--spacing-md);
-    transition: var(--transition-normal);
   }
 
-  .retry-button:hover {
-    background: var(--primary-color);
+  .nodes-table-wrap {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+  }
+  .nodes-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+  }
+  .nodes-table th {
+    background: var(--background-secondary);
+    padding: 10px 12px;
+    text-align: left;
+    color: var(--text-muted);
+    font-weight: 700;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border-primary);
+  }
+  .nodes-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+  }
+  .node-row {
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .node-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .node-click-link {
+    color: var(--primary-color);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status-pill {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+  .status-pill.status-ready { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+  .status-pill.status-not-ready { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+  .pool-tag {
+    background: var(--background-secondary);
+    border: 1px solid var(--border-primary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+  }
+  .btn-copy-ip {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 0.8rem;
+  }
+  .btn-copy-ip:hover { color: var(--primary-color); }
+  .btn-table-action {
+    background: var(--background-secondary);
+    border: 1px solid var(--border-primary);
+    color: var(--text-primary);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .btn-table-action:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
   }
 
-      .metrics-graph-container {
-        background: var(--background-card);
-        border-radius: var(--radius-sm);
-        padding: var(--spacing-sm);
-        border: 1px solid var(--border-primary);
-      }
+  .gauge-bar-wrap { display: flex; flex-direction: column; gap: 3px; min-width: 110px; }
+  .gauge-label { font-size: 0.72rem; color: var(--text-muted); }
+  .gauge-bar { width: 100%; height: 5px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; overflow: hidden; }
+  .gauge-fill { height: 100%; background: #3b82f6; border-radius: 3px; }
+  .gauge-fill.ram { background: #8b5cf6; }
 
-      /* Resource Type Selector */
-      .resource-type-selector {
-        margin-bottom: var(--spacing-md);
-      }
-
-      .metrics-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: var(--spacing-sm);
-        flex-wrap: wrap;
-        gap: var(--spacing-sm);
-      }
-
-      .resource-type-selector h6 {
-        margin: 0;
-        color: var(--text-primary);
-        font-size: 1.1rem;
-        font-weight: 600;
-      }
-
-      .time-range-selector {
-        display: flex;
-        align-items: center;
-        gap: var(--spacing-sm);
-      }
-
-      .time-range-selector label {
-        color: var(--text-secondary);
-        font-size: 0.9rem;
-        font-weight: 500;
-        white-space: nowrap;
-      }
-
-      .time-range-select {
-        background: var(--background-card);
-        border: 1px solid var(--border-primary);
-        border-radius: var(--radius-sm);
-        color: var(--text-primary);
-        font-size: 0.9rem;
-        font-weight: 500;
-        padding: var(--spacing-xs) var(--spacing-sm);
-        cursor: pointer;
-        transition: var(--transition-normal);
-        min-width: 120px;
-      }
-
-      .time-range-select:hover {
-        border-color: var(--accent-color);
-        background: var(--background-tertiary);
-      }
-
-      .time-range-select:focus {
-        outline: none;
-        border-color: var(--primary-color);
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
-      }
-
-      .resource-tabs {
-        display: flex;
-        gap: var(--spacing-xs);
-        background: var(--background-secondary);
-        border-radius: var(--radius-sm);
-        padding: var(--spacing-xs);
-        border: 1px solid var(--border-secondary);
-      }
-
-      .resource-tab {
-        background: transparent;
-        border: 1px solid transparent;
-        border-radius: var(--radius-sm);
-        color: var(--text-secondary);
-        cursor: pointer;
-        font-size: 0.9rem;
-        font-weight: 500;
-        padding: var(--spacing-xs) var(--spacing-sm);
-        transition: var(--transition-normal);
-        flex: 1;
-        text-align: center;
-      }
-
-      .resource-tab:hover {
-        background: var(--background-tertiary);
-        border-color: var(--border-primary);
-        color: var(--text-primary);
-      }
-
-      .resource-tab.active {
-        background: var(--primary-color);
-        border-color: var(--primary-color);
-        color: white;
-        font-weight: 600;
-      }
-
-      .resource-tab.active:hover {
-        background: var(--accent-color);
-        border-color: var(--accent-color);
-      }
-
-  /* Responsive Design */
-  @media (max-width: 768px) {
-    .nodes-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .info-grid, .resource-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .details-header {
-      flex-direction: column;
-      align-items: flex-start;
-    }
+  /* Full Details View */
+  .full-details-view { display: flex; flex-direction: column; gap: 16px; }
+  .details-header { display: flex; align-items: center; gap: 14px; }
+  .btn-back {
+    background: var(--background-secondary);
+    border: 1px solid var(--border-primary);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    cursor: pointer;
   }
+  .node-details-title { margin: 0; font-size: 1.1rem; color: var(--text-primary); cursor: pointer; }
+  .details-section {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .details-section h6 { margin: 0; font-size: 0.9rem; font-weight: 700; color: var(--text-primary); }
+  .info-grid, .resource-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .info-item, .resource-item { display: flex; flex-direction: column; gap: 2px; }
+  .info-label, .resource-label { font-size: 0.74rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
+  .info-val, .resource-val { font-size: 0.86rem; color: var(--text-primary); font-weight: 600; }
+  .section-header-row { display: flex; justify-content: space-between; align-items: center; }
+  .controls-row { display: flex; align-items: center; gap: 10px; }
+  .pill-toggle { display: flex; background: var(--background-secondary); padding: 2px; border-radius: 6px; }
+  .pill-btn { background: transparent; border: none; color: var(--text-muted); padding: 4px 10px; font-size: 0.78rem; cursor: pointer; border-radius: 4px; }
+  .pill-btn.active { background: var(--primary-color); color: #ffffff; font-weight: 700; }
+  .no-nodes-message, .loading-nodes, .metrics-loading {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; gap: 10px; color: var(--text-muted);
+  }
+  .inline-icon { display: inline-block; vertical-align: middle; }
 </style>

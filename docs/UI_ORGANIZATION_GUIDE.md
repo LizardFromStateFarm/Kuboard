@@ -27,21 +27,21 @@ src/
     │   │
     │   ├── WorkloadsTab.svelte   # Container for workload sub-tabs (Pods, Deployments, StatefulSets, DaemonSets, CronJobs, ReplicaSets, Services) with multi-select namespace filter & persistent search controls
     │   │   ├── PodsPanel.svelte           # Pod list, search, multi-namespace auto-refresh filtering, watch stream
-    │   │   ├── PodDetails.svelte          # Pod detail view with interactive click-to-copy pod name banner
+    │   │   ├── PodDetails.svelte          # Pod detail view with single-click action bar (Logs, Exec, Port Forward, Edit YAML, Delete), container metrics selector, and click-to-copy fields
     │   │   ├── PodConditions.svelte       # Pod conditions list
     │   │   ├── PodEvents.svelte           # Pod-specific event stream
     │   │   ├── PodVolumes.svelte          # Pod volume mounts view
     │   │   ├── DeploymentsPanel.svelte    # Deployment list & scaling
-    │   │   ├── DeploymentDetails.svelte   # Deployment detail view & rollout status
+    │   │   ├── DeploymentDetails.svelte   # Deployment detail view with single-click action bar (Logs, Scale, Restart, Edit YAML, Delete) and owned pod counts
     │   │   ├── StatefulSetsPanel.svelte   # StatefulSet list & management
-    │   │   ├── StatefulSetDetails.svelte  # StatefulSet detail view
+    │   │   ├── StatefulSetDetails.svelte  # StatefulSet detail view with single-click action bar (Logs, Scale, Edit YAML, Delete)
     │   │   ├── DaemonSetsPanel.svelte     # DaemonSet list
-    │   │   ├── DaemonSetDetails.svelte    # DaemonSet detail view
+    │   │   ├── DaemonSetDetails.svelte    # DaemonSet detail view with single-click action bar (Logs, Edit YAML, Delete)
     │   │   ├── ReplicaSetsPanel.svelte    # ReplicaSet list
-    │   │   ├── ReplicaSetDetails.svelte   # ReplicaSet detail view
+    │   │   ├── ReplicaSetDetails.svelte   # ReplicaSet detail view with single-click action bar (Logs, Scale, Edit YAML, Delete)
     │   │   ├── CronJobsPanel.svelte       # CronJob list & manual trigger
-    │   │   ├── CronJobDetails.svelte      # CronJob detail view & schedule history
-    │   │   └── ServiceDetails.svelte      # Service detail view
+    │   │   ├── CronJobDetails.svelte      # CronJob detail view with single-click action bar (Trigger Job, Edit YAML, Delete)
+    │   │   └── ServiceDetails.svelte      # Service detail view with single-click action bar (Port Forward, Edit YAML, Delete)
     │   │
     │   ├── NodesTab.svelte       # Cluster node list & resource capacity cards
     │   ├── ConfigTab.svelte      # ConfigMaps & Secrets management
@@ -117,8 +117,11 @@ Kuboard uses a centralized color palette system in `src/lib/styles/color-palette
 
 2. **Component Hierarchy**:
    - `+page.svelte`: Orchestrates top-level context selection, state polling, and global modals (Logs, Terminal, Port Forward, Search).
+   - `ThemeSwitcher.svelte`: Overhauled **Settings & Preferences Modal** with sub-tabs for Appearance & Color Themes and Grafana Integration (Endpoint URL, Bearer Token/Key, Datasource selection, live HTTP connection test).
    - `TabbedContent.svelte`: Renders the active tab container.
-   - `WorkloadsTab.svelte`: Manages sub-tab state (Pods, Deployments, StatefulSets, DaemonSets, CronJobs, ReplicaSets, Services) with lazy data fetching.
+   - `WorkloadsTab.svelte`, `ConfigTab.svelte`, `SecurityTab.svelte`, `NetworkTab.svelte`, `StorageTab.svelte`: Unified sub-nav tab bars sharing a cohesive glassmorphic design token system (`rgba(59, 130, 246, 0.1)` active pill highlights, `rgba(255, 255, 255, 0.05)` hover fills, and 6px gap spacing across all main tabs).
+   - `SecurityTab.svelte`: Sub-tabs for Secrets, Roles, ClusterRoles, RoleBindings, ClusterRoleBindings, and ServiceAccounts. Integrated `RoleDetails.svelte` (RBAC policy rules table, verb badges) and `RoleBindingDetails.svelte` (Target Role ref card, bound subjects table).
+   - `MiniTopologyDAG.svelte` & `XRayViewer.svelte`: Interactive cluster topology maps with clickable controller parent cards (Deployments, StatefulSets, DaemonSets, ReplicaSets), current resource cards, and child dependency cards (ConfigMaps, Secrets, PVCs) triggering direct cross-tab navigation via `navigationStore`.
 
 3. **Event Dispatching & Cross-Navigation**:
-   - Resource Detail views emit `navigateToWorkload` events to jump seamlessly between owner controllers (e.g. from ReplicaSet to parent Deployment or Pod).
+   - Resource Detail views emit `navigateToWorkload` events and update `navigationStore` to jump seamlessly between owner controllers (e.g. from ReplicaSet to parent Deployment or Pod).

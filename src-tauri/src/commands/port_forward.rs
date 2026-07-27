@@ -122,12 +122,13 @@ pub async fn kuboard_stop_port_forward(
     
     let mut sessions = state.port_forward_sessions.write().await;
     
-    if let Some(session) = sessions.remove(&forward_id) {
+    if let Some(mut session) = sessions.remove(&forward_id) {
         info!("Stopped port forward session: {} ({}:{}/{} -> localhost:{})", 
               forward_id, session.namespace, session.resource_name, session.remote_port, session.local_port);
         
-        // TODO: Close WebSocket connection and TCP listener
-        // For now, just remove from state
+        if let Some(stop_tx) = session.stop_tx.take() {
+            let _ = stop_tx.send(());
+        }
         
         Ok(format!("Port forward {} stopped", forward_id))
     } else {

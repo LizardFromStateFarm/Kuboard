@@ -3,7 +3,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import QuickActionsMenu from './QuickActionsMenu.svelte';
   import { openGlobalPodLogs } from '../stores/logs';
-  import { ArrowLeft, Sliders, FileText, Settings, ExternalLink, AlertTriangle, Box, Tag, Loader2 } from 'lucide-svelte';
+  import YamlEditor from './YamlEditor.svelte';
+  import { ArrowLeft, Sliders, FileText, Settings, ExternalLink, AlertTriangle, Box, Tag, Loader2, Trash2, RefreshCw } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -167,6 +168,42 @@
     actionsMenuVisible = true;
   }
 
+  let yamlEditorVisible = false;
+  let yamlEditorContent = '';
+  let copiedNotice = false;
+  let copiedText = 'Copied!';
+
+  async function copyToClipboard(text: string | undefined, label: string = 'Value') {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedText = `${label} Copied!`;
+      copiedNotice = true;
+      setTimeout(() => copiedNotice = false, 1500);
+    } catch (err) {
+      console.error(`Failed to copy ${label}:`, err);
+    }
+  }
+
+  function handleActionEdit() {
+    yamlEditorVisible = true;
+  }
+
+  async function handleActionDelete() {
+    if (!sts?.metadata?.name || !sts?.metadata?.namespace) return;
+    if (!confirm(`Are you sure you want to delete StatefulSet "${sts.metadata.name}"?`)) return;
+    try {
+      await invoke('kuboard_delete_resource', {
+        kind: 'StatefulSet',
+        name: sts.metadata.name,
+        namespace: sts.metadata.namespace
+      });
+      if (onBack) onBack();
+    } catch (err: any) {
+      alert(`Failed to delete StatefulSet: ${err}`);
+    }
+  }
+
   function handleActionMenuClose() { actionsMenuVisible = false; }
   function handleActionDeleted() { handleActionMenuClose(); onBack(); }
   function handleViewYaml(event: CustomEvent) {
@@ -184,17 +221,20 @@
   <div class="details-nav-bar">
     <div class="nav-actions">
       <button class="btn-back" onclick={() => { if (onBack) onBack(); dispatch('back'); }}><ArrowLeft size={14} class="inline-icon" /> Back to StatefulSets</button>
-      <button class="btn-subtle" onclick={() => { showScaleInput = !showScaleInput; scaleValue = desired; }}>
-        <Sliders size={14} class="inline-icon" /> {showScaleInput ? 'Cancel Scale' : 'Scale'}
-      </button>
       <button class="btn-subtle" onclick={() => openGlobalPodLogs(undefined, sts?.metadata?.name, sts?.metadata?.namespace)}>
         <FileText size={14} class="inline-icon" /> Logs
       </button>
-      <button class="btn-subtle" onclick={openActionsMenu} ondblclick={(e) => { e.stopPropagation(); e.preventDefault(); }}><Settings size={14} class="inline-icon" /> Actions</button>
+      <button class="btn-subtle" onclick={() => { showScaleInput = !showScaleInput; scaleValue = desired; }}>
+        <Sliders size={14} class="inline-icon" /> {showScaleInput ? 'Cancel Scale' : 'Scale'}
+      </button>
+      <button class="btn-subtle" onclick={handleActionEdit} title="Edit YAML"><FileText size={14} class="inline-icon" /> Edit YAML</button>
+      <button class="btn-subtle danger" onclick={handleActionDelete} title="Delete StatefulSet"><Trash2 size={14} class="inline-icon" /> Delete</button>
     </div>
     <div class="nav-heading">
       <span class="status-pill status-{getStatusClass(status)}">{status}</span>
-      <h3 class="nav-title">{sts?.metadata?.name}</h3>
+      <h3 class="nav-title clickable" onclick={() => copyToClipboard(sts?.metadata?.name, 'StatefulSet Name')} title="Click to copy statefulset name">
+        {sts?.metadata?.name} {#if copiedNotice}<span class="copy-toast-inline">{copiedText}</span>{/if}
+      </h3>
       <span class="namespace-pill">{sts?.metadata?.namespace}</span>
     </div>
   </div>
@@ -339,6 +379,15 @@
   on:deleted={handleActionDeleted}
   on:view-yaml={handleViewYaml}
 />
+
+{#if yamlEditorVisible}
+  <YamlEditor
+    resource={sts}
+    resourceType="statefulset"
+    onSave={() => { yamlEditorVisible = false; loadStatefulSetDetails(); }}
+    onCancel={() => yamlEditorVisible = false}
+  />
+{/if}
 
 {#if yamlViewerVisible}
   <div class="modal-overlay" onclick={closeYamlViewer} role="button" tabindex="-1" onkeydown={(e) => e.key === 'Escape' && closeYamlViewer()}>

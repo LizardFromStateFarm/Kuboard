@@ -78,7 +78,7 @@
   @import '../styles/variables.css';
 
   .resource-tabs-container {
-    padding: 2px 5px;
+    padding: 4px 6px 2px 6px;
     margin-bottom: 5px;
   }
 
@@ -88,6 +88,8 @@
     gap: 6px;
     width: 100%;
     overflow-x: auto;
+    padding-top: 4px;
+    padding-bottom: 4px;
     scrollbar-width: thin;
   }
 

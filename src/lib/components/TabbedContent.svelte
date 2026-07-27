@@ -45,6 +45,8 @@
     console.log(`🔄 TabbedContent tab change for session [${tabSessionId}]:`, newTab);
     sessionTabMap[tabSessionId] = newTab;
     sessionTabMap = { ...sessionTabMap };
+    // Clear navigationStore so past resource cross-tab navigations don't override manual user tab clicks
+    navigationStore.set(null);
   }
 
   // Update tab counts
@@ -86,16 +88,25 @@
     loadInitialCounts();
   }
 
+  let lastProcessedNavTarget: any = null;
+
   // Watch navigation store
-  $: if ($navigationStore) {
+  $: if ($navigationStore && $navigationStore !== lastProcessedNavTarget) {
+    lastProcessedNavTarget = $navigationStore;
     const nav = $navigationStore;
     if (nav.tab) {
-      const targetSession = nav.tabSessionId || tabSessionId;
+      const targetSession = (nav as any).tabSessionId || tabSessionId;
       console.log(`🔄 TabbedContent: Navigating session [${targetSession}] to:`, nav.tab);
-      sessionTabMap[targetSession] = nav.tab;
+      const workloadSubTabs = ['pods', 'deployments', 'statefulsets', 'daemonsets', 'cronjobs', 'replicasets', 'services', 'pod', 'deployment', 'statefulset', 'daemonset', 'cronjob', 'replicaset', 'service'];
+      const targetTabLower = nav.tab.toLowerCase();
+
+      if (workloadSubTabs.includes(targetTabLower)) {
+        sessionTabMap[targetSession] = 'workloads';
+      } else {
+        sessionTabMap[targetSession] = nav.tab;
+      }
       sessionTabMap = { ...sessionTabMap };
     }
-    navigationStore.set(null);
   }
 </script>
 

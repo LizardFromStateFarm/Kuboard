@@ -216,23 +216,23 @@
   }
 
   // Lifecycle
-  let watchEventListenerUnsubscribe: (() => Promise<void>) | null = null;
-  let watchErrorListenerUnsubscribe: (() => Promise<void>) | null = null;
+  let watchEventListenerUnsubscribe: (() => void) | null = null;
+  let watchErrorListenerUnsubscribe: (() => void) | null = null;
   let lastContext: string | null = null;
 
-  onMount(async () => {
+  onMount(() => {
     // Initialize deployments from props
     initializeDeployments();
     
     // Listen to watch events
-    const { listen } = await import('@tauri-apps/api/event');
-    
-    watchEventListenerUnsubscribe = await listen('deployment-watch-event', (event: any) => {
-      handleWatchEvent(event.payload);
-    });
-    
-    watchErrorListenerUnsubscribe = await listen('deployment-watch-error', (event: any) => {
-      handleWatchError(event.payload);
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('deployment-watch-event', (event: any) => {
+        handleWatchEvent(event.payload);
+      }).then(unsub => { watchEventListenerUnsubscribe = unsub; });
+      
+      listen('deployment-watch-error', (event: any) => {
+        handleWatchError(event.payload);
+      }).then(unsub => { watchErrorListenerUnsubscribe = unsub; });
     });
     
     // Start watch when context is available
@@ -240,18 +240,17 @@
       startWatch();
     }
     
-    return async () => {
-      if (watchEventListenerUnsubscribe) await watchEventListenerUnsubscribe();
-      if (watchErrorListenerUnsubscribe) await watchErrorListenerUnsubscribe();
-      await stopWatch();
+    return () => {
+      if (watchEventListenerUnsubscribe) watchEventListenerUnsubscribe();
+      if (watchErrorListenerUnsubscribe) watchErrorListenerUnsubscribe();
+      stopWatch();
     };
   });
 
-  onDestroy(async () => {
-    stopAutoRefresh();
-    if (watchEventListenerUnsubscribe) await watchEventListenerUnsubscribe();
-    if (watchErrorListenerUnsubscribe) await watchErrorListenerUnsubscribe();
-    await stopWatch();
+  onDestroy(() => {
+    if (watchEventListenerUnsubscribe) watchEventListenerUnsubscribe();
+    if (watchErrorListenerUnsubscribe) watchErrorListenerUnsubscribe();
+    stopWatch();
   });
 
   // Restart watch only when context actually changes
@@ -514,13 +513,7 @@
   <DeploymentDetails deployment={selectedDeployment} onBack={backToDeploymentsList} currentContext={currentContext} on:navigateToWorkload />
 {:else}
   <div class="deployments-panel">
-    <div class="panel-header">
-      <div class="panel-controls">
-        <span class="live-indicator {watchError ? 'error' : watchActive ? 'active' : ''}">
-          {watchError ? 'Watch Error' : watchActive ? '🟢 Live' : '⏸️ Paused'}
-        </span>
-      </div>
-    </div>
+
       <ResourceTable
         items={getRenderDeployments()}
         filteredItems={filteredDeployments}

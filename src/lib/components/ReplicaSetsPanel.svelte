@@ -242,13 +242,24 @@
     return sorted;
   })();
 
+  let showVersionFilter: 'active' | 'all' = 'active';
+
   $: filteredReplicaSets = (() => {
+    let list = sortedReplicaSets;
+    if (showVersionFilter === 'active') {
+      list = list.filter(rs => {
+        const desired = rs.spec?.replicas || 0;
+        const current = rs.status?.replicas || 0;
+        return desired > 0 || current > 0;
+      });
+    }
+
     if (!searchQuery || !searchQuery.trim()) {
-      return sortedReplicaSets;
+      return list;
     }
 
     const query = searchQuery.toLowerCase().trim();
-    return sortedReplicaSets.filter(rs => {
+    return list.filter(rs => {
       const name = (rs.metadata?.name || '').toLowerCase();
       const namespace = (rs.metadata?.namespace || '').toLowerCase();
       const owner = getOwnerReference(rs).toLowerCase();
@@ -285,6 +296,10 @@
         noSearchResultsMessage="No ReplicaSets match your search query:"
       >
         <div slot="controls" class="table-controls-right">
+          <select bind:value={showVersionFilter} class="version-filter-select">
+            <option value="active">Active Revisions Only ({sortedReplicaSets.filter(r => (r.spec?.replicas || 0) > 0 || (r.status?.replicas || 0) > 0).length})</option>
+            <option value="all">All Revisions & History ({sortedReplicaSets.length})</option>
+          </select>
           {#if namespacesList && namespacesList.length > 0}
             <MultiNamespaceSelect bind:selectedNamespaces={selectedNamespaces} {namespacesList} />
           {/if}
@@ -827,5 +842,19 @@
   .yaml-editor-save:hover:not(:disabled) {
     background: var(--primary-color-hover);
   }
-</style>
 
+  .version-filter-select {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-primary);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+  }
+  .version-filter-select:hover {
+    border-color: var(--primary-color);
+  }
+</style>
